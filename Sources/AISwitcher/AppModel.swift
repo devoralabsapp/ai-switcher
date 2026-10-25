@@ -44,16 +44,19 @@ final class AppModel: ObservableObject {
 
     let repository: ProfileRepository
     let browserService: BrowserService
+    let desktopService: DesktopService
     let quotaService: CodexQuotaService
     private var refreshTimer: AnyCancellable?
     private var quotaTimer: AnyCancellable?
     private var quotaTasks: [UUID: Task<Void, Never>] = [:]
     private var quotaSweepTask: Task<Void, Never>?
     private var quotaCleanupTasks: [UUID: Task<Void, Never>] = [:]
+    private var desktopQuotaClients: [UUID: CodexRPCClient] = [:]
 
     init(root: URL) {
         repository = ProfileRepository(root: root)
         browserService = BrowserService(repository: repository)
+        desktopService = DesktopService(repository: repository)
         quotaService = CodexQuotaService(repository: repository)
         reload()
         refreshTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect().sink { [weak self] _ in
@@ -115,7 +118,14 @@ final class AppModel: ObservableObject {
             var updated = snapshot
             if let index = updated.accounts.firstIndex(where: { $0.id == account.id }) {
                 var edited = account
+                if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode {
+                    guard !hasRunningSession(account), !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
+                        throw DesktopProfileError.profileRunning
+                    }
+                    quotaErrors[account.id] = nil
+                }
                 edited.codexConnection = updated.accounts[index].codexConnection
+                edited.desktopCodexConnection = updated.accounts[index].desktopCodexConnection
                 edited.lastOpenedAt = updated.accounts[index].lastOpenedAt
                 updated.accounts[index] = edited
             } else {
@@ -139,8 +149,9 @@ final class AppModel: ObservableObject {
         Task {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
-                try await browserService.open(account, forceNewWindow: newWindow)
-                // Preserve label edits made while the browser was launching.
+                if account.effectiveLaunchMode == .desktop { try await desktopService.open(account) }
+                else { try await browserService.open(account, forceNewWindow: newWindow) }
+                // Preserve label edits made while the application was launching.
                 var updated = snapshot
                 if let index = updated.accounts.firstIndex(where: { $0.id == account.id }) {
                     updated.accounts[index].lastOpenedAt = Date()
@@ -148,17 +159,19 @@ final class AppModel: ObservableObject {
                     try persist(updated)
                 }
                 lastAction = "Đã mở \(account.name)"
+                if account.effectiveLaunchMode == .desktop { refreshQuota(account) }
             } catch { showError(error, title: "Chưa mở được tài khoản") }
         }
     }
 
     func closeSession(_ account: Account) {
-        guard !launchingIDs.contains(account.id) else { return }
+        guard !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
         launchingIDs.insert(account.id)
         Task {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
                 try await browserService.close(account)
+                try await desktopService.close(account)
                 lastAction = "Đã đóng phiên \(account.name). Đăng nhập vẫn được giữ."
             } catch { showError(error) }
         }
@@ -167,7 +180,7 @@ final class AppModel: ObservableObject {
     func delete(_ account: Account) {
         guard !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else { return }
         do {
-            guard browserService.runningApplication(for: account) == nil else { throw ProfileError.profileRunning }
+            guard !hasRunningSession(account) else { throw DesktopProfileError.profileRunning }
             snapshot = try repository.remove(account.id, from: snapshot)
             lastAction = "Đã xóa hồ sơ \(account.name) trên máy này"
         } catch {
@@ -178,11 +191,17 @@ final class AppModel: ObservableObject {
     }
 
     func refreshRunning() {
-        let ids = Set(accounts.filter { browserService.runningApplication(for: $0) != nil }.map(\.id))
+        let ids = Set(accounts.filter { hasRunningSession($0) }.map(\.id))
         if ids != runningIDs { runningIDs = ids }
     }
 
+    func hasRunningSession(_ account: Account) -> Bool {
+        browserService.runningApplication(for: account) != nil || desktopService.runningApplication(for: account) != nil
+            || desktopService.hasBackend(account.id)
+    }
+
     func connectQuota(_ account: Account) {
+        if account.effectiveLaunchMode == .desktop { open(account); return }
         guard connectingID == nil, !quotaBusyIDs.contains(account.id), quotaCleanupTasks[account.id] == nil,
               account.codexConnection == nil else { return }
         connectingID = account.id
@@ -232,7 +251,7 @@ final class AppModel: ObservableObject {
     }
 
     func disconnectQuota(_ id: UUID) {
-        guard !quotaBusyIDs.contains(id) else { return }
+        guard !quotaBusyIDs.contains(id), accounts.first(where: { $0.id == id })?.effectiveLaunchMode == .browser else { return }
         quotaBusyIDs.insert(id)
         quotaTasks[id] = Task {
             defer { finishQuotaOperation(id) }
@@ -246,7 +265,9 @@ final class AppModel: ObservableObject {
     }
 
     func refreshQuota(_ account: Account) {
-        guard let connection = account.codexConnection, !quotaBusyIDs.contains(account.id) else { return }
+        guard !quotaBusyIDs.contains(account.id) else { return }
+        if account.effectiveLaunchMode == .desktop { refreshDesktopQuota(account); return }
+        guard let connection = account.codexConnection else { return }
         quotaBusyIDs.insert(account.id)
         quotaTasks[account.id] = Task {
             defer { finishQuotaOperation(account.id) }
@@ -260,11 +281,46 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func refreshDesktopQuota(_ account: Account) {
+        quotaBusyIDs.insert(account.id)
+        quotaTasks[account.id] = Task {
+            defer { finishQuotaOperation(account.id) }
+            do {
+                let client = try desktopService.quotaClient(account.id)
+                desktopQuotaClients[account.id] = client
+                do {
+                    try await client.start()
+                    let identity = try await client.readIdentity()
+                    let limits = try await client.readLimits()
+                    let after = try await client.readIdentity()
+                    guard identity.matches(after) else { throw CodexQuotaError.identityChanged }
+                    try Task.checkCancellation()
+                    let current = CodexIdentity(email: after.email, planType: after.planType, accountId: limits.accountId)
+                    try storeConnection(CodexConnection(identity: current, quota: CodexQuotaSnapshot(limits: limits)),
+                                        for: account.id, mode: .desktop)
+                    quotaErrors[account.id] = nil
+                    await client.stop()
+                    desktopQuotaClients[account.id] = nil
+                } catch {
+                    await client.stop()
+                    desktopQuotaClients[account.id] = nil
+                    throw error
+                }
+            } catch is CancellationError { }
+            catch {
+                if let error = error as? CodexQuotaError, error == .notSignedIn || error == .identityChanged {
+                    try? storeConnection(nil, for: account.id, mode: .desktop)
+                }
+                quotaErrors[account.id] = error.localizedDescription
+            }
+        }
+    }
+
     func refreshAllQuotas() {
         guard quotaSweepTask == nil else { return }
         quotaSweepTask = Task {
             defer { quotaSweepTask = nil }
-            for id in accounts.filter({ $0.codexConnection != nil }).map(\.id) {
+            for id in accounts.filter({ $0.effectiveLaunchMode == .desktop ? desktopService.hasBackend($0.id) : $0.codexConnection != nil }).map(\.id) {
                 if Task.isCancelled { return }
                 guard let account = accounts.first(where: { $0.id == id }) else { continue }
                 refreshQuota(account)
@@ -279,6 +335,7 @@ final class AppModel: ObservableObject {
         if let id = connectingID { cancelQuotaConnection(id) }
         for id in Array(pendingConnections.keys) { cancelQuotaConnection(id) }
         for task in quotaTasks.values { task.cancel() }
+        for client in desktopQuotaClients.values { await client.stop() }
         await quotaService.stopAll()
         for task in quotaCleanupTasks.values { await task.value }
     }
@@ -288,10 +345,11 @@ final class AppModel: ObservableObject {
         quotaTasks[id] = nil
     }
 
-    private func storeConnection(_ connection: CodexConnection?, for id: UUID) throws {
+    private func storeConnection(_ connection: CodexConnection?, for id: UUID, mode: LaunchMode = .browser) throws {
         var updated = snapshot
         guard let index = updated.accounts.firstIndex(where: { $0.id == id }) else { throw ProfileError.invalidSelection }
-        updated.accounts[index].codexConnection = connection
+        if mode == .desktop { updated.accounts[index].desktopCodexConnection = connection }
+        else { updated.accounts[index].codexConnection = connection }
         try persist(updated)
     }
 

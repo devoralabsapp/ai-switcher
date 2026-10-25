@@ -1,6 +1,6 @@
 # Security policy
 
-AI Switcher manages dedicated browser profiles and optional per-profile Codex OAuth sessions. Both can contain live login credentials even though the app does not inspect token files or browser session contents.
+AI Switcher manages dedicated ChatGPT Desktop UI/backend profiles, browser profiles, and optional browser-mode Codex OAuth sessions. Both can contain live login credentials even though the app does not inspect token files or browser session contents.
 
 ## Reporting a vulnerability
 
@@ -14,13 +14,14 @@ There is currently no guaranteed response time or funded security support. This 
 
 - The application does not collect account credentials or inspect ChatGPT conversations.
 - Quota uses a child app-server with a UUID-specific `CODEX_HOME` and file-based credentials managed by Codex CLI. Host API keys and authentication environment overrides are not inherited.
-- Users confirm the returned Codex identity. Backend account IDs are pinned when available; mismatching accounts are refused on refresh.
+- Desktop quota uses a local Unix WebSocket bridge to the same profile backend as its window; the returned account identity is displayed. Desktop launch settings are experimental.
+- For browser quota, users confirm the returned Codex identity. Backend account IDs are pinned when available; mismatching accounts are refused on refresh.
 - OAuth URLs require an allowed official HTTPS origin. Raw RPC errors and authentication URLs are not written to app logs.
 - The client exposes only initialization and account/login/logout/quota methods; it starts no model turns and consumes no reset credits.
-- Each profile is selected through its UUID-based directory and exact browser process arguments.
+- Each profile is selected through its UUID-based directory and exact application process arguments.
 - Local filesystem permissions restrict newly created app data to the current macOS user.
 - Profiles are not encrypted by AI Switcher. Other software running as the same user may access them.
-- Browser and service authentication, session expiry, and server-side data are controlled by their vendors.
+- Desktop, browser and service authentication, session expiry, and server-side data are controlled by their vendors.
 - The shipped build is signed ad hoc, without Developer ID signing or notarization.
 
 See [the architecture notes](docs/ARCHITECTURE.md) for data flow and lifecycle behavior.

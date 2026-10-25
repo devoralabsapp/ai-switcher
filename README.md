@@ -1,183 +1,114 @@
-<p align="center">
-  <img src="docs/assets/icon.png" width="88" alt="AI Switcher icon">
-</p>
+<p align="center"><img src="docs/assets/icon.png" width="88" alt="AI Switcher icon"></p>
 
 # AI Switcher for macOS
 
-**Switch between your ChatGPT accounts with one click. Keep a separate browser session for each account.**
+**One click to the right ChatGPT Desktop session. A separate profile for each account, with Codex quota on every card.**
 
-AI Switcher is a small, native macOS utility built with SwiftUI and AppKit. Add a profile for each of your accounts, sign in directly on ChatGPT, then return to the right window from the dashboard or menu bar. Closing the manager leaves the menu bar available.
+AI Switcher is a native SwiftUI and AppKit utility. Add your accounts, sign in once in each dedicated ChatGPT Desktop window, then switch from the dashboard or macOS menu bar. Daily switching requires no Chrome.
 
 **macOS 13+ · Intel and Apple Silicon · Swift · MIT license**
 
 [![macOS build](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml/badge.svg)](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml)
 
-[Download preview](https://github.com/devoralabsapp/ai-switcher/releases) ·
-[Hướng dẫn tiếng Việt](docs/README.vi.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Roadmap](docs/ROADMAP.md)
+[Download preview](https://github.com/devoralabsapp/ai-switcher/releases) · [Tiếng Việt](docs/README.vi.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Roadmap](docs/ROADMAP.md)
 
-## Why it exists
+## What it does
 
-Moving between personal, work, and study accounts should not interrupt a conversation. AI Switcher gives each account a named, persistent browser profile and makes those profiles easy to reopen. It keeps authentication in a real browser, including the normal Google and Apple sign-in flows, instead of asking users to hand over passwords or session tokens.
+- Launch the installed, official ChatGPT app with separate UI data and a separate local backend for each profile.
+- Bring the exact existing profile process forward when switching.
+- Show Codex quota remaining, hour/week windows, reset times, and the backend's account identity.
+- Refresh quota manually or every five minutes while the profile backend is running.
+- Name, color, favorite, search, and revisit profiles from a Vietnamese dashboard and menu bar.
+- Close a profile without deleting its login, or explicitly delete its local data after closing.
+- Keep the previous Chrome/Edge/Brave mode available for browser profiles.
+- Run without an API key, a hosted service, or third-party Swift packages.
 
-This is an independent utility. It opens ChatGPT in dedicated browser windows and does not change the account in OpenAI's official desktop app. Account labels are entered by the user; the app does not verify the identity signed in to ChatGPT.
+This is an independent, **experimental** utility. Desktop profiles rely on internal launch settings in the new ChatGPT app with Chat, Work, and Codex (`com.openai.codex`). ChatGPT Classic is not supported. OpenAI does not document this as a supported multi-account interface; an app update can break compatibility. AI Switcher checks for the required mechanisms and reports an error if they are absent. It never silently falls back to Chrome.
 
-## Features
+## Install and use
 
-- Open a profile with one click from its card; select profiles from the macOS menu bar.
-- Bring an existing profile window forward instead of opening a duplicate on each switch.
-- Keep browser sessions separate with a unique data directory for every profile.
-- Name profiles, add an optional email label, assign colors, and mark favorites.
-- Search profiles and filter by favorites or recent use.
-- Show Codex quota remaining and reset times per account, with a separate optional Codex connection for each profile.
-- Edit labels, open another window, close a profile session, or delete its local data.
-- Use Google Chrome, Microsoft Edge, or Brave; each profile stays with its original browser.
-- Use a Vietnamese interface, with English contributor documentation.
-- Run locally without an API key, account on another service, or third-party Swift packages.
+Download a ZIP and `SHA256SUMS.txt` from [Releases](https://github.com/devoralabsapp/ai-switcher/releases), extract it, and move **AI Switcher.app** to Applications. Previews are signed ad hoc and are not notarized; source builds are also available.
 
-## Project status
+1. Install the new ChatGPT Desktop app at `/Applications/ChatGPT.app` or `~/Applications/ChatGPT.app`.
+2. In AI Switcher, choose **Thêm tài khoản**, enter a name, and leave **ChatGPT Desktop** selected. The email field is an optional label.
+3. Sign in to the intended account inside the new ChatGPT window. Verify its account menu. Normal authentication may open your system browser once; Chrome is not required for subsequent switching.
+4. Repeat for the other accounts. The first launch of each profile can take longer while its backend is installed.
+5. Use **Mở ChatGPT** or choose the profile from the menu bar to bring its window forward.
 
-**Early preview.** The core and protocol suite has 32 tests. Local integration checks with Google Chrome verify separate processes, correct profile selection, reuse of an existing window, and persistent, isolated cookies and localStorage on a loopback fixture. Codex tests use offline fixtures, plus an installed-CLI probe in an empty, isolated home. Real OAuth login and live account quota remain manual checks.
+Existing profiles without an explicit mode now open in Desktop mode. They require one new sign-in; previous browser sessions and their separate quota connections are retained. To use them again, close the profile using **⋯ → Đóng phiên tài khoản…**, edit it, and choose **Trình duyệt**. Modes cannot change during an active session or quota operation.
 
-The initial build was tested on an Intel Mac. The bundle also compiles for Apple Silicon, but it has not yet been validated on Apple Silicon hardware or on every supported macOS version. Edge and Brave are implemented but do not yet have the same integration coverage. Real ChatGPT sign-in remains a manual check; there are no credentials in tests or CI.
+Closing the manager keeps the menu bar available. Quitting AI Switcher leaves Desktop sessions running. **Đóng phiên tài khoản…** requests a normal quit of only that profile's applications and stops its backend; it does not force-quit. Service session expiry can still require a new sign-in.
 
-## Build and install
-
-Prebuilt previews, when available, are listed under [Releases](https://github.com/devoralabsapp/ai-switcher/releases). Each includes a ZIP and `SHA256SUMS.txt`. Extract the ZIP and move the app to Applications. These previews are signed ad hoc and are not notarized; build from source if you prefer to inspect and compile the code yourself.
-
-Requirements:
-
-- macOS 13 or newer.
-- Xcode or Command Line Tools with Swift 5.9 or newer. The universal build uses Xcode's build tools.
-- At least one supported browser installed.
-- Python 3 for packaging the app icon.
-- Optional: a recent Codex CLI with app-server support, for quota display. Browser switching works without it.
-
-From the repository root:
-
-```sh
-bash scripts/build.sh
-```
-
-The app is written to `dist/AI Switcher.app`. Open it in Finder and optionally move it to Applications.
-
-For a bundle containing both CPU architectures:
-
-```sh
-bash scripts/build.sh --universal
-```
-
-Builds are signed ad hoc for local use. They are not Developer ID signed or notarized. GitHub Actions also builds a universal bundle and saves a ZIP as a workflow artifact; the source build remains available without downloading a prebuilt app.
-
-To create the release ZIP and checksum from an existing build:
-
-```sh
-bash scripts/package.sh
-```
-
-## First use
-
-1. Open AI Switcher and choose **Thêm tài khoản** (Add account).
-2. Choose a recognizable name, a color, and an installed browser. The email field is an optional label.
-3. Sign in to the intended ChatGPT account in the new window. Check the account shown inside ChatGPT.
-4. Repeat for your other accounts.
-5. Choose **Mở ChatGPT** (Open ChatGPT) or select a profile from the menu bar whenever you want to switch.
-
-Sessions are reused while the browser and ChatGPT consider them valid. If you sign out or the service expires a session, sign in again inside that profile.
-
-## Codex quota per account
-
-1. Choose **Kết nối** (Connect) under **Quota Codex** on a profile card.
-2. Choose **Đăng nhập Codex** and complete sign-in in that profile's browser window.
-3. Check the returned Codex email/plan and choose **Dùng tài khoản này** (Use this account). The browser and Codex accounts are separate; you confirm the association.
-4. The card and menu bar show quota **remaining** in the windows returned by Codex, such as five hours and a week. Click quota details for all buckets, reset times, and the last read timestamp.
-
-A compatible installed Codex CLI is required. The app discovers common installation locations, or you can choose the executable in the connection dialog. See the [official CLI guide](https://learn.chatgpt.com/docs/cli).
-
-Quota uses the documented `account/rateLimits/read` protocol. Connected profiles refresh every five minutes, one at a time; manual refresh is available. Missing windows stay unknown. Values are marked stale after six minutes, after a reset timestamp passes, or after a failed refresh. A passed reset timestamp never fabricates a refill. No model turns or reset-credit redemption are performed.
-
-**Ngắt kết nối** (Disconnect) removes that profile's local Codex session and cached quota. This connection does not change the account used by a separate Codex app or terminal.
-
-### Shortcuts
-
-These apply while AI Switcher is the active app.
-
-| Shortcut | Action |
+| Shortcut (while AI Switcher is active) | Action |
 | --- | --- |
 | ⌘1–⌘9 | Open the corresponding profile |
-| ⌘N | Add a profile |
-| ⌘K | Focus account search |
-| ⌘0 | Show the manager |
-| ⌘W | Close the manager window, keeping the menu bar available |
-| ⌘Q | Quit AI Switcher |
+| ⌘N / ⌘K / ⌘0 | Add / search / show manager |
+| ⌘W / ⌘Q | Close manager / quit AI Switcher |
 
-## Privacy and session storage
+## Codex quota
 
-The application does not inspect passwords, cookies, authentication tokens, or conversations. The browser manages sign-in in its own profile directory. AI Switcher does not add analytics, a backend, browser extensions, remote debugging ports, or credential synchronization. ChatGPT and the browser still make their usual network requests.
+For Desktop profiles, sign in inside that Desktop window, then choose **Làm mới quota**. The reader connects to the **same local backend** as that window, using a local WebSocket bridge included in AI Switcher. It does not establish a second quota login or import your default Codex session. The returned email/plan identifies the quota account; profile names remain user-entered labels. Sign out within the relevant ChatGPT window when changing its account.
 
-Optional quota connections use Codex-managed OAuth in `Codex/<UUID>/` under the app data directory. Codex CLI owns and refreshes its profile-local `auth.json`; AI Switcher does not read that token file or import your regular Codex session. It reads identity and quota responses and caches those in `accounts.json`. Codex CLI also makes its usual service requests. New Codex directories use `0700`, with `0600` enforced for the credential file after sign-in. Treat these directories as private authentication data, not an encrypted vault.
+Cards and the menu bar show **remaining** quota in the windows returned by Codex, such as five hours and a week. Details include all separate limit buckets and reset timestamps. Missing windows remain unknown. Snapshots are marked stale after six minutes, reset expiry, or a failed refresh; a reset timestamp never invents a refill. Closing the profile stops live refresh and leaves the last cached snapshot.
+
+Browser-mode profiles retain the optional **Kết nối → Đăng nhập Codex → Dùng tài khoản này** flow. Their Codex login is separate from browser ChatGPT login and requires identity confirmation. **Ngắt kết nối** removes only that browser profile's separate Codex home.
+
+Quota uses [`account/read` and `account/rateLimits/read`](https://learn.chatgpt.com/docs/app-server). The reader performs no model turns and redeems no reset credits.
+
+## Privacy and storage
+
+AI Switcher does not read passwords, cookies, token files, or conversations. ChatGPT and Codex manage their own authentication and usual network requests. AI Switcher reads identity and quota protocol responses and caches them in `accounts.json`. Child environments exclude inherited API keys and authentication/CLI overrides.
 
 ```text
 ~/Library/Application Support/AI Switcher/
-├── accounts.json          # Names, optional email labels, colors, and recent-use metadata
-└── Profiles/
-    └── <UUID>/            # A dedicated browser data directory for one profile
+├── accounts.json                  # Labels, selected mode, identities and cached quota
+├── Desktop/<UUID>/UserData/        # ChatGPT Desktop UI and browser storage
+├── Desktop/<UUID>/backend-location.txt
+├── Profiles/<UUID>/               # Optional legacy browser profile
+└── Codex/<UUID>/                  # Optional browser-mode quota login
+
+~/.aisw/<profile-key>/             # Desktop backend, configuration and authentication
+└── ai-switcher-profile.json       # Ownership marker: app-data root and profile UUID
 ```
 
-New app directories use permissions `0700`; the metadata file uses `0600`. These profiles belong to the current macOS user. They are not a separate encrypted vault or a boundary against other software running as that user. Treat profile directories as private browser data.
+The short `~/.aisw` location keeps Unix socket paths within macOS limits. Its stable key hashes the app-data root and profile UUID, so development and production profiles do not share a backend. An ownership marker must match before the app reuses or removes a backend. A new profile never imports your default ChatGPT or `~/.codex` data. Desktop backends use file-based credentials managed by Codex.
 
-The app creates its own profiles. It does not import or edit your everyday browser profile. When switching windows or closing sessions, it matches the browser's exact data-directory argument, not just the browser name.
+New app directories use `0700`, and metadata uses `0600`. These are private sessions belonging to the current macOS user, **not an encrypted vault** or protection from other software running as that user. Do not upload profile data to GitHub. Exact process arguments identify the profile before focus or termination; the app never quits every process named ChatGPT.
 
-Close a profile session before deleting it. Deleting a profile removes its app-managed local data and label; it does not delete the ChatGPT account, delete server-side conversations, or revoke every session on the service. Browser-managed caches may also exist outside the app's profile directory.
+Close a profile before deletion. Deletion stages its Desktop, backend, browser and optional Codex directories, saves metadata, then removes them; metadata-save failure restores staged data. It does not delete service accounts or server-side conversations. OS-level deep links, notifications, permissions, and other bundle-ID integrations may be shared between instances; check the intended window when using them. See [SECURITY.md](SECURITY.md).
 
-Deletion also removes that profile's dedicated Codex home. Wait for any quota operation to finish before deleting a profile; browser and Codex directories share the metadata-save rollback operation.
+## Build and verify
 
-For security reports, see [SECURITY.md](SECURITY.md).
-
-## Development and tests
-
-Run the unit suite:
+Use macOS 13+, Xcode/Command Line Tools with Swift 5.9+, and Python 3 for icon packaging. Desktop runtime additionally needs the compatible ChatGPT app; browser mode needs Chrome, Edge, or Brave.
 
 ```sh
 bash scripts/test.sh
+bash scripts/build.sh --universal
+bash scripts/package.sh
 ```
 
-Run local browser checks as well:
+Output: `dist/AI Switcher.app`, `dist/AI-Switcher-macOS.zip`, and `dist/SHA256SUMS.txt`. Omit `--universal` for a local-architecture build. GitHub Actions runs offline tests and builds/packages both architectures.
+
+Local integration checks require a graphical macOS login session:
 
 ```sh
-bash scripts/test.sh --browser
+bash scripts/test.sh --desktop  # Two disposable real ChatGPT instances and local backend connections
+bash scripts/test.sh --browser  # Chrome windows plus loopback cookie/localStorage fixture
+bash scripts/test.sh --codex    # Installed CLI handshake in a fresh unauthenticated home
 ```
 
-The browser checks require Google Chrome and a logged-in graphical macOS session. They open two disposable test windows, close only those dedicated sessions, then use Chrome headless with an HTTP fixture on `127.0.0.1` to check cookie and localStorage persistence. No ChatGPT account is required. The GUI checks are kept local; CI runs the unit suite and builds the app.
+The core/protocol suite has 46 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, and JSONL lifecycle. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
 
-Use a separate development data directory:
+**Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface is Vietnamese; English localization is planned.
+
+Use a separate development profile root:
 
 ```sh
 "dist/AI Switcher.app/Contents/MacOS/AISwitcher" --data-dir /tmp/ai-switcher-dev
 ```
 
-The unit tests cover metadata round trips, corrupt-file handling, permissions, validation, profile separation, exact process matching, deletion isolation, and rollback when a deletion cannot save metadata.
+## Contribute
 
-Quota tests also cover remaining-vs-used values, multiple buckets, unknown/expired windows, identity matching, sanitized child environments, fragmented JSONL, early login notifications, timeouts, cancellation, EOF, and sanitized errors. CI uses offline fixtures without Codex credentials. To probe an installed CLI in a fresh, unauthenticated home, run `bash scripts/test.sh --codex`; it can be combined with `--browser`.
+Compatibility reports, accessibility improvements, and localization contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). The initial implementation was developed with OpenAI Codex assistance; contributors are responsible for checking changes and reporting actual validation.
 
-## Repository layout
-
-| Path | Purpose |
-| --- | --- |
-| `Sources/AISwitcherCore` | Account models, metadata persistence, and browser arguments |
-| `Sources/AISwitcher` | SwiftUI dashboard, AppKit menus, and browser lifecycle |
-| `Tests/AISwitcherCoreTests` | Unit tests for data and process routing |
-| `scripts` | Build, original icon generation, packaging, and browser checks |
-| `.github/workflows` | macOS test and universal-build workflow |
-| `docs` | Vietnamese guide, architecture notes, and roadmap |
-
-## Contributing
-
-Bug reports, reproducible browser compatibility reports, accessibility improvements, and localization work are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and review expectations.
-
-The initial implementation was developed with assistance from OpenAI Codex. Contributors remain responsible for understanding their changes, protecting session data, and reporting what they actually tested.
-
-## License and acknowledgments
-
-Released under the [MIT License](LICENSE).
-
-Profile separation follows Chromium's documented [`--user-data-dir` mechanism](https://chromium.googlesource.com/chromium/src/+/main/docs/user_data_dir.md). The app icon is generated from original geometric drawing code in this repository. ChatGPT, browser names, and related marks belong to their respective owners. AI Switcher is not affiliated with or endorsed by OpenAI or the browser vendors.
+Released under the [MIT License](LICENSE). The icon is original geometric drawing code in this repository. Legacy browser isolation follows Chromium's [`--user-data-dir` mechanism](https://chromium.googlesource.com/chromium/src/+/main/docs/user_data_dir.md). AI Switcher is not affiliated with or endorsed by OpenAI or browser vendors.

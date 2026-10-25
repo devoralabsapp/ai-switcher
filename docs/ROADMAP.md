@@ -5,6 +5,8 @@ These are proposed next steps, not promised release dates or shipped features. C
 ## Make the first release easier to validate
 
 - [ ] Add manual compatibility results for Apple Silicon and the oldest supported macOS version.
+- [ ] Verify Desktop compatibility across ChatGPT updates and improve version diagnostics.
+- [ ] Verify OAuth callbacks, deep links, notifications, and OS permissions across Desktop instances.
 - [ ] Exercise Edge and Brave with the same profile lifecycle checks as Chrome.
 - [ ] Document real ChatGPT sign-in, session expiry, and sign-out behavior with disposable accounts.
 - [ ] Verify minimized windows, multiple windows, and multiple macOS Spaces.

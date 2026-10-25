@@ -61,7 +61,8 @@ final class CodexRPCClientTests: XCTestCase {
     }
 
     func testTimeoutCompletesInsteadOfHanging() async throws {
-        let client = try client("timeout", timeout: 0.2)
+        // Leave enough time for Python's cold start on a busy CI host.
+        let client = try client("timeout", timeout: 1)
         try await client.start()
         do { _ = try await client.readLimits(); XCTFail("Expected timeout") }
         catch { XCTAssertEqual(error as? CodexQuotaError, .timeout) }

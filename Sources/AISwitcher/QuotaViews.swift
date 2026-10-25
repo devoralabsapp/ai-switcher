@@ -13,12 +13,12 @@ struct QuotaSummaryView: View {
                     Spacer()
                     if model.quotaBusyIDs.contains(account.id) {
                         ProgressView().controlSize(.mini)
-                    } else if account.codexConnection != nil {
+                    } else if account.displayedCodexConnection != nil {
                         Button { model.refreshQuota(account) } label: { Image(systemName: "arrow.clockwise").font(.system(size: 11)) }
                             .buttonStyle(.plain).help("Làm mới quota Codex")
                     }
                 }
-                if let connection = account.codexConnection {
+                if let connection = account.displayedCodexConnection {
                     Button { model.quotaAccountID = account.id } label: {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(connection.identity.email ?? "Danh tính Codex đã xác nhận")
@@ -39,7 +39,7 @@ struct QuotaSummaryView: View {
                     }.buttonStyle(.plain).help("Xem quota, thời điểm reset và tài khoản Codex đã kết nối")
                 } else {
                     HStack {
-                        Text(model.connectingID == account.id ? "Đang chờ đăng nhập…" : "Chưa kết nối")
+                        Text(model.connectingID == account.id ? "Đang chờ đăng nhập…" : (account.effectiveLaunchMode == .desktop ? "Đăng nhập trong Desktop" : "Chưa kết nối"))
                             .font(.system(size: 10)).foregroundColor(Palette.secondary)
                         Spacer()
                         Button(model.connectingID == account.id ? "Chi tiết" : "Kết nối") { model.quotaAccountID = account.id }
@@ -128,7 +128,7 @@ struct QuotaDetailView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if let pending = model.pendingConnections[accountID] {
                         confirmation(pending)
-                    } else if let account, let connection = account.codexConnection {
+                    } else if let account, let connection = account.displayedCodexConnection {
                         connected(account, connection)
                     } else if let account {
                         onboarding(account)
@@ -156,8 +156,21 @@ struct QuotaDetailView: View {
         }
     }
 
+    @ViewBuilder
     private func onboarding(_ account: Account) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        if account.effectiveLaunchMode == .desktop {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Quota của chính phiên Desktop").font(.system(size: 15, weight: .semibold))
+                Text("Mở phiên ChatGPT Desktop của hồ sơ này và đăng nhập đúng tài khoản. Quota giờ/tuần được đọc qua cùng backend, tự làm mới mỗi 5 phút khi phiên đang chạy.")
+                    .font(.system(size: 12)).lineSpacing(4).foregroundColor(Palette.secondary)
+                Text("Sau khi đăng nhập, bấm Làm mới. Muốn đổi tài khoản của phiên, đăng xuất bên trong cửa sổ ChatGPT đó. Email trên thẻ là danh tính do backend trả về.")
+                    .font(.system(size: 11)).lineSpacing(4).foregroundColor(Palette.secondary)
+                Button { model.open(account) } label: { Label("Mở ChatGPT Desktop", systemImage: "macwindow") }
+                    .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.launchingIDs.contains(accountID))
+                Button("Làm mới quota") { model.refreshQuota(account) }.disabled(busy)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
             Text("Kết nối một lần cho hồ sơ này").font(.system(size: 15, weight: .semibold))
             Text("Đăng nhập đúng tài khoản Codex trong cửa sổ trình duyệt của hồ sơ. Sau khi xong, kiểm tra danh tính và xác nhận để gắn quota vào thẻ.")
                 .font(.system(size: 12)).lineSpacing(4).foregroundColor(Palette.secondary)
@@ -184,6 +197,7 @@ struct QuotaDetailView: View {
                 }.font(.system(size: 11))
             }
         }
+    }
     }
 
     private func confirmation(_ connection: CodexConnection) -> some View {
@@ -228,7 +242,9 @@ struct QuotaDetailView: View {
                 Button { model.refreshQuota(account) } label: { Label("Làm mới", systemImage: "arrow.clockwise") }
                     .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(busy)
                 Spacer()
-                Button("Ngắt kết nối…") { confirmDisconnect = true }.disabled(busy)
+                if account.effectiveLaunchMode == .browser {
+                    Button("Ngắt kết nối…") { confirmDisconnect = true }.disabled(busy)
+                }
             }
             Text("Phần trăm là hạn mức còn lại do Codex trả về. Cửa sổ không có dữ liệu không được coi là không giới hạn. App không thực hiện tác vụ AI khi đọc quota.")
                 .font(.system(size: 10)).lineSpacing(4).foregroundColor(Palette.secondary)

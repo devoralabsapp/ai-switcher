@@ -12,3 +12,5 @@ submission/
 __pycache__/
 Codex/
 auth.json
+Desktop/
+.aisw/

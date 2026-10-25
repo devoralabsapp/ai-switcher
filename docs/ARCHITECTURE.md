@@ -1,54 +1,61 @@
 # Architecture
 
-AI Switcher is a native macOS executable with a small, independently testable core. It has no server component or third-party Swift package dependency.
-
-## Data flow
+A SwiftUI/AppKit macOS manager with an independently testable Swift core. No hosted backend or third-party Swift packages are included. ChatGPT Desktop runs its own local backend per profile.
 
 ```mermaid
 flowchart LR
     UI[Dashboard or menu bar] --> Model[AppModel]
-    Model --> Metadata[ProfileRepository: labels and UUIDs]
-    Model --> Browser[BrowserService]
-    Browser --> A[Browser process with profile A]
-    Browser --> B[Browser process with profile B]
-    A --> ChatGPT[chatgpt.com]
-    B --> ChatGPT
+    Model --> Metadata[ProfileRepository]
+    Model --> Desktop[DesktopService]
+    Desktop --> A[ChatGPT UI A + backend A]
+    Desktop --> B[ChatGPT UI B + backend B]
+    Model --> Quota[CodexRPCClient via local WebSocket bridge]
+    Quota --> A
+    Quota --> B
+    Model --> Browser[Optional BrowserService]
 ```
 
-Browser authentication happens directly with the service. Optional Codex authentication is owned by a separate CLI home per profile. The app receives authorization URLs, completion status, identity, and quota responses, but does not read token files.
+## Profile identity and storage
 
-## Core
+Each account UUID selects stable storage independent of its editable labels. Versioned JSON retains optional launch mode, separate Desktop/browser quota connections, and recent-use metadata. Old snapshots decode without new fields; an absent mode now selects Desktop. Browser sessions are retained, never converted by copying authentication.
 
-`AISwitcherCore` defines accounts, colors, supported browser identifiers, snapshot validation, and browser launch arguments. An account's UUID is its stable storage identity. Labels are editable; renaming an account cannot select a different directory.
+UI data stays at `Desktop/<UUID>/UserData` under the app-data root. Backend homes use `~/.aisw/<key>`, where the key is the first 128 bits of SHA-256 of the normalized app root and UUID, encoded as base64url. This keeps the backend Unix socket path under macOS's 104-byte limit, including when the app-data root is long. A marker records the original root and UUID; existing backend directories require a matching marker. Owned directories reject symlinks and wrong OS ownership. The UI profile records the backend location for recovery.
 
-`ProfileRepository` reads and atomically writes versioned JSON metadata. It rejects corrupt data, duplicate IDs, unsupported versions, and invalid selections. A failed load is surfaced instead of replacing the file with an empty list.
+Deleting a stopped profile stages its four data directories beside their respective original locations, saves metadata, then deletes staged data. A failed save restores all staged directories. Cleanup errors surface and trigger metadata reload. Moving each directory within its own parent avoids cross-volume renames between app data and backend storage.
 
-Each account's browser data directory is derived from its UUID. For deletion, the repository stages the directory, saves updated metadata, then removes the staged data. If saving metadata fails, it attempts to restore the directory. A cleanup failure is surfaced; the caller reloads saved metadata so the interface reflects the durable result.
+## Desktop lifecycle
 
-## Native application
+`DesktopService` locates ChatGPT with bundle ID `com.openai.codex`, checks the installed app archive for required launch mechanisms, and uses its bundled CLI. This targets the new ChatGPT with Chat, Work, and Codex; it does not support ChatGPT Classic. These mechanisms are internal and experimental, not a vendor-supported multi-account API.
 
-`AppModel` coordinates editing, filtering, opening, closing, and deletion. `AppDelegate` owns the AppKit window and menu bar; the dashboard and dialogs use SwiftUI.
+The service starts a profile-owned `codex app-server daemon` with an explicit `CODEX_HOME`, file-based credentials, and analytics disabled. The first start installs the bundled daemon locally; it does not bootstrap a system service. The Desktop process receives:
 
-`BrowserService` locates an installed browser by bundle identifier. It starts the browser executable with a dedicated `--user-data-dir` and ChatGPT in app-window mode. Arguments are passed directly to `Process`, without a shell.
+- `CODEX_HOME`: the matching backend directory.
+- `CODEX_ELECTRON_USER_DATA_PATH`: the matching UI directory.
+- `CODEX_APP_SERVER_USE_LOCAL_DAEMON=1`: connect to that profile's daemon.
+- `--user-data-dir=<exact UI directory>`: separate Electron storage and instance lock.
 
-To reuse a session, the service enumerates running applications with the matching browser bundle ID, reads their process argument vectors, and matches the complete profile argument. Helpers with a `--type=` argument do not qualify as the main browser process. CoreGraphics supplies window metadata to decide whether there is a window to activate; the app does not capture screen pixels.
+Arguments go directly to `Process`, with no shell. The environment is allowlisted; inherited authentication keys, forced CLI overrides and other profile settings are dropped. Default ChatGPT and Codex directories are never imported or rewritten.
 
-Closing a session requests termination only of the matched dedicated browser process and waits for it to exit. It does not force-kill a process. Deletion is refused while the matching profile is running.
+`ManagedApplications` matches a full data-directory argument on the correct bundle ID, excluding renderer/helper processes. CoreGraphics provides window metadata, not screenshots. Existing windows activate by exact process; launching the same profile again forwards a reopen request through its Electron instance lock if all windows were closed. Closing requests normal termination of only that matched UI process, waits for exit, then stops its exact backend. It never force-quits or kills applications by name.
 
-## Codex quota
+Profile windows/backends persist after AI Switcher quits. Local daemons allow quota reads without starting a second independent backend that could race authentication refresh. macOS integrations keyed by bundle ID (deep links, permissions, notifications) can still be shared; they are outside the profile routing guarantee.
 
-`CodexRPCClient` is an actor using JSONL over a child process's stdio. It initializes first, exposes only account operations, and handles fragmented messages, early login events, cancellation, deadlines, and EOF. Raw error messages are replaced with fixed user-facing text. No model threads or reset-credit operations are exposed.
+## Quota
 
-`CodexQuotaService` uses `Codex/<UUID>` for the child's `CODEX_HOME`, sanitizes inherited environment variables, and leaves regular Codex sessions untouched. Login opens a validated official HTTPS URL in the profile's browser. Users confirm identity before saving. Backend account IDs are checked on later reads when available, with email fallback for older responses. Helpers stop after each operation; abandoned logins are cleaned up.
+`CodexRPCClient` is an actor with JSONL stdio, fragmented-message support, deadlines, cancellation, early login notifications, and EOF handling. It exposes initialization and account operations, never model threads or reset credits. Raw server errors become fixed messages.
 
-Polling runs sequentially every five minutes. Multiple quota buckets stay separate, and nonempty multi-bucket responses take precedence over the legacy view. Remaining percentages are `100 - usedPercent`, clamped to 0–100. Missing windows stay unknown and reset expiry does not imply a refill. Snapshots retain the read timestamp; stale/error states remain visible. Browser and Codex directories share staged deletion/rollback.
+Desktop reads use a child copy of AI Switcher in `--quota-socket-bridge` mode against the same backend as its UI. It upgrades a local Unix connection at `/rpc` to WebSocket, validates the handshake, masks client frames, handles fragmentation/ping/close, and relays JSONL to the restricted reader. It opens no TCP listener. Socket ownership is checked after resolving the daemon's socket symlink. Identity is read before and after quota; an identity change invalidates the read. Signed-out profiles clear their cached Desktop connection. The helper stops after each operation; stopping a bridge does not stop the Desktop daemon. Desktop sign-out belongs to the ChatGPT window, so the manager offers no separate quota logout for Desktop.
+
+Optional browser quota still uses `CodexQuotaService` and `Codex/<UUID>` with explicit identity confirmation and account-ID checks. Validated HTTPS login URLs open only in the corresponding browser profile. Browser and Desktop cache fields remain separate when changing mode.
+
+Polling is sequential every five minutes while a Desktop backend exists, or while a browser quota connection is saved. `100 - usedPercent` is clamped to 0–100. Multiple buckets remain separate; nonempty multi-bucket responses take precedence. Missing windows are unknown, and expired reset times never fabricate refill. Last-read timestamps and stale/error states remain visible.
 
 Protocol reference: [Codex App Server](https://learn.chatgpt.com/docs/app-server).
 
-## Tests and limits
+## Browser fallback and verification
 
-The core unit suite verifies persistence, validation, storage separation, exact argument matching, permissions, targeted deletion, and deletion rollback.
+`BrowserService` retains Chrome/Edge/Brave app-window launching with UUID-specific `--user-data-dir`, exact argument matching and normal termination. It runs only when the profile explicitly selects browser mode.
 
-Local GUI smoke checks create two throwaway profiles, verify distinct browser processes, switch back to a process without creating another window, then terminate only those test sessions. A separate headless loopback fixture verifies isolated and persistent cookies and localStorage.
+The offline core/protocol suite verifies persistence, migration, owner markers, environment isolation, routing, permissions, staged deletion/rollback, quota semantics and JSONL lifecycle. `--desktop` uses two new real Desktop profiles, verifies separate PIDs, blank identities through each daemon, reuse, close/reopen persistence and cleanup while existing instances remain alive. `--browser` adds Chrome GUI checks and a headless loopback cookie/localStorage fixture; `--codex` probes an empty standalone CLI home.
 
-CI runs unit tests and a universal app build. Manual ChatGPT authentication, minimized-window behavior across macOS versions, and vendor-managed browser policies need further field testing. The current interface supports Vietnamese; internationalization is planned.
+CI runs offline tests and universal compilation/packaging. Real account authentication, live quota, Apple Silicon runtime behavior, minimized windows and multiple Spaces require manual coverage. The interface is Vietnamese.

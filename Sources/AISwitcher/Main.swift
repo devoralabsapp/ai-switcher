@@ -8,6 +8,10 @@ import Darwin
 struct AISwitcherMain {
     @MainActor
     static func main() {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--quota-socket-bridge" {
+            do { try LocalWebSocket.run(socketPath: CommandLine.arguments[2]); Darwin.exit(0) }
+            catch { Darwin.exit(1) }
+        }
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate
@@ -49,7 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         noticeSubscription = model.$notice.compactMap { $0 }.receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.showDashboard() }
 
-        if arguments.contains("--quota-smoke-test") {
+        if arguments.contains("--desktop-smoke-test") {
+            Task { await desktopSmokeTest(root: root) }
+        } else if arguments.contains("--quota-smoke-test") {
             Task { await quotaSmokeTest(root: root) }
         } else if arguments.contains("--smoke-test") {
             Task { await smokeTest(root: root) }
@@ -142,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.isEnabled = !busy
             item.state = model.snapshot.lastOpenedID == account.id ? .on : .off
             item.image = NSImage(systemSymbolName: account.isFavorite ? "star.fill" : "person.crop.circle", accessibilityDescription: nil)
-            item.toolTip = "Mở hồ sơ \(account.name) bằng \(account.browser.name)"
+            item.toolTip = "Mở hồ sơ \(account.name) bằng \(account.effectiveLaunchMode == .desktop ? "ChatGPT Desktop" : account.browser.name)"
             menu.addItem(item)
         }
         menu.addItem(.separator())
@@ -159,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func statusTitle(_ account: Account) -> String {
         let suffix = account.emailHint.isEmpty ? "" : "  ·  \(account.emailHint)"
         var quotaLabel = ""
-        if let quota = account.codexConnection?.quota {
+        if let quota = account.displayedCodexConnection?.quota {
             if quota.isStale(at: Date()) || model.quotaErrors[account.id] != nil { quotaLabel = "  ·  Codex: dữ liệu cũ" }
             else if let bucket = quota.limits.buckets.first {
                 let windows = [bucket.value.primary, bucket.value.secondary].compactMap { $0 }.compactMap { window -> String? in
@@ -243,7 +249,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item)
     }
 
-    /// Uses throwaway browser profiles only; never touches user accounts.
+    /// Uses two new, disposable Desktop profiles; never signs in or reads existing credentials.
+    private func desktopSmokeTest(root: URL) async {
+        setbuf(stdout, nil)
+        guard CommandLine.arguments.contains("--data-dir"), root.lastPathComponent.hasPrefix("ai-switcher-smoke."),
+              model.accounts.isEmpty else {
+            fputs("FAIL: a new ai-switcher-smoke.* data directory is required\n", stderr)
+            Darwin.exit(1)
+        }
+        let service = model.desktopService, repository = model.repository
+        let a = Account(name: "Desktop Smoke A", launchMode: .desktop)
+        let b = Account(name: "Desktop Smoke B", launchMode: .desktop)
+        let existing = NSRunningApplication.runningApplications(withBundleIdentifier: DesktopLaunch.bundleIdentifier)
+        var failure: Error?
+        do {
+            let installed = try service.installation()
+            print("Testing ChatGPT Desktop \(installed.version)")
+            let first = try await service.open(a)
+            print("Opened isolated Desktop A")
+            let second = try await service.open(b)
+            guard first.processIdentifier != second.processIdentifier,
+                  !existing.contains(where: { [first.processIdentifier, second.processIdentifier].contains($0.processIdentifier) }) else {
+                throw DesktopProfileError.launchFailed
+            }
+            print("PASS: two real Desktop processes, separate from existing application instances")
+            for account in [a, b] {
+                let client = try service.quotaClient(account.id)
+                do {
+                    try await client.start()
+                    do {
+                        _ = try await client.readIdentity()
+                        throw CodexQuotaError.identityChanged
+                    } catch CodexQuotaError.notSignedIn { }
+                    await client.stop()
+                } catch { await client.stop(); throw error }
+            }
+            print("PASS: both Desktop backends have no inherited account; quota bridge handshake works")
+            let windows = ManagedApplications.windowCount(first)
+            let reused = try await service.open(a)
+            guard reused.processIdentifier == first.processIdentifier,
+                  ManagedApplications.windowCount(first) == windows else { throw DesktopProfileError.launchFailed }
+            print("PASS: switching targets the existing profile process and reuses its window")
+            let marker = repository.desktopUserDataURL(for: a.id).appendingPathComponent("ai-switcher-smoke-fixture")
+            try Data("retained-profile".utf8).write(to: marker)
+            try await service.close(a)
+            guard !second.isTerminated, existing.allSatisfy({ !$0.isTerminated }) else { throw DesktopProfileError.launchFailed }
+            let reopened = try await service.open(a)
+            guard reopened.processIdentifier != first.processIdentifier,
+                  try String(contentsOf: marker) == "retained-profile" else { throw DesktopProfileError.launchFailed }
+            print("PASS: closing/reopening preserves profile data; other Desktop instances remain running")
+        } catch { failure = error }
+        for account in [a, b] {
+            do {
+                try await service.close(account)
+                _ = try repository.remove(account.id, from: AccountSnapshot())
+            } catch { failure = failure ?? error }
+        }
+        if let failure {
+            fputs("FAIL: \(failure.localizedDescription)\n", stderr)
+            Darwin.exit(1)
+        }
+        print("PASS: disposable Desktop processes, daemons and storage cleaned up")
+        Darwin.exit(0)
+    }
+
+    /// Uses a throwaway Codex home only; never touches user accounts.
     private func quotaSmokeTest(root: URL) async {
         guard let executable = model.quotaService.executableURL,
               CommandLine.arguments.contains("--data-dir") else {

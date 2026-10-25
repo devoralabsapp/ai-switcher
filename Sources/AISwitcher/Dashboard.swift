@@ -45,9 +45,9 @@ struct Dashboard: View {
             Button("Hủy", role: .cancel) { model.accountToDelete = nil }
             Button("Xóa hồ sơ", role: .destructive) { model.delete(account); model.accountToDelete = nil }
         } message: { account in
-            Text("Hồ sơ “\(account.name)”, phiên trình duyệt và phiên Codex riêng trên máy sẽ bị xóa. Tài khoản và lịch sử trên dịch vụ vẫn được giữ.")
+            Text("Hồ sơ “\(account.name)”, phiên Desktop, trình duyệt và backend riêng trên máy sẽ bị xóa. Tài khoản và lịch sử trên dịch vụ vẫn được giữ.")
         }
-        .alert("Đóng phiên trình duyệt?", isPresented: Binding(
+        .alert("Đóng phiên tài khoản?", isPresented: Binding(
             get: { model.accountToClose != nil },
             set: { if !$0 { model.accountToClose = nil } }
         ), presenting: model.accountToClose) { account in
@@ -132,7 +132,7 @@ struct Dashboard: View {
                 Rectangle().fill(Palette.line).frame(height: 1)
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lock.shield").font(.system(size: 13)).foregroundColor(Palette.accent)
-                    Text("Phiên đăng nhập được lưu\ntrong hồ sơ trình duyệt riêng.")
+                    Text("Mỗi tài khoản có một phiên\nChatGPT Desktop riêng.")
                         .font(.system(size: 10)).lineSpacing(4).foregroundColor(Palette.secondary)
                 }
             }
@@ -326,9 +326,11 @@ private struct AccountCard: View {
                 Menu {
                     Button("Chỉnh sửa hồ sơ…") { model.editor = AccountEditor(account: account) }
                     Button("Quota Codex…") { model.quotaAccountID = account.id }
-                    Button("Mở cửa sổ ChatGPT mới") { model.open(account, newWindow: true) }
+                    if account.effectiveLaunchMode == .browser {
+                        Button("Mở cửa sổ ChatGPT mới") { model.open(account, newWindow: true) }
+                    }
                     Divider()
-                    Button("Đóng phiên trình duyệt…") { model.accountToClose = account }.disabled(!running)
+                    Button("Đóng phiên tài khoản…") { model.accountToClose = account }.disabled(!running || model.quotaBusyIDs.contains(account.id))
                     Button("Xóa hồ sơ trên máy…", role: .destructive) { model.accountToDelete = account }
                         .disabled(model.quotaBusyIDs.contains(account.id) || model.pendingConnections[account.id] != nil)
                 } label: { Image(systemName: "ellipsis").font(.system(size: 13, weight: .medium)).frame(width: 18, height: 24) }
@@ -344,8 +346,8 @@ private struct AccountCard: View {
             }.buttonStyle(.plain).disabled(busy)
 
             HStack(spacing: 5) {
-                Image(systemName: "globe").font(.system(size: 10))
-                Text(account.browser == .chrome ? "Chrome" : account.browser == .edge ? "Edge" : "Brave")
+                Image(systemName: account.effectiveLaunchMode == .desktop ? "macwindow" : "globe").font(.system(size: 10))
+                Text(account.effectiveLaunchMode == .desktop ? "ChatGPT Desktop" : account.browser.name)
                 Spacer()
                 Circle().fill(running ? Palette.accent : Palette.secondary.opacity(0.35)).frame(width: 4, height: 4)
                 Text(running ? "Đang mở" : account.lastOpenedAt == nil ? "Chưa mở" : "Đã lưu hồ sơ")

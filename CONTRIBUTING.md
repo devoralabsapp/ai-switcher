@@ -4,7 +4,7 @@ Thanks for helping improve a small, native macOS utility. The current interface 
 
 ## Set up
 
-Use macOS 13+ with Swift 5.9+ and Xcode or Command Line Tools. Install Chrome if you intend to run browser integration checks. No third-party Swift dependencies or API credentials are required.
+Use macOS 13+ with Swift 5.9+ and Xcode or Command Line Tools. Install the new ChatGPT app for `--desktop` checks. Install Chrome if you intend to run browser integration checks. No third-party Swift dependencies or API credentials are required.
 
 ```sh
 bash scripts/test.sh
@@ -16,9 +16,9 @@ Keep development profiles separate from accounts you use every day. Use a dispos
 
 ## Report a bug
 
-Include macOS version, CPU architecture, browser name/version, the action that triggered the problem, and the expected and actual behavior. List reproduction steps and whether the issue occurs with a fresh profile.
+Include macOS version, CPU architecture, ChatGPT or browser name/version, the action that triggered the problem, and the expected and actual behavior. List reproduction steps and whether the issue occurs with a fresh profile.
 
-Redact account names and email labels from screenshots. Never attach `accounts.json`, browser profile directories, cookies, tokens, credentials, or conversation content. Use the private reporting route in [SECURITY.md](SECURITY.md) for vulnerabilities.
+Redact account names and email labels from screenshots. Never attach `accounts.json`, Desktop/backend/browser profile directories, cookies, tokens, credentials, or conversation content. Use the private reporting route in [SECURITY.md](SECURITY.md) for vulnerabilities.
 
 ## Propose a change
 
@@ -28,7 +28,7 @@ For a substantial feature, open an issue to discuss the behavior first. Small fi
 - Relevant tests or a manual verification description.
 - The browser and macOS versions tested, and remaining coverage gaps.
 
-Run `bash scripts/test.sh` and `bash scripts/build.sh` before submitting app changes. Changes to profile paths, process matching, session closing, or deletion should also run `bash scripts/test.sh --browser` locally. The latter opens temporary browser windows and requires a graphical login session.
+Run `bash scripts/test.sh` and `bash scripts/build.sh` before submitting app changes. Changes to profile paths, process matching, session closing, or deletion should also run `bash scripts/test.sh --desktop` locally, and `--browser` when changing browser behavior. These checks open temporary windows and require a graphical login session.
 
 For release-related changes, run `bash scripts/build.sh --universal`. CI tests the core and builds both architectures; it does not claim to validate interactive sign-in.
 
@@ -36,7 +36,7 @@ For release-related changes, run `bash scripts/build.sh --universal`. CI tests t
 
 Quota changes must preserve profile isolation and keep unavailable data distinct from zero usage. Run the protocol fixture tests with `bash scripts/test.sh`. Optionally use `bash scripts/test.sh --codex` to probe an installed CLI with a disposable, unauthenticated home; never import real credentials into test fixtures.
 
-- Keep authentication inside the real browser. Do not collect or copy passwords, cookies, or tokens.
+- Keep authentication inside ChatGPT Desktop or the selected real browser. Do not collect or copy passwords, cookies, or tokens.
 - Match a dedicated profile exactly before focusing or terminating its process.
 - Preserve existing metadata when reading or saving fails.
 - Do not force-quit sessions or silently delete profile data.

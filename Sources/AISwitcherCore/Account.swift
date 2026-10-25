@@ -49,10 +49,18 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public let createdAt: Date
     public var lastOpenedAt: Date?
     public var codexConnection: CodexConnection?
+    public var launchMode: LaunchMode?
+    public var desktopCodexConnection: CodexConnection?
+
+    public var effectiveLaunchMode: LaunchMode { launchMode ?? .desktop }
+    public var displayedCodexConnection: CodexConnection? {
+        effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection
+    }
 
     public init(id: UUID = UUID(), name: String, emailHint: String = "", browser: BrowserKind = .chrome,
                 color: AccountColor = .mint, isFavorite: Bool = false, createdAt: Date = Date(),
-                lastOpenedAt: Date? = nil, codexConnection: CodexConnection? = nil) {
+                lastOpenedAt: Date? = nil, codexConnection: CodexConnection? = nil,
+                launchMode: LaunchMode? = nil, desktopCodexConnection: CodexConnection? = nil) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.emailHint = emailHint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -62,6 +70,8 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
         self.codexConnection = codexConnection
+        self.launchMode = launchMode
+        self.desktopCodexConnection = desktopCodexConnection
     }
 
     public var initials: String {
