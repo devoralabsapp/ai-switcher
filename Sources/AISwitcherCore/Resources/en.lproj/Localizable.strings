@@ -255,3 +255,21 @@
 "This profile already has private local history. Its data was kept. Use a new profile to share the existing ChatGPT workspace." = "This profile already has private local history. Its data was kept. Use a new profile to share the existing ChatGPT workspace.";
 "Could not access the local history database. Close this profile and try again." = "Could not access the local history database. Close this profile and try again.";
 "The existing ChatGPT history location could not be resolved. Check its sqlite_home setting." = "The existing ChatGPT history location could not be resolved. Check its sqlite_home setting.";
+
+"Cream, candy colors, and bold outlines" = "Cream, candy colors, and bold outlines";
+
+"Connect account session" = "Connect account session";
+
+"Connecting session…" = "Connecting session…";
+
+"Connect session to read quota" = "Connect session to read quota";
+
+"Connected session %@ without opening Desktop." = "Connected session %@ without opening Desktop.";
+
+"Could not connect account session" = "Could not connect account session";
+
+"This session is not signed in. Use Open ChatGPT once to sign in, then connect the session to read quota without opening Desktop." = "This session is not signed in. Use Open ChatGPT once to sign in, then connect the session to read quota without opening Desktop.";
+
+"Connect this account session to read quota in the background without opening ChatGPT Desktop. Your saved sign-in is reused." = "Connect this account session to read quota in the background without opening ChatGPT Desktop. Your saved sign-in is reused.";
+
+"For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window." = "For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window.";

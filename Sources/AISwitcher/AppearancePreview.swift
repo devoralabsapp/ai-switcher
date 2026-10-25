@@ -17,11 +17,11 @@ enum AppearancePreview {
             let connection = CodexConnection(identity: CodexIdentity(email: "demo@example.test", planType: "plus"), quota: CodexQuotaSnapshot(limits: limits))
             let accounts = [Account(name: "Demo Personal", emailHint: "personal@example.test", color: .mint, isFavorite: true, launchMode: .desktop, desktopCodexConnection: connection),
                             Account(name: "Demo Work", emailHint: "work@example.test", color: .blue, launchMode: .desktop),
-                            Account(name: "Demo Study", emailHint: "study@example.test", color: .violet, launchMode: .desktop)]
+                            Account(name: "Demo Study", emailHint: "study@example.test", color: theme.isPlayfulRetro ? .rose : .violet, launchMode: .desktop)]
             try ProfileRepository(root: data).save(AccountSnapshot(accounts: accounts))
             let model = AppModel(root: data, preferences: AppPreferences(language: L10n.language, theme: theme), monitoring: false)
             NSApp.appearance = theme.nsAppearance
-            try renderView(Dashboard(model: model), size: NSSize(width: 1120, height: 850), to: output.appendingPathComponent("\(theme.rawValue)-\(L10n.language.rawValue).png"))
+            try renderView(Dashboard(model: model), size: NSSize(width: 1120, height: theme.isPlayfulRetro ? 960 : 850), to: output.appendingPathComponent("\(theme.rawValue)-\(L10n.language.rawValue).png"))
             try renderView(PreferencesView(model: model), size: NSSize(width: 580, height: 720), to: output.appendingPathComponent("settings-\(theme.rawValue)-\(L10n.language.rawValue).png"))
             try renderView(AccountEditorView(model: model, editor: AccountEditor(account: nil)),
                            size: NSSize(width: 520, height: 760),
@@ -29,6 +29,18 @@ enum AppearancePreview {
             try renderView(AccountEditorView(model: model, editor: AccountEditor(account: accounts[0])),
                            size: NSSize(width: 520, height: 760),
                            to: output.appendingPathComponent("edit-account-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+            if theme.isPlayfulRetro {
+                try renderView(Dashboard(model: model), size: NSSize(width: 900, height: 640),
+                               to: output.appendingPathComponent("compact-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+                try renderView(GuideView().appAppearance(model.preferences), size: NSSize(width: 530, height: 850),
+                               to: output.appendingPathComponent("guide-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+                try renderView(QuotaDetailView(model: model, accountID: accounts[0].id).appAppearance(model.preferences),
+                               size: NSSize(width: 530, height: 600),
+                               to: output.appendingPathComponent("quota-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+                let emptyModel = AppModel(root: data.appendingPathComponent("empty"), preferences: model.preferences, monitoring: false)
+                try renderView(Dashboard(model: emptyModel), size: NSSize(width: 900, height: 800),
+                               to: output.appendingPathComponent("empty-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+            }
         }
         print("Rendered appearance previews with fictional profiles: \(output.path)")
     }

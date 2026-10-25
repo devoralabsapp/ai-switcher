@@ -52,11 +52,18 @@ Closing the manager keeps the menu bar available. Quitting AI Switcher leaves De
 
 ## Language and appearance
 
-Open **Appearance & Language** from the sidebar, the menu bar, or **⌘,**. Choose **English** or **Tiếng Việt** and one of five themes: **Light**, **Dark**, **Terminal**, **Code** (inspired by VS Code), or **Dracula**. Changes apply immediately and persist after relaunch. Existing users keep Vietnamese and Light until they choose otherwise.
+Open **Appearance & Language** from the sidebar, the menu bar, or **⌘,**. Choose **English** or **Tiếng Việt** and one of six themes: **Light**, **Dark**, **Terminal**, **Code** (inspired by VS Code), **Dracula**, or **Playful Retro Neo-Brutalism**. Changes apply immediately and persist after relaunch. Existing users keep Vietnamese and Light until they choose otherwise.
 
-Terminal and Code use monospace typography and compact corners. Themes cover the manager, account cards, dialogs, quota details, and native menu appearance. Language selection also updates menus, errors, quota labels, and date/number formatting. These preferences apply to AI Switcher.
+Terminal and Code use monospace typography and compact corners. Playful Retro Neo-Brutalism adds warm cream surfaces, pastel yellow/pink/blue/mint cards, rounded system typography, 2.5-point ink outlines, and hard 4-point offset shadows. Its pill buttons and cards respond to presses and hovering, with animations respecting Reduce Motion. Themes cover the manager, account cards, dialogs, quota details, and native menu appearance. Language selection also updates menus, errors, quota labels, and date/number formatting. These preferences apply to AI Switcher.
 
-<p align="center"><img src="docs/assets/appearance-en.png" width="550" alt="Appearance settings with English and Vietnamese and five theme choices"></p>
+<p align="center"><img src="docs/assets/appearance-en.png" width="550" alt="Appearance settings with English and Vietnamese and theme choices"></p>
+
+<details>
+<summary>Playful Retro Neo-Brutalism preview (fictional profiles and quota)</summary>
+
+![Playful Retro Neo-Brutalism theme](docs/assets/playful-retro-en.png)
+
+</details>
 
 <details>
 <summary>Terminal theme preview (fictional profiles and quota)</summary>
@@ -76,6 +83,8 @@ Local work is shared storage on this Mac. Continue a local chat in one Desktop w
 ## Codex quota
 
 For Desktop profiles, sign in inside that Desktop window; quota appears automatically within a few seconds. AI Switcher retries while waiting for sign-in and backs off on read errors; **Làm mới quota** is also available for a manual refresh. The reader first checks that profile’s local daemon through a WebSocket bridge. Some Desktop configurations use a separate stdio backend, leaving the daemon signed out after a successful Desktop login. In that case the bundled Codex CLI reads the saved session from the **same profile home**. AI Switcher never starts a second quota login or imports your default Codex session. The returned email/plan identifies the quota account; profile names remain user-entered labels. Sign out within the relevant ChatGPT window when changing its account.
+
+Use **⋯ → Connect account session** to start only the profile backend and read quota without opening or activating ChatGPT Desktop. The **Connect** action on an inactive quota card and a manual quota refresh also connect in the background. Saved sign-in is reused; new or signed-out profiles need one explicit **Open ChatGPT** sign-in first. **Close account session…** stops the backend again and keeps the saved login. Background connection does not change your recent/opened profiles.
 
 Cards and the menu bar show **remaining** quota in the windows returned by Codex, such as five hours and a week. Details include all separate limit buckets and reset timestamps. Missing windows remain unknown. Snapshots are marked stale after six minutes, reset expiry, or a failed refresh; a reset timestamp never invents a refill. Closing the profile stops live refresh and leaves the last cached snapshot.
 
@@ -126,7 +135,7 @@ bash scripts/test.sh --browser  # Chrome windows plus loopback cookie/localStora
 bash scripts/test.sh --codex    # Installed CLI handshake in a fresh unauthenticated home
 ```
 
-The core/protocol, Desktop discovery and shared-workspace suite has 68 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
+The core/protocol, Desktop discovery and shared-workspace suite has 75 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. The optional `bash scripts/test.sh --session` smoke check verifies a real isolated backend starts and stops without launching a ChatGPT Desktop process. No real accounts or model requests are used in automated checks.
 
 **Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface supports Vietnamese and English.
 

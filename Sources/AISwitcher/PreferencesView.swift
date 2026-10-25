@@ -16,7 +16,7 @@ struct PreferencesView: View {
                         .font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
                 }
                 Spacer()
-                Button { dismiss() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).help(L10n.text("Close"))
+                Button { dismiss() } label: { Image(systemName: "xmark") }.buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("Close"))
             }
             VStack(alignment: .leading, spacing: 10) {
                 Label(L10n.text("Language"), systemImage: "globe").font(appearanceTheme.font(size: 13, weight: .semibold))
@@ -29,7 +29,7 @@ struct PreferencesView: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(AppTheme.allCases) { theme in
                         Button { model.setTheme(theme) } label: { themeCard(theme) }
-                            .buttonStyle(.plain).accessibilityIdentifier("theme-\(theme.rawValue)")
+                            .buttonStyle(ThemedPlainButtonStyle()).accessibilityIdentifier("theme-\(theme.rawValue)")
                             .accessibilityLabel(theme.name + ". " + theme.detail)
                             .accessibilityAddTraits(appearanceTheme == theme ? .isSelected : [])
                     }
@@ -60,12 +60,18 @@ struct PreferencesView: View {
                     Text(theme == .terminal ? "$ switch account" : "AI Switcher")
                         .font(theme.font(size: 10, weight: .semibold)).foregroundColor(colors.ink)
                     HStack(spacing: 5) {
-                        ForEach(0..<2) { _ in
+                        ForEach(0..<2) { index in
                             VStack(alignment: .leading, spacing: 5) {
-                                RoundedRectangle(cornerRadius: 2).fill(colors.accent.opacity(0.3)).frame(width: 15, height: 10)
+                                RoundedRectangle(cornerRadius: 2).fill(theme.isPlayfulRetro ? colors.yellow : colors.accent.opacity(0.3)).frame(width: 15, height: 10)
                                 Capsule().fill(colors.secondary.opacity(0.5)).frame(height: 3)
                                 Capsule().fill(colors.accent).frame(height: 3)
-                            }.padding(7).background(colors.surface).clipShape(RoundedRectangle(cornerRadius: theme.radius(5)))
+                            }.padding(7).background(theme.isPlayfulRetro ? (index == 0 ? colors.mint : colors.pink) : colors.surface).clipShape(RoundedRectangle(cornerRadius: theme.radius(5)))
+                                .overlay(RoundedRectangle(cornerRadius: theme.radius(5)).strokeBorder(colors.ink, lineWidth: theme.isPlayfulRetro ? 1.5 : 0))
+                                .background {
+                                    if theme.isPlayfulRetro {
+                                        RoundedRectangle(cornerRadius: theme.radius(5)).fill(colors.ink).offset(x: 2, y: 2)
+                                    }
+                                }
                         }
                     }
                 }.padding(.trailing, 10)
@@ -73,15 +79,17 @@ struct PreferencesView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(theme.name).font(appearanceTheme.font(size: 12, weight: .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(theme.detail).font(appearanceTheme.font(size: 9)).foregroundColor(palette.secondary)
                 }
                 Spacer()
                 Image(systemName: theme == appearanceTheme ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(theme == appearanceTheme ? palette.accent : palette.secondary)
+                    .foregroundColor(appearanceTheme.isPlayfulRetro ? palette.ink : theme == appearanceTheme ? palette.accent : palette.secondary)
             }.padding(12)
         }
         .background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(10)))
-        .overlay(RoundedRectangle(cornerRadius: appearanceTheme.radius(10)).stroke(theme == appearanceTheme ? palette.accent : palette.line, lineWidth: theme == appearanceTheme ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: appearanceTheme.radius(10)).stroke(appearanceTheme.isPlayfulRetro ? palette.ink : theme == appearanceTheme ? palette.accent : palette.line, lineWidth: theme == appearanceTheme ? 2 : 1))
+        .retroOutline(radius: appearanceTheme.radius(10), shadow: theme == appearanceTheme)
         .contentShape(Rectangle())
     }
 }

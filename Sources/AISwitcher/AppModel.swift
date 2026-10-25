@@ -41,6 +41,7 @@ final class AppModel: ObservableObject {
     @Published var showPreferences = false
     @Published private(set) var preferences = AppPreferencesStore().load()
     @Published private(set) var launchingIDs: Set<UUID> = []
+    @Published private(set) var connectingSessionIDs: Set<UUID> = []
     @Published private(set) var runningIDs: Set<UUID> = []
     @Published private(set) var loadFailed = false
     @Published private(set) var lastAction: String?
@@ -62,6 +63,7 @@ final class AppModel: ObservableObject {
     private var quotaCleanupTasks: [UUID: Task<Void, Never>] = [:]
     private var desktopQuotaClients: [UUID: CodexRPCClient] = [:]
     private var desktopQuotaRetryAt: [UUID: Date] = [:]
+    private var sessionTasks: [UUID: Task<Void, Never>] = [:]
 
     init(root: URL, preferences: AppPreferences? = nil, monitoring: Bool = true,
          desktopQuotaSource: (any DesktopQuotaSource)? = nil) {
@@ -190,8 +192,34 @@ final class AppModel: ObservableObject {
                     try persist(updated)
                 }
                 lastAction = L10n.format("Opened %@", String(describing: account.name))
-                if account.effectiveLaunchMode == .desktop { refreshQuota(account) }
+                if account.effectiveLaunchMode == .desktop && !quotaBusyIDs.contains(account.id) { refreshDesktopQuota(account) }
             } catch { showError(error, title: L10n.text("Could not open account")) }
+        }
+    }
+
+    func connectSession(_ account: Account) {
+        guard !loadFailed, let current = accounts.first(where: { $0.id == account.id }),
+              current.effectiveLaunchMode == .desktop,
+              !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
+        launchingIDs.insert(account.id)
+        connectingSessionIDs.insert(account.id)
+        sessionTasks[account.id] = Task {
+            defer {
+                launchingIDs.remove(account.id)
+                connectingSessionIDs.remove(account.id)
+                sessionTasks[account.id] = nil
+                refreshRunning()
+            }
+            do {
+                try await desktopQuotaSource.connectSession(current)
+                try Task.checkCancellation()
+                lastAction = L10n.format("Connected session %@ without opening Desktop.", current.name)
+                refreshDesktopQuota(current)
+            } catch is CancellationError { }
+            catch {
+                quotaErrors[account.id] = error
+                showError(error, title: L10n.text("Could not connect account session"))
+            }
         }
     }
 
@@ -251,7 +279,7 @@ final class AppModel: ObservableObject {
         }
         switch codexError {
         case .notSignedIn:
-            return L10n.text("Waiting for sign-in in this ChatGPT Desktop window. Quota will appear automatically; no separate Codex sign-in is needed.")
+            return L10n.text("This session is not signed in. Use Open ChatGPT once to sign in, then connect the session to read quota without opening Desktop.")
         case .identityChanged:
             return L10n.text("The Desktop account changed. Quota will refresh automatically.")
         case .rpc:
@@ -262,7 +290,7 @@ final class AppModel: ObservableObject {
     }
 
     func connectQuota(_ account: Account) {
-        if account.effectiveLaunchMode == .desktop { open(account); return }
+        if account.effectiveLaunchMode == .desktop { connectSession(account); return }
         guard connectingID == nil, !quotaBusyIDs.contains(account.id), quotaCleanupTasks[account.id] == nil,
               account.codexConnection == nil else { return }
         connectingID = account.id
@@ -327,7 +355,11 @@ final class AppModel: ObservableObject {
 
     func refreshQuota(_ account: Account) {
         guard !quotaBusyIDs.contains(account.id) else { return }
-        if account.effectiveLaunchMode == .desktop { refreshDesktopQuota(account); return }
+        if account.effectiveLaunchMode == .desktop {
+            if !desktopQuotaSource.hasBackend(account.id) { connectSession(account) }
+            else if !launchingIDs.contains(account.id) { refreshDesktopQuota(account) }
+            return
+        }
         guard let connection = account.codexConnection else { return }
         quotaBusyIDs.insert(account.id)
         quotaTasks[account.id] = Task {
@@ -410,6 +442,9 @@ final class AppModel: ObservableObject {
         refreshTimer?.cancel()
         quotaTimer?.cancel()
         quotaSweepTask?.cancel()
+        let sessions = Array(sessionTasks.values)
+        for task in sessions { task.cancel() }
+        for task in sessions { await task.value }
         if let id = connectingID { cancelQuotaConnection(id) }
         for id in Array(pendingConnections.keys) { cancelQuotaConnection(id) }
         for task in quotaTasks.values { task.cancel() }

@@ -147,8 +147,12 @@ public struct ProfileRepository: Sendable {
             let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
             guard attributes[.type] as? FileAttributeType == .typeDirectory else { continue }
             guard (attributes[.ownerAccountID] as? NSNumber)?.uint32Value == geteuid() else { throw DesktopProfileError.unsafeStorage }
-            let mode = (attributes[.posixPermissions] as? Int ?? 0) | 0o700
-            try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: directory.path)
+            let mode = attributes[.posixPermissions] as? Int ?? 0
+            // Avoid rewriting attributes on writable bundled apps: macOS can
+            // protect their metadata even inside this owned runtime directory.
+            if mode & 0o700 != 0o700 {
+                try FileManager.default.setAttributes([.posixPermissions: mode | 0o700], ofItemAtPath: directory.path)
+            }
             for child in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
                 if try FileManager.default.attributesOfItem(atPath: child.path)[.type] as? FileAttributeType == .typeDirectory {
                     directories.append(child)

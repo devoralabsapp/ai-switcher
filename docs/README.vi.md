@@ -23,9 +23,16 @@ Hồ sơ cũ mặc định chuyển sang Desktop và cần đăng nhập mới m
 
 ## Ngôn ngữ và theme
 
-Mở **Giao diện & Ngôn ngữ** ở thanh bên, menu macOS hoặc bấm **⌘,**. Chọn **Tiếng Việt / English** và theme **Sáng, Tối, Terminal, Code (lấy cảm hứng từ VS Code), Dracula**. Lựa chọn áp dụng ngay và được giữ khi mở lại app.
+Mở **Giao diện & Ngôn ngữ** ở thanh bên, menu macOS hoặc bấm **⌘,**. Chọn **Tiếng Việt / English** và theme **Sáng, Tối, Terminal, Code (lấy cảm hứng từ VS Code), Dracula, Playful Retro Neo-Brutalism**. Lựa chọn áp dụng ngay và được giữ khi mở lại app.
 
-Terminal và Code dùng font đơn cách, góc gọn cùng bảng màu riêng. Theme áp dụng cho giao diện AI Switcher, hộp thoại và quota. Bản dịch bao gồm menu, thông báo lỗi, hạn mức, số và ngày giờ. Tài khoản và phiên đăng nhập vẫn dùng dữ liệu hiện có.
+Terminal và Code dùng font đơn cách, góc gọn cùng bảng màu riêng. Playful Retro Neo-Brutalism dùng nền kem, thẻ màu pastel, chữ bo tròn, viền đậm và bóng đổ cứng, cùng hiệu ứng nút bấm có hỗ trợ Giảm chuyển động. Theme áp dụng cho giao diện AI Switcher, hộp thoại và quota. Bản dịch bao gồm menu, thông báo lỗi, hạn mức, số và ngày giờ. Tài khoản và phiên đăng nhập vẫn dùng dữ liệu hiện có.
+
+<details>
+<summary>Xem theme Playful Retro Neo-Brutalism với dữ liệu mẫu</summary>
+
+![Theme Playful Retro Neo-Brutalism](assets/playful-retro-vi.png)
+
+</details>
 
 Xem [ảnh mẫu các theme](../README.md#language-and-appearance); ảnh dùng hồ sơ và quota giả để minh họa.
 
@@ -40,6 +47,8 @@ Dữ liệu công việc và các artifact của Work được dùng chung trên
 ## Quota và đóng phiên
 
 Thẻ hiển thị phần trăm **còn lại** và thời điểm reset của các cửa sổ do Codex trả về, thường là giờ/tuần. Bấm chi tiết để xem mọi nhóm hạn mức, email/gói và lần đọc gần nhất. Email trong mục quota do backend trả về, khác với nhãn bạn tự đặt.
+
+Chọn **⋯ → Kết nối phiên tài khoản** để chỉ chạy phiên nền và đọc quota, không mở hoặc kích hoạt cửa sổ ChatGPT Desktop. Nút **Kết nối** trên thẻ quota chưa hoạt động và thao tác làm mới quota cũng kết nối trong nền. App sử dụng lại đăng nhập đã lưu; hồ sơ mới hoặc đã đăng xuất cần bấm **Mở ChatGPT** để đăng nhập một lần trước. **Đóng phiên tài khoản…** dừng phiên nền và vẫn giữ đăng nhập. Kết nối nền không thay đổi danh sách hồ sơ mở gần đây.
 
 Quota tự cập nhật mỗi 5 phút khi backend của hồ sơ đang chạy. Không có dữ liệu thì hiển thị chưa biết; dữ liệu cũ hoặc lỗi đọc được đánh dấu rõ. Đến giờ reset không đồng nghĩa app tự suy ra quota đã đầy. Muốn đổi tài khoản trong một phiên, đăng xuất ở chính cửa sổ ChatGPT đó.
 

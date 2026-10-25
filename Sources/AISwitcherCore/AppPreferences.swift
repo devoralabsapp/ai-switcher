@@ -8,9 +8,13 @@ public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 }
 
 public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
-    case light, dark, terminal, code, dracula
+    case light, dark, terminal, code, dracula, playfulRetro
     public var id: String { rawValue }
-    public var isDark: Bool { self != .light }
+    public var isDark: Bool { self != .light && self != .playfulRetro }
+    public var isPlayfulRetro: Bool { self == .playfulRetro }
+    /// Decoration tokens are zero for the original themes so their styling stays intact.
+    public var outlineWidth: Double { isPlayfulRetro ? 2.5 : 0 }
+    public var hardShadowOffset: Double { isPlayfulRetro ? 4 : 0 }
     public var monospaced: Bool { self == .terminal || self == .code }
     public var cornerRadius: Double { self == .terminal ? 3 : self == .code ? 6 : 13 }
     public var name: String {
@@ -20,6 +24,7 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .terminal: return "Terminal"
         case .code: return "Code"
         case .dracula: return "Dracula"
+        case .playfulRetro: return "Playful Retro Neo-Brutalism"
         }
     }
     public var detail: String {
@@ -29,6 +34,7 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .terminal: return L10n.text("Monospace with terminal green")
         case .code: return L10n.text("Inspired by VS Code")
         case .dracula: return L10n.text("Deep purple with pink accents")
+        case .playfulRetro: return L10n.text("Cream, candy colors, and bold outlines")
         }
     }
     public var colors: ThemeColors {
@@ -38,8 +44,19 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .terminal: return .init(canvas: 0x090e0b, surface: 0x101913, sidebar: 0x0b120d, ink: 0xc5f5ce, secondary: 0x8bb795, accent: 0x65ed85, onAccent: 0x0c2112, line: 0x2c4633)
         case .code: return .init(canvas: 0x1e1e1e, surface: 0x252526, sidebar: 0x181818, ink: 0xe0e0e0, secondary: 0xababab, accent: 0x75beff, onAccent: 0x09243d, line: 0x454545)
         case .dracula: return .init(canvas: 0x20212c, surface: 0x282a36, sidebar: 0x191a23, ink: 0xf8f8f2, secondary: 0xb3afd0, accent: 0xd2afff, onAccent: 0x2b1644, line: 0x4c4e65)
+        case .playfulRetro: return .init(canvas: 0xfff7e8, surface: 0xfffdf7, sidebar: 0xf6eddb, ink: 0x171714, secondary: 0x4c493f, accent: 0x185e52, onAccent: 0xffffff, line: 0x171714)
         }
     }
+}
+
+/// Shared candy colors used for retro cards, actions, badges, and previews.
+public enum RetroColors {
+    public static let yellow: UInt32 = 0xffd84d
+    public static let pink: UInt32 = 0xffa6c9
+    public static let blue: UInt32 = 0xa8d8f0
+    public static let mint: UInt32 = 0xb4edc5
+    public static let peach: UInt32 = 0xffb39e
+    public static let violet: UInt32 = 0xd5c0f4
 }
 
 public struct ThemeColors: Equatable, Sendable {

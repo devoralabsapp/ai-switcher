@@ -83,7 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.rebuildStatusMenu()
         }
 
-        if arguments.contains("--desktop-smoke-test") {
+        if arguments.contains("--session-smoke-test") {
+            Task { await sessionSmokeTest(root: root) }
+        } else if arguments.contains("--desktop-smoke-test") {
             Task { await desktopSmokeTest(root: root) }
         } else if arguments.contains("--quota-smoke-test") {
             Task { await quotaSmokeTest(root: root) }
@@ -280,6 +282,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         menu.addItem(item)
+    }
+
+    /// Verifies a real, disposable backend without launching any ChatGPT Desktop window.
+    private func sessionSmokeTest(root: URL) async {
+        guard CommandLine.arguments.contains("--data-dir"), root.lastPathComponent.hasPrefix("ai-switcher-smoke."),
+              model.accounts.isEmpty else {
+            fputs("FAIL: a new ai-switcher-smoke.* data directory is required\n", stderr)
+            Darwin.exit(1)
+        }
+        let account = Account(name: "Headless Session Smoke", launchMode: .desktop)
+        let service = model.desktopService
+        let existing = Set(NSRunningApplication.runningApplications(withBundleIdentifier: DesktopLaunch.bundleIdentifier).map(\.processIdentifier))
+        var failure: Error?
+        do {
+            try await service.connectSession(account)
+            try await service.connectSession(account)
+            let current = Set(NSRunningApplication.runningApplications(withBundleIdentifier: DesktopLaunch.bundleIdentifier).map(\.processIdentifier))
+            guard service.hasBackend(account.id), service.runningApplication(for: account) == nil, current == existing else {
+                throw DesktopProfileError.launchFailed
+            }
+            let client = try service.quotaClient(account.id)
+            do {
+                try await client.start()
+                do {
+                    _ = try await client.readIdentity()
+                    throw CodexQuotaError.identityChanged
+                } catch CodexQuotaError.notSignedIn { }
+                await client.stop()
+            } catch { await client.stop(); throw error }
+            print("PASS: repeated session connection starts only the backend; no Desktop process or window is opened")
+            print("PASS: quota handshake works with an isolated, signed-out session; existing accounts are untouched")
+        } catch { failure = error }
+        do {
+            try await service.close(account)
+            _ = try model.repository.remove(account.id, from: AccountSnapshot())
+        } catch { failure = failure ?? error }
+        if let failure {
+            fputs("FAIL: \(failure.localizedDescription)\n", stderr)
+            Darwin.exit(1)
+        }
+        print("PASS: disposable backend stopped and profile storage cleaned up")
+        Darwin.exit(0)
     }
 
     /// Uses two new, disposable Desktop profiles; never signs in or reads existing credentials.

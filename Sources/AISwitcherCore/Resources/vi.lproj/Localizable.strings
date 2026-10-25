@@ -255,3 +255,21 @@
 "This profile already has private local history. Its data was kept. Use a new profile to share the existing ChatGPT workspace." = "Hồ sơ này đã có lịch sử local riêng. Dữ liệu được giữ nguyên. Hãy dùng hồ sơ mới để chia sẻ kho công việc ChatGPT hiện có.";
 "Could not access the local history database. Close this profile and try again." = "Không truy cập được cơ sở dữ liệu lịch sử local. Hãy đóng phiên hồ sơ này rồi thử lại.";
 "The existing ChatGPT history location could not be resolved. Check its sqlite_home setting." = "Không xác định được nơi lưu lịch sử ChatGPT hiện có. Hãy kiểm tra cấu hình sqlite_home.";
+
+"Cream, candy colors, and bold outlines" = "Nền kem, màu pastel và đường viền đậm";
+
+"Connect account session" = "Kết nối phiên tài khoản";
+
+"Connecting session…" = "Đang kết nối phiên…";
+
+"Connect session to read quota" = "Kết nối phiên để xem quota";
+
+"Connected session %@ without opening Desktop." = "Đã kết nối phiên %@ mà không mở Desktop.";
+
+"Could not connect account session" = "Không thể kết nối phiên tài khoản";
+
+"This session is not signed in. Use Open ChatGPT once to sign in, then connect the session to read quota without opening Desktop." = "Phiên này chưa đăng nhập. Chọn Mở ChatGPT để đăng nhập một lần, sau đó kết nối phiên để xem quota mà không mở Desktop.";
+
+"Connect this account session to read quota in the background without opening ChatGPT Desktop. Your saved sign-in is reused." = "Kết nối phiên tài khoản này để đọc quota trong nền mà không mở ChatGPT Desktop. Phiên đăng nhập đã lưu sẽ được sử dụng lại.";
+
+"For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window." = "Với hồ sơ mới hoặc đã đăng xuất, chọn Mở ChatGPT Desktop để đăng nhập một lần. Kết nối phiên sẽ không mở cửa sổ Desktop.";

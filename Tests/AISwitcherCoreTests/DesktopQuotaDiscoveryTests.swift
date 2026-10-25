@@ -25,10 +25,99 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
 
     private func waitForQuota(_ model: AppModel, account: Account) async throws {
         let deadline = Date().addingTimeInterval(5)
-        while model.quotaBusyIDs.contains(account.id), Date() < deadline {
+        while (model.quotaBusyIDs.contains(account.id) || model.launchingIDs.contains(account.id)), Date() < deadline {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTAssertFalse(model.quotaBusyIDs.contains(account.id), "Quota operation should finish")
+        XCTAssertFalse(model.launchingIDs.contains(account.id), "Session connection should finish")
+    }
+
+    func testHeadlessConnectStartsStoppedSessionReadsQuotaAndPreservesRecents() async throws {
+        let (model, account, source) = try setup("headless")
+        source.running = false
+        model.connectSession(account)
+        model.connectSession(account)
+        XCTAssertTrue(model.connectingSessionIDs.contains(account.id))
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.connects, 1, "Repeated clicks must not start overlapping sessions")
+        XCTAssertEqual(source.reads, 1)
+        XCTAssertTrue(model.runningIDs.contains(account.id))
+        XCTAssertEqual(model.accounts.first?.desktopCodexConnection?.identity.email, "headless@example.test")
+        XCTAssertNil(model.accounts.first?.lastOpenedAt, "Reading quota must not mark Desktop as opened")
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        XCTAssertNil(model.connectingID)
+        XCTAssertTrue(model.pendingConnections.isEmpty)
+        XCTAssertNil(model.notice)
+        XCTAssertTrue(model.connectingSessionIDs.isEmpty)
+        let methods = try String(contentsOf: source.home.appendingPathComponent("methods.txt")).split(separator: "\n").map(String.init)
+        XCTAssertEqual(methods, ["initialize", "initialized", "account/read", "account/rateLimits/read", "account/read"])
+        await model.shutdownQuota()
+    }
+
+    func testManualRefreshConnectsStoppedSessionWithoutOpeningDesktop() async throws {
+        let (model, account, source) = try setup("refresh-stopped")
+        source.running = false
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.connects, 1)
+        XCTAssertEqual(source.reads, 1)
+        XCTAssertNotNil(model.accounts.first?.desktopCodexConnection?.quota)
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        await model.shutdownQuota()
+    }
+
+    func testHeadlessConnectFailureDoesNotReadQuotaOrOpenDesktop() async throws {
+        let (model, account, source) = try setup("connect-failed")
+        source.running = false
+        source.connectError = DesktopProfileError.backendFailed
+        model.connectSession(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.connects, 1)
+        XCTAssertEqual(source.reads, 0)
+        XCTAssertFalse(model.runningIDs.contains(account.id))
+        XCTAssertNotNil(model.quotaErrors[account.id])
+        XCTAssertEqual(model.notice?.title, L10n.text("Could not connect account session"))
+        XCTAssertNil(model.accounts.first?.desktopCodexConnection)
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        await model.shutdownQuota()
+    }
+
+    func testHeadlessUnsignedSessionDoesNotLaunchOAuthOrDesktop() async throws {
+        let (model, account, source) = try setup("unauthed")
+        source.running = false
+        model.connectQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.connects, 1)
+        XCTAssertEqual(model.quotaErrors[account.id] as? CodexQuotaError, .notSignedIn)
+        XCTAssertNil(model.accounts.first?.desktopCodexConnection)
+        XCTAssertNil(model.connectingID)
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        XCTAssertTrue(model.pendingConnections.isEmpty)
+        XCTAssertNotNil(model.quotaErrorDescription(for: account))
+        await model.shutdownQuota()
+    }
+
+    func testShutdownCancelsSessionConnectionBeforeReadingQuota() async throws {
+        let (model, account, source) = try setup("cancel-connect")
+        source.running = false
+        source.connectDelay = 10_000_000_000
+        model.connectSession(account)
+        await Task.yield()
+        await model.shutdownQuota()
+        XCTAssertEqual(source.reads, 0)
+        XCTAssertTrue(model.launchingIDs.isEmpty)
+        XCTAssertTrue(model.connectingSessionIDs.isEmpty)
+        XCTAssertNil(model.notice)
+    }
+
+    func testSessionConnectDoesNotStartBrowserProfiles() async throws {
+        let (model, account, source) = try setup("browser-connect", launchMode: .browser)
+        source.running = false
+        model.connectSession(account)
+        XCTAssertTrue(model.launchingIDs.isEmpty)
+        XCTAssertEqual(source.connects, 0)
+        XCTAssertEqual(source.reads, 0)
+        await model.shutdownQuota()
     }
 
     func testDesktopLoginIsDiscoveredAutomaticallyWithoutAnotherOAuthFlow() async throws {
@@ -142,10 +231,20 @@ private final class FixtureDesktopQuotaSource: DesktopQuotaSource {
     var running = true
     var daemonSignedOut = false
     var persistedSessionEnabled = false
+    var connectError: Error?
+    var connectDelay: UInt64 = 0
+    private(set) var connects = 0
     private(set) var reads = 0
     private(set) var persistedReads = 0
 
     init(home: URL) { self.home = home }
+
+    func connectSession(_ account: Account) async throws {
+        connects += 1
+        if connectDelay > 0 { try await Task.sleep(nanoseconds: connectDelay) }
+        if let connectError { throw connectError }
+        running = true
+    }
 
     func hasBackend(_ id: UUID) -> Bool { running }
 

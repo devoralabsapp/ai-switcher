@@ -47,26 +47,27 @@ struct AccountEditorView: View {
                 }
                 Spacer()
                 Button { dismiss() } label: { Image(systemName: "xmark").font(appearanceTheme.font(size: 12, weight: .medium)) }
-                    .buttonStyle(.plain).foregroundColor(palette.secondary).help(L10n.text("Close"))
+                    .buttonStyle(ThemedPlainButtonStyle()).foregroundColor(palette.secondary).help(L10n.text("Close"))
             }
 
             VStack(alignment: .leading, spacing: 18) {
                 field(L10n.text("Account name"), detail: L10n.text("For example: Personal, Work, Study")) {
-                    TextField(L10n.text("Give this account a name"), text: $name).focused($nameFocused)
+                    TextField(L10n.text("Give this account a name"), text: $name).themedTextField().focused($nameFocused)
                         .accessibilityIdentifier("accountName")
                 }
                 field(L10n.text("Email or note"), detail: L10n.text("Optional · label only")) {
-                    TextField("ban@example.com", text: $email).accessibilityIdentifier("accountEmail")
+                    TextField("ban@example.com", text: $email).themedTextField().accessibilityIdentifier("accountEmail")
                 }
                 VStack(alignment: .leading, spacing: 9) {
                     Text(L10n.text("Profile color")).font(appearanceTheme.font(size: 12, weight: .medium))
                     HStack(spacing: 11) {
                         ForEach(AccountColor.allCases) { item in
                             Button { color = item } label: {
-                                Circle().fill(item.tint(for: appearanceTheme)).frame(width: 27, height: 27)
-                                    .overlay { if item == color { Image(systemName: "checkmark").font(appearanceTheme.font(size: 11, weight: .bold)).foregroundColor(palette.onAccent) } }
+                                Circle().fill(appearanceTheme.isPlayfulRetro ? item.pale(for: appearanceTheme) : item.tint(for: appearanceTheme)).frame(width: 27, height: 27)
+                                    .overlay { if item == color { Image(systemName: "checkmark").font(appearanceTheme.font(size: 11, weight: .bold)).foregroundColor(appearanceTheme.isPlayfulRetro ? palette.ink : palette.onAccent) } }
+                                    .retroOutline(radius: 100, shadow: false)
                                     .padding(3).overlay(Circle().stroke(item == color ? item.tint(for: appearanceTheme).opacity(0.5) : Color.clear, lineWidth: 1))
-                            }.buttonStyle(.plain).help(item.name).accessibilityLabel(item.name)
+                            }.buttonStyle(ThemedPlainButtonStyle()).help(item.name).accessibilityLabel(item.name)
                                 .accessibilityAddTraits(item == color ? .isSelected : [])
                         }
                     }
@@ -128,7 +129,8 @@ struct AccountEditorView: View {
                 Text(L10n.text("Sign in directly in ChatGPT. AI Switcher does not read passwords, cookies, or conversations. Quota comes from this session's Codex backend."))
                     .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
             }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
-                .background(palette.accent.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
+                .background(appearanceTheme.isPlayfulRetro ? palette.mint : palette.accent.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
+                .retroOutline(radius: appearanceTheme.radius(9), shadow: false)
 
             if isNew {
                 Toggle(L10n.text("Open ChatGPT to sign in after adding"), isOn: $openAfterSave)
@@ -144,7 +146,7 @@ struct AccountEditorView: View {
             }
         }
         .textFieldStyle(.roundedBorder).foregroundColor(palette.ink)
-        .padding(30).frame(width: 500).background(palette.surface)
+        .padding(30).frame(width: 500).background(appearanceTheme.isPlayfulRetro ? palette.canvas : palette.surface)
         .appAppearance(model.preferences)
 
         .onAppear { nameFocused = true }

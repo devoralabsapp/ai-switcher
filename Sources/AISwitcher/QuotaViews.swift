@@ -6,13 +6,21 @@ struct QuotaSummaryView: View {
     private var palette: ThemePalette { ThemePalette(theme: appearanceTheme) }
     @ObservedObject var model: AppModel
     let account: Account
+    private var needsDesktopSession: Bool {
+        account.effectiveLaunchMode == .desktop && !model.runningIDs.contains(account.id)
+    }
+    private var emptyActionTitle: String {
+        if needsDesktopSession { return L10n.text("Connect") }
+        return account.effectiveLaunchMode == .desktop || model.connectingID == account.id ? L10n.text("Details") : L10n.text("Connect")
+    }
 
     private var emptyStatus: String {
         if account.effectiveLaunchMode == .browser {
             return model.connectingID == account.id ? L10n.text("Waiting for sign-in…") : L10n.text("Not connected")
         }
+        if model.connectingSessionIDs.contains(account.id) { return L10n.text("Connecting session…") }
         if model.quotaBusyIDs.contains(account.id) { return L10n.text("Reading Desktop quota…") }
-        if !model.runningIDs.contains(account.id) { return L10n.text("Open Desktop to read quota") }
+        if !model.runningIDs.contains(account.id) { return L10n.text("Connect session to read quota") }
         if let error = model.quotaErrors[account.id] {
             return (error as? CodexQuotaError) == .notSignedIn
                 ? L10n.text("Waiting for Desktop sign-in…")
@@ -27,11 +35,11 @@ struct QuotaSummaryView: View {
                 HStack {
                     Label(L10n.text("Codex quota"), systemImage: "gauge").font(appearanceTheme.font(size: 11, weight: .semibold))
                     Spacer()
-                    if model.quotaBusyIDs.contains(account.id) {
+                    if model.quotaBusyIDs.contains(account.id) || model.connectingSessionIDs.contains(account.id) {
                         ProgressView().controlSize(.mini)
                     } else if account.displayedCodexConnection != nil || (account.effectiveLaunchMode == .desktop && model.runningIDs.contains(account.id)) {
                         Button { model.refreshQuota(account) } label: { Image(systemName: "arrow.clockwise").font(appearanceTheme.font(size: 11)) }
-                            .buttonStyle(.plain).help(L10n.text("Refresh Codex quota"))
+                            .buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("Refresh Codex quota"))
                     }
                 }
                 if let connection = account.displayedCodexConnection {
@@ -52,19 +60,24 @@ struct QuotaSummaryView: View {
                                     .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                    }.buttonStyle(.plain).help(L10n.text("View quota, reset times, and the connected Codex account"))
+                    }.buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("View quota, reset times, and the connected Codex account"))
                 } else {
                     HStack {
                         Text(emptyStatus)
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                         Spacer()
-                        Button(account.effectiveLaunchMode == .desktop || model.connectingID == account.id ? L10n.text("Details") : L10n.text("Connect")) { model.quotaAccountID = account.id }
-                            .buttonStyle(.plain).font(appearanceTheme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent)
+                        Button(emptyActionTitle) {
+                            if needsDesktopSession { model.connectSession(account) }
+                            else { model.quotaAccountID = account.id }
+                        }
+                            .disabled(model.launchingIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
+                            .buttonStyle(ThemedPlainButtonStyle()).font(appearanceTheme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent)
                     }
                 }
             }
         }
         .padding(12).background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
+        .retroOutline(radius: appearanceTheme.radius(9), shadow: false)
     }
 }
 
@@ -103,10 +116,11 @@ private struct QuotaBucketView: View {
             }.font(appearanceTheme.font(size: compact ? 10 : 12))
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(palette.line)
+                    Capsule().fill(appearanceTheme.isPlayfulRetro ? palette.surface : palette.line)
                     Capsule().fill(color).frame(width: geometry.size.width * CGFloat((remaining ?? 0) / 100))
                 }
-            }.frame(height: compact ? 4 : 6).accessibilityHidden(true)
+            }.frame(height: appearanceTheme.isPlayfulRetro ? (compact ? 8 : 12) : (compact ? 4 : 6))
+                .retroOutline(radius: 100, shadow: false).accessibilityHidden(true)
             if expired {
                 Text(L10n.text("Reset time reached · refresh needed")).font(appearanceTheme.font(size: compact ? 9 : 11)).foregroundColor(.orange)
             } else if let date = window.resetDate {
@@ -132,7 +146,7 @@ struct QuotaDetailView: View {
     @State private var executableRevision = 0
 
     private var account: Account? { model.accounts.first { $0.id == accountID } }
-    private var busy: Bool { model.quotaBusyIDs.contains(accountID) }
+    private var busy: Bool { model.quotaBusyIDs.contains(accountID) || model.connectingSessionIDs.contains(accountID) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -142,7 +156,7 @@ struct QuotaDetailView: View {
                     Text(account?.name ?? L10n.text("Profile")).font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
                 }
                 Spacer()
-                Button { dismiss() } label: { Image(systemName: "xmark") }.buttonStyle(.plain).help(L10n.text("Close"))
+                Button { dismiss() } label: { Image(systemName: "xmark") }.buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("Close"))
             }.padding(.bottom, 22)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -158,6 +172,7 @@ struct QuotaDetailView: View {
                             .font(appearanceTheme.font(size: 11)).foregroundColor(.orange).fixedSize(horizontal: false, vertical: true)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 4)
+                    .padding(.trailing, appearanceTheme.isPlayfulRetro ? appearanceTheme.hardShadowOffset : 0)
             }
             HStack {
                 if busy { ProgressView().controlSize(.small); Text(L10n.text("Working…")).font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary) }
@@ -165,7 +180,7 @@ struct QuotaDetailView: View {
                 Button(L10n.text("Close")) { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(.top, 20)
         }
-        .padding(28).frame(width: 530, height: 600).background(palette.surface).foregroundColor(palette.ink)
+        .padding(28).frame(width: 530, height: 600).background(appearanceTheme.isPlayfulRetro ? palette.canvas : palette.surface).foregroundColor(palette.ink)
 
         .onAppear {
             if let account, account.effectiveLaunchMode == .desktop, model.runningIDs.contains(accountID) {
@@ -186,13 +201,17 @@ struct QuotaDetailView: View {
         if account.effectiveLaunchMode == .desktop {
             VStack(alignment: .leading, spacing: 16) {
                 Text(L10n.text("Quota from this Desktop session")).font(appearanceTheme.font(size: 15, weight: .semibold))
-                Text(L10n.text("Quota appears automatically after you sign in to this profile's ChatGPT Desktop window. No separate Codex sign-in is needed."))
+                Text(L10n.text("Connect this account session to read quota in the background without opening ChatGPT Desktop. Your saved sign-in is reused."))
                     .font(appearanceTheme.font(size: 12)).lineSpacing(4).foregroundColor(palette.secondary)
                 Text(L10n.text("AI Switcher checks the Desktop session every few seconds until quota is available, then refreshes every 5 minutes. To change accounts, sign out inside that ChatGPT window."))
                     .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
+                Button { model.connectSession(account) } label: { Label(L10n.text("Connect account session"), systemImage: "link") }
+                    .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.launchingIDs.contains(accountID) || busy)
+                Text(L10n.text("For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window."))
+                    .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
                 Button { model.open(account) } label: { Label(L10n.text("Open ChatGPT Desktop"), systemImage: "macwindow") }
-                    .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.launchingIDs.contains(accountID))
-                Button(L10n.text("Refresh quota")) { model.refreshQuota(account) }.disabled(busy)
+                    .disabled(model.launchingIDs.contains(accountID))
+                Button(L10n.text("Refresh quota")) { model.refreshQuota(account) }.disabled(busy || model.launchingIDs.contains(accountID))
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
@@ -202,6 +221,7 @@ struct QuotaDetailView: View {
             Text(L10n.text("Codex CLI stores OAuth in a separate local directory and refreshes quota every 5 minutes. This connection is separate from browser ChatGPT sign-in. AI Switcher does not read Chrome cookies or use your default Codex session."))
                 .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
                 .padding(13).background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
+                .retroOutline(radius: appearanceTheme.radius(9), shadow: false)
             if model.connectingID == accountID {
                 Label(L10n.text("Finish signing in in the window that just opened."), systemImage: "arrow.up.right.square")
                     .font(appearanceTheme.font(size: 12)).foregroundColor(palette.accent)
@@ -251,7 +271,8 @@ struct QuotaDetailView: View {
                                     .font(appearanceTheme.font(size: 13, weight: .semibold))
                                 QuotaBucketView(bucket: bucket.value, now: timeline.date,
                                                 stale: quota.isStale(at: timeline.date) || model.quotaErrors[accountID] != nil)
-                            }.padding(15).background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(10)))
+                            }.padding(15).background(appearanceTheme.isPlayfulRetro ? palette.blue : palette.canvas).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(10)))
+                                .retroOutline(radius: appearanceTheme.radius(10))
                         }
                         if quota.limits.buckets.isEmpty { Text(L10n.text("Codex has not returned limits for this account.")).font(appearanceTheme.font(size: 12)) }
                         VStack(alignment: .leading, spacing: 6) {
@@ -281,5 +302,6 @@ struct QuotaDetailView: View {
             Text(identity.email ?? L10n.text("Verified Codex account")).font(appearanceTheme.font(size: 14, weight: .semibold)).textSelection(.enabled)
             Text(L10n.format("Plan: %@", String(describing: identity.planType ?? L10n.text("No data yet")))).font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
         }
+        .retroPanel(fill: palette.pink, radius: 12, padding: 16)
     }
 }

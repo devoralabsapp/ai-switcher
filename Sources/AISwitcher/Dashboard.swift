@@ -10,10 +10,10 @@ struct Dashboard: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar.frame(width: 230).background(palette.sidebar)
-            Rectangle().fill(palette.line).frame(width: 1)
+            Rectangle().fill(palette.line).frame(width: appearanceTheme.dividerWidth)
             VStack(spacing: 0) {
                 toolbar
-                Rectangle().fill(palette.line).frame(height: 1)
+                Rectangle().fill(palette.line).frame(height: appearanceTheme.dividerWidth)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 27) {
                         hero
@@ -66,10 +66,11 @@ struct Dashboard: View {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.triangle.swap")
                     .font(appearanceTheme.font(size: 18, weight: .semibold))
-                    .foregroundColor(palette.onAccent)
+                    .foregroundColor(palette.onAction)
                     .frame(width: 35, height: 35)
-                    .background(palette.accent)
+                    .background(palette.action)
                     .clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(10)))
+                    .retroOutline(radius: appearanceTheme.radius(10))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("AI Switcher").font(appearanceTheme.font(size: 16, weight: .bold))
                     Text(L10n.text("One click to your account")).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
@@ -96,12 +97,13 @@ struct Dashboard: View {
                                 .clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(5)))
                         }
                     }
-                    .foregroundColor(model.filter == filter ? palette.accent : palette.secondary)
+                    .foregroundColor(appearanceTheme.isPlayfulRetro ? palette.ink : model.filter == filter ? palette.accent : palette.secondary)
                     .padding(.horizontal, 11).padding(.vertical, 12)
-                    .background(model.filter == filter ? palette.accent.opacity(0.08) : Color.clear)
+                    .background(model.filter == filter ? (appearanceTheme.isPlayfulRetro ? palette.mint : palette.accent.opacity(0.08)) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(8)))
+                    .retroOutline(radius: appearanceTheme.radius(8), shadow: model.filter == filter, enabled: model.filter == filter)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ThemedPlainButtonStyle())
                 .padding(.bottom, 4)
             }
 
@@ -118,7 +120,7 @@ struct Dashboard: View {
                             }
                             Spacer(minLength: 0)
                         }
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(ThemedPlainButtonStyle())
                 }
                 .padding(.horizontal, 10).padding(.top, 30)
             }
@@ -127,14 +129,14 @@ struct Dashboard: View {
             VStack(alignment: .leading, spacing: 20) {
                 Button { model.showPreferences = true } label: {
                     Label(L10n.text("Appearance & Language"), systemImage: "paintpalette").font(appearanceTheme.font(size: 12))
-                }.buttonStyle(.plain).accessibilityIdentifier("openPreferences")
+                }.buttonStyle(ThemedPlainButtonStyle()).accessibilityIdentifier("openPreferences")
                 Button { model.showGuide = true } label: {
                     Label(L10n.text("How it works"), systemImage: "questionmark.circle").font(appearanceTheme.font(size: 12))
-                }.buttonStyle(.plain)
+                }.buttonStyle(ThemedPlainButtonStyle())
                 Button { model.revealData() } label: {
                     Label(L10n.text("Local data"), systemImage: "externaldrive").font(appearanceTheme.font(size: 12))
-                }.buttonStyle(.plain)
-                Rectangle().fill(palette.line).frame(height: 1)
+                }.buttonStyle(ThemedPlainButtonStyle())
+                Rectangle().fill(palette.line).frame(height: appearanceTheme.dividerWidth)
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lock.shield").font(appearanceTheme.font(size: 13)).foregroundColor(palette.accent)
                     Text(L10n.text("Each account has its own\nChatGPT Desktop session."))
@@ -167,13 +169,14 @@ struct Dashboard: View {
                     .accessibilityIdentifier("accountSearch")
                 if !model.search.isEmpty {
                     Button { model.search = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundColor(palette.secondary).help(L10n.text("Clear search"))
+                        .buttonStyle(ThemedPlainButtonStyle()).foregroundColor(palette.secondary).help(L10n.text("Clear search"))
                 } else { Text("⌘ K").font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary) }
             }
             .padding(.horizontal, 11).padding(.vertical, 8)
             .frame(width: 212).background(palette.surface)
             .clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(7)))
             .overlay(RoundedRectangle(cornerRadius: appearanceTheme.radius(7)).stroke(palette.line))
+            .retroOutline(radius: appearanceTheme.radius(7), shadow: false)
         }
         .padding(.horizontal, 30).frame(height: 66)
     }
@@ -185,7 +188,7 @@ struct Dashboard: View {
                     Circle().fill(palette.accent).frame(width: 5, height: 5)
                     Text(L10n.text("FEWER CLICKS. KEEP YOUR FLOW."))
                         .font(appearanceTheme.font(size: 9, weight: .semibold)).tracking(1.2)
-                }.foregroundColor(palette.accent)
+                }.foregroundColor(appearanceTheme.isPlayfulRetro ? palette.ink : palette.accent)
                 Text(L10n.text("Multiple accounts.\nOne click."))
                     .font(appearanceTheme.font(size: 32, weight: .semibold)).tracking(-1.2).lineSpacing(1)
                     .fixedSize(horizontal: false, vertical: true)
@@ -196,20 +199,23 @@ struct Dashboard: View {
             ZStack {
                 Circle().stroke(palette.accent.opacity(0.08), lineWidth: 1).frame(width: 154, height: 154)
                 Circle().stroke(palette.accent.opacity(0.05), lineWidth: 1).frame(width: 188, height: 188)
-                RoundedRectangle(cornerRadius: appearanceTheme.radius(16)).fill(palette.surface).frame(width: 63, height: 63)
+                RoundedRectangle(cornerRadius: appearanceTheme.radius(16)).fill(appearanceTheme.isPlayfulRetro ? palette.pink : palette.surface).frame(width: 63, height: 63)
+                    .retroOutline(radius: appearanceTheme.radius(16))
                     .rotationEffect(.degrees(-13)).offset(x: -37, y: -26)
                     .shadow(color: palette.ink.opacity(0.04), radius: 10, y: 5)
                 Image(systemName: "person.fill").font(appearanceTheme.font(size: 23)).foregroundColor(AccountColor.violet.tint(for: appearanceTheme))
                     .offset(x: -37, y: -26)
-                RoundedRectangle(cornerRadius: appearanceTheme.radius(16)).fill(palette.accent).frame(width: 63, height: 63)
+                RoundedRectangle(cornerRadius: appearanceTheme.radius(16)).fill(appearanceTheme.isPlayfulRetro ? palette.blue : palette.accent).frame(width: 63, height: 63)
+                    .retroOutline(radius: appearanceTheme.radius(16))
                     .rotationEffect(.degrees(10)).offset(x: 30, y: 23)
                     .shadow(color: palette.accent.opacity(0.15), radius: 10, y: 5)
-                Image(systemName: "person.fill").font(appearanceTheme.font(size: 23)).foregroundColor(palette.onAccent).offset(x: 30, y: 23)
+                Image(systemName: "person.fill").font(appearanceTheme.font(size: 23)).foregroundColor(appearanceTheme.isPlayfulRetro ? palette.ink : palette.onAccent).offset(x: 30, y: 23)
                 Image(systemName: "arrow.triangle.swap").font(appearanceTheme.font(size: 18, weight: .semibold))
                     .foregroundColor(palette.accent).offset(x: 33, y: -38)
             }
             .frame(width: 190, height: 180).accessibilityHidden(true)
         }
+        .retroPanel(fill: palette.yellow, radius: 18, padding: 22)
     }
 
     private var accountSection: some View {
@@ -220,8 +226,8 @@ struct Dashboard: View {
                         Text(model.filter.title).font(appearanceTheme.font(size: 17, weight: .semibold))
                         Text("\(model.visibleAccounts.count)")
                             .font(appearanceTheme.font(size: 10, weight: .semibold)).foregroundColor(palette.secondary)
-                            .padding(.horizontal, 7).padding(.vertical, 3).background(palette.line.opacity(0.5))
-                            .clipShape(Capsule())
+                            .padding(.horizontal, 7).padding(.vertical, 3).background(appearanceTheme.isPlayfulRetro ? palette.pink : palette.line.opacity(0.5))
+                            .clipShape(Capsule()).retroOutline(radius: 100, shadow: false)
                     }
                     Text(L10n.text("A separate login session for each account."))
                         .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
@@ -234,7 +240,7 @@ struct Dashboard: View {
             if model.visibleAccounts.isEmpty {
                 emptyState
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 245), spacing: 16, alignment: .top)], spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 245), spacing: appearanceTheme.isPlayfulRetro ? 20 : 16, alignment: .top)], spacing: appearanceTheme.isPlayfulRetro ? 20 : 16) {
                     ForEach(model.visibleAccounts) { account in AccountCard(model: model, account: account) }
                 }
             }
@@ -256,12 +262,13 @@ struct Dashboard: View {
                     .buttonStyle(PrimaryButtonStyle(compact: true)).padding(.top, 3).disabled(model.loadFailed)
             } else {
                 Button(L10n.text("View all")) { model.search = ""; model.filter = .all }
-                    .buttonStyle(.plain).font(appearanceTheme.font(size: 12, weight: .medium)).foregroundColor(palette.accent)
+                    .buttonStyle(ThemedPlainButtonStyle()).font(appearanceTheme.font(size: 12, weight: .medium)).foregroundColor(palette.accent)
             }
         }
         .frame(maxWidth: .infinity).padding(.vertical, 29).padding(.horizontal, 16)
         .background(palette.surface).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)))
         .overlay(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)).stroke(palette.line, style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+        .retroOutline(radius: appearanceTheme.radius(13))
     }
 
     private var setupSteps: some View {
@@ -281,7 +288,8 @@ struct Dashboard: View {
     private func step(_ number: String, _ title: String, _ detail: String) -> some View {
         HStack(spacing: 8) {
             Text(number).font(appearanceTheme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent)
-                .frame(width: 24, height: 24).background(palette.accent.opacity(0.07)).clipShape(Circle())
+                .frame(width: 24, height: 24).background(appearanceTheme.isPlayfulRetro ? palette.blue : palette.accent.opacity(0.07)).clipShape(Circle())
+                .retroOutline(radius: 100, shadow: false)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(appearanceTheme.font(size: 10, weight: .medium))
                 Text(detail).font(appearanceTheme.font(size: 9)).foregroundColor(palette.secondary)
@@ -296,7 +304,8 @@ struct Dashboard: View {
             Spacer()
             Button(L10n.text("Try again")) { model.reload() }
             Button(L10n.text("Open folder")) { model.revealData() }
-        }.padding(13).background(Color.orange.opacity(0.07)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
+        }.padding(13).background(appearanceTheme.isPlayfulRetro ? palette.yellow : Color.orange.opacity(0.07)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
+            .retroOutline(radius: appearanceTheme.radius(9))
     }
 
     private var footer: some View {
@@ -308,7 +317,7 @@ struct Dashboard: View {
         }
         .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
         .padding(.horizontal, 31).frame(height: 34)
-        .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 1) }
+        .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: appearanceTheme.dividerWidth) }
     }
 }
 
@@ -318,6 +327,7 @@ private struct AccountCard: View {
     @ObservedObject var model: AppModel
     let account: Account
     @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var busy: Bool { model.launchingIDs.contains(account.id) }
     private var running: Bool { model.runningIDs.contains(account.id) }
@@ -326,14 +336,14 @@ private struct AccountCard: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 Button { model.open(account) } label: { AccountAvatar(account: account) }
-                    .buttonStyle(.plain).help(L10n.format("Open %@", String(describing: account.name))).disabled(busy)
+                    .buttonStyle(ThemedPlainButtonStyle()).help(L10n.format("Open %@", String(describing: account.name))).disabled(busy)
                 Spacer()
                 Button { model.toggleFavorite(account) } label: {
                     Image(systemName: account.isFavorite ? "star.fill" : "star")
-                        .font(appearanceTheme.font(size: 12)).foregroundColor(account.isFavorite ? AccountColor.gold.tint(for: appearanceTheme) : palette.secondary.opacity(0.6))
+                        .font(appearanceTheme.font(size: 12)).foregroundColor(appearanceTheme.isPlayfulRetro ? palette.ink : account.isFavorite ? AccountColor.gold.tint(for: appearanceTheme) : palette.secondary.opacity(0.6))
                         .frame(width: 24, height: 24).contentShape(Rectangle())
                 }
-                .buttonStyle(.plain).help(account.isFavorite ? L10n.text("Remove from favorites") : L10n.text("Add to favorites"))
+                .buttonStyle(ThemedPlainButtonStyle()).help(account.isFavorite ? L10n.text("Remove from favorites") : L10n.text("Add to favorites"))
                 Menu {
                     Button(L10n.text("Edit profile…")) { model.editor = AccountEditor(account: account) }
                     Button(L10n.text("Codex quota…")) { model.quotaAccountID = account.id }
@@ -341,6 +351,10 @@ private struct AccountCard: View {
                         Button(L10n.text("Open a new ChatGPT window")) { model.open(account, newWindow: true) }
                     }
                     Divider()
+                    if account.effectiveLaunchMode == .desktop {
+                        Button(L10n.text("Connect account session")) { model.connectSession(account) }
+                            .disabled(model.quotaBusyIDs.contains(account.id))
+                    }
                     Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled(!running || model.quotaBusyIDs.contains(account.id))
                     Button(L10n.text("Delete local profile…"), role: .destructive) { model.accountToDelete = account }
                         .disabled(model.quotaBusyIDs.contains(account.id) || model.pendingConnections[account.id] != nil)
@@ -354,7 +368,7 @@ private struct AccountCard: View {
                     Text(account.emailHint.isEmpty ? L10n.text("Separate ChatGPT profile") : account.emailHint)
                         .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary).lineLimit(1)
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-            }.buttonStyle(.plain).disabled(busy)
+            }.buttonStyle(ThemedPlainButtonStyle()).disabled(busy)
 
             HStack(spacing: 5) {
                 Image(systemName: account.effectiveLaunchMode == .desktop ? "macwindow" : "globe").font(appearanceTheme.font(size: 10))
@@ -369,20 +383,24 @@ private struct AccountCard: View {
             Button { model.open(account) } label: {
                 HStack(spacing: 7) {
                     if busy { ProgressView().controlSize(.mini).scaleEffect(0.8) }
-                    Text(busy ? L10n.text("Opening…") : L10n.text("Open ChatGPT"))
+                    Text(busy ? (model.connectingSessionIDs.contains(account.id) ? L10n.text("Connecting session…") : L10n.text("Opening…")) : L10n.text("Open ChatGPT"))
                     Spacer()
                     Image(systemName: "arrow.up.right").font(appearanceTheme.font(size: 10, weight: .semibold))
                 }
-                .font(appearanceTheme.font(size: 12, weight: .semibold)).foregroundColor(account.color.tint(for: appearanceTheme))
+                .font(appearanceTheme.font(size: 12, weight: .semibold)).foregroundColor(appearanceTheme.isPlayfulRetro ? palette.ink : account.color.tint(for: appearanceTheme))
                 .padding(.horizontal, 12).frame(height: 35)
-                .background(account.color.pale(for: appearanceTheme)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(7)))
+                .background(appearanceTheme.isPlayfulRetro ? palette.surface : account.color.pale(for: appearanceTheme)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.isPlayfulRetro ? appearanceTheme.buttonRadius : appearanceTheme.radius(7)))
+                .retroOutline(radius: appearanceTheme.buttonRadius)
                 .contentShape(Rectangle())
-            }.buttonStyle(.plain).disabled(busy)
+            }.buttonStyle(ThemedPlainButtonStyle()).disabled(busy)
                 .accessibilityLabel(L10n.format("Open ChatGPT with profile %@", String(describing: account.name)))
         }
-        .padding(20).background(palette.surface).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)))
+        .padding(20).background(appearanceTheme.isPlayfulRetro ? account.color.pale(for: appearanceTheme) : palette.surface).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)))
         .overlay(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)).stroke(hovering ? account.color.tint(for: appearanceTheme).opacity(0.4) : palette.line))
         .shadow(color: palette.ink.opacity(hovering ? 0.045 : 0), radius: 10, y: 4)
+        .retroOutline(radius: appearanceTheme.radius(13))
+        .offset(y: appearanceTheme.isPlayfulRetro && hovering ? -2 : 0)
+        .animation(reduceMotion || !appearanceTheme.isPlayfulRetro ? nil : .easeOut(duration: 0.15), value: hovering)
         .onHover { hovering = $0 }
     }
 }

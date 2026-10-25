@@ -33,6 +33,21 @@ final class AppearanceTests: XCTestCase {
         XCTAssertEqual(store.load(), AppPreferences(language: .vietnamese, theme: .terminal))
     }
 
+    func testThemeAdditionKeepsPersistedIdentifiersAndAppearanceCompatible() {
+        let existing: [(String, Bool)] = [("light", false), ("dark", true), ("terminal", true), ("code", true), ("dracula", true)]
+        for (identifier, isDark) in existing {
+            defaults.set(identifier, forKey: "ui.theme")
+            let theme = AppPreferencesStore(defaults: defaults).load().theme
+            XCTAssertEqual(theme.rawValue, identifier)
+            XCTAssertEqual(theme.isDark, isDark)
+            XCTAssertEqual(theme.outlineWidth, 0)
+            XCTAssertEqual(theme.hardShadowOffset, 0)
+        }
+        XCTAssertTrue(AppTheme.allCases.contains(.playfulRetro))
+        XCTAssertFalse(AppTheme.playfulRetro.isDark)
+        XCTAssertFalse(AppTheme.playfulRetro.monospaced)
+    }
+
     private func catalog(_ language: AppLanguage) throws -> [String: String] {
         let url = try XCTUnwrap(L10n.bundle(for: language).url(forResource: "Localizable", withExtension: "strings"))
         let data = try Data(contentsOf: url)
@@ -108,7 +123,8 @@ final class AppearanceTests: XCTestCase {
         }
         for theme in AppTheme.allCases {
             let c = theme.colors
-            for background in [c.canvas, c.surface, c.sidebar] {
+            let candySurfaces = theme.isPlayfulRetro ? [RetroColors.yellow, RetroColors.pink, RetroColors.blue, RetroColors.mint, RetroColors.peach, RetroColors.violet] : []
+            for background in [c.canvas, c.surface, c.sidebar] + candySurfaces {
                 XCTAssertGreaterThanOrEqual(contrast(c.ink, background), 4.5, theme.rawValue)
                 XCTAssertGreaterThanOrEqual(contrast(c.secondary, background), 4.5, theme.rawValue)
             }

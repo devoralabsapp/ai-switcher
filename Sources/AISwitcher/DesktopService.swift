@@ -10,6 +10,7 @@ struct DesktopInstallation {
 
 @MainActor
 protocol DesktopQuotaSource {
+    func connectSession(_ account: Account) async throws
     func hasBackend(_ id: UUID) -> Bool
     func quotaClient(_ id: UUID) throws -> CodexRPCClient
     func persistedSessionQuotaClient(_ id: UUID) throws -> CodexRPCClient?
@@ -71,30 +72,9 @@ final class DesktopService: DesktopQuotaSource {
            running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) {
             return running
         }
-        let workspace = SharedDesktopWorkspace(repository: repository)
-        guard !hasBackend(account.id) || workspace.isPrepared(account.id) == account.usesSharedLocalWorkspace else {
-            throw DesktopProfileError.profileRunning
-        }
-        let databaseHome: URL?
-        if account.usesSharedLocalWorkspace {
-            databaseHome = try workspace.prepare(account.id)
-        } else {
-            try workspace.restorePrivateWorkspace(account.id)
-            databaseHome = nil
-        }
+        let environment = try await startBackend(account)
         // With no windows, launch the same profile again. Electron's per-profile
         // instance lock forwards the request to its own running process.
-        let home = repository.desktopHomeURL(for: account.id)
-        let environment = DesktopLaunch.environment(base: ProcessInfo.processInfo.environment, home: home,
-                                                     userData: repository.desktopUserDataURL(for: account.id),
-                                                     sharedDatabaseHome: databaseHome)
-        try await DesktopCommand.run(executable: installed.cli, arguments: ["app-server", "daemon", "start", "-c", "cli_auth_credentials_store=\"file\"", "-c", "analytics.enabled=false"], environment: environment, directory: home)
-        // daemon start publishes a PID before the server binds its socket.
-        for _ in 0..<100 {
-            if hasBackend(account.id) { break }
-            try await Task.sleep(nanoseconds: 100_000_000)
-        }
-        guard hasBackend(account.id) else { throw DesktopProfileError.backendFailed }
         let child = Process()
         child.executableURL = installed.executable
         child.arguments = DesktopLaunch.arguments(userData: repository.desktopUserDataURL(for: account.id))
@@ -113,6 +93,41 @@ final class DesktopService: DesktopQuotaSource {
             if !child.isRunning, child.terminationStatus != 0 { throw DesktopProfileError.launchFailed }
         }
         throw DesktopProfileError.launchFailed
+    }
+
+    /// Reuses the profile's saved sign-in and starts only its quota/session backend.
+    /// This path never launches or activates the Desktop application.
+    func connectSession(_ account: Account) async throws {
+        _ = try await startBackend(account)
+    }
+
+    private func startBackend(_ account: Account) async throws -> [String: String] {
+        let installed = try installation()
+        try repository.prepareDesktopProfile(for: account.id)
+        let workspace = SharedDesktopWorkspace(repository: repository)
+        guard !hasBackend(account.id) || workspace.isPrepared(account.id) == account.usesSharedLocalWorkspace else {
+            throw DesktopProfileError.profileRunning
+        }
+        let databaseHome: URL?
+        if account.usesSharedLocalWorkspace {
+            databaseHome = try workspace.prepare(account.id)
+        } else {
+            try workspace.restorePrivateWorkspace(account.id)
+            databaseHome = nil
+        }
+        let home = repository.desktopHomeURL(for: account.id)
+        let environment = DesktopLaunch.environment(base: ProcessInfo.processInfo.environment, home: home,
+                                                     userData: repository.desktopUserDataURL(for: account.id),
+                                                     sharedDatabaseHome: databaseHome)
+        if hasBackend(account.id) { return environment }
+        try await DesktopCommand.run(executable: installed.cli, arguments: ["app-server", "daemon", "start", "-c", "cli_auth_credentials_store=\"file\"", "-c", "analytics.enabled=false"], environment: environment, directory: home)
+        // daemon start publishes a PID before the server binds its socket.
+        for _ in 0..<100 {
+            if hasBackend(account.id) { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        guard hasBackend(account.id) else { throw DesktopProfileError.backendFailed }
+        return environment
     }
 
     func close(_ account: Account) async throws {
