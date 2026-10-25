@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible problem with AI Switcher.
+body:
+  - type: markdown
+    attributes:
+      value: "Do not attach browser profiles, accounts.json, cookies, tokens, or private conversations. Redact account labels in screenshots. For vulnerabilities, see SECURITY.md."
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: macOS version, Intel or Apple Silicon, browser name/version, and app version or commit.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Describe the smallest sequence that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: fresh_profile
+    attributes:
+      label: Additional context
+      description: Does this happen with a fresh profile? Include only redacted, non-sensitive details.

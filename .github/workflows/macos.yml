@@ -1,0 +1,41 @@
+name: macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show toolchain
+        run: swift --version
+      - name: Test core
+        run: bash scripts/test.sh
+      - name: Build Intel and Apple Silicon app
+        run: bash scripts/build.sh --universal
+      - name: Package app and checksum
+        run: bash scripts/package.sh
+      - name: Save preview build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: AI-Switcher-macOS-${{ github.sha }}
+          path: |
+            dist/AI-Switcher-macOS.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
