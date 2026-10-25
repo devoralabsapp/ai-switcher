@@ -4,6 +4,10 @@
 
 Chuyển giữa nhiều tài khoản bằng **những phiên ChatGPT Desktop riêng**, không cần Chrome để dùng hằng ngày. App SwiftUI có giao diện tiếng Việt/tiếng Anh, thanh menu và quota Codex giờ/tuần cho từng hồ sơ.
 
+![Màn hình chính AI Switcher bằng tiếng Anh với theme Code](assets/code-en.png)
+
+*Giao diện tiếng Anh, theme Code. Tên tài khoản và quota trong ảnh là dữ liệu mẫu.*
+
 ## Cách dùng
 
 1. Cài ChatGPT Desktop mới có Chat, Work và Codex vào Applications. **ChatGPT Classic chưa được hỗ trợ.**

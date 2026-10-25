@@ -12,6 +12,10 @@ AI Switcher is a native SwiftUI and AppKit utility. Add your accounts, sign in o
 
 [Download preview](https://github.com/devoralabsapp/ai-switcher/releases) · [Tiếng Việt](docs/README.vi.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Roadmap](docs/ROADMAP.md)
 
+![AI Switcher dashboard in English with the Code theme](docs/assets/code-en.png)
+
+*English interface with the Code theme. Account labels and quota are fictional demo data.*
+
 ## What it does
 
 - Launch the installed, official ChatGPT app with separate UI data and a separate local backend for each profile.
@@ -55,10 +59,9 @@ Terminal and Code use monospace typography and compact corners. Themes cover the
 <p align="center"><img src="docs/assets/appearance-en.png" width="550" alt="Appearance settings with English and Vietnamese and five theme choices"></p>
 
 <details>
-<summary>Terminal and Code previews (fictional profiles and quota)</summary>
+<summary>Terminal theme preview (fictional profiles and quota)</summary>
 
 ![Terminal theme in English](docs/assets/terminal-en.png)
-![Code theme in English](docs/assets/code-en.png)
 
 </details>
 
