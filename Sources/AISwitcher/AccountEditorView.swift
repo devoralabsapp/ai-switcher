@@ -2,6 +2,8 @@ import SwiftUI
 import AISwitcherCore
 
 struct AccountEditorView: View {
+    @Environment(\.appTheme) private var appearanceTheme
+    private var palette: ThemePalette { ThemePalette(theme: appearanceTheme) }
     @ObservedObject var model: AppModel
     let editor: AccountEditor
     @Environment(\.dismiss) private var dismiss
@@ -36,32 +38,32 @@ struct AccountEditorView: View {
         VStack(alignment: .leading, spacing: 23) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(isNew ? "Một tài khoản nữa.\nMọi thứ vẫn liền mạch." : "Chỉnh sửa hồ sơ")
-                        .font(.system(size: 24, weight: .semibold)).tracking(-0.5)
-                    Text(isNew ? "Tạo không gian riêng cho tài khoản ChatGPT của bạn." : "Tên và email chỉ là nhãn để bạn dễ nhận biết.")
-                        .font(.system(size: 12)).foregroundColor(Palette.secondary)
+                    Text(isNew ? L10n.text("Another account.\nKeep your flow.") : L10n.text("Edit profile"))
+                        .font(appearanceTheme.font(size: 24, weight: .semibold)).tracking(-0.5)
+                    Text(isNew ? L10n.text("Create a separate space for your ChatGPT account.") : L10n.text("Names and emails are labels to help you recognize accounts."))
+                        .font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
                 }
                 Spacer()
-                Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .medium)) }
-                    .buttonStyle(.plain).foregroundColor(Palette.secondary).help("Đóng")
+                Button { dismiss() } label: { Image(systemName: "xmark").font(appearanceTheme.font(size: 12, weight: .medium)) }
+                    .buttonStyle(.plain).foregroundColor(palette.secondary).help(L10n.text("Close"))
             }
 
             VStack(alignment: .leading, spacing: 18) {
-                field("Tên tài khoản", detail: "Ví dụ: Cá nhân, Công việc, Học tập") {
-                    TextField("Đặt tên cho tài khoản", text: $name).focused($nameFocused)
+                field(L10n.text("Account name"), detail: L10n.text("For example: Personal, Work, Study")) {
+                    TextField(L10n.text("Give this account a name"), text: $name).focused($nameFocused)
                         .accessibilityIdentifier("accountName")
                 }
-                field("Email hoặc ghi chú", detail: "Không bắt buộc · chỉ dùng làm nhãn") {
+                field(L10n.text("Email or note"), detail: L10n.text("Optional · label only")) {
                     TextField("ban@example.com", text: $email).accessibilityIdentifier("accountEmail")
                 }
                 VStack(alignment: .leading, spacing: 9) {
-                    Text("Màu nhận diện").font(.system(size: 12, weight: .medium))
+                    Text(L10n.text("Profile color")).font(appearanceTheme.font(size: 12, weight: .medium))
                     HStack(spacing: 11) {
                         ForEach(AccountColor.allCases) { item in
                             Button { color = item } label: {
-                                Circle().fill(item.tint).frame(width: 27, height: 27)
-                                    .overlay { if item == color { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white) } }
-                                    .padding(3).overlay(Circle().stroke(item == color ? item.tint.opacity(0.5) : Color.clear, lineWidth: 1))
+                                Circle().fill(item.tint(for: appearanceTheme)).frame(width: 27, height: 27)
+                                    .overlay { if item == color { Image(systemName: "checkmark").font(appearanceTheme.font(size: 11, weight: .bold)).foregroundColor(palette.onAccent) } }
+                                    .padding(3).overlay(Circle().stroke(item == color ? item.tint(for: appearanceTheme).opacity(0.5) : Color.clear, lineWidth: 1))
                             }.buttonStyle(.plain).help(item.name).accessibilityLabel(item.name)
                                 .accessibilityAddTraits(item == color ? .isSelected : [])
                         }
@@ -69,42 +71,42 @@ struct AccountEditorView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 9) {
-                    Text("Mở tài khoản bằng").font(.system(size: 12, weight: .medium))
-                    Picker("Chế độ", selection: $launchMode) {
+                    Text(L10n.text("Open accounts with")).font(appearanceTheme.font(size: 12, weight: .medium))
+                    Picker(L10n.text("Mode"), selection: $launchMode) {
                         ForEach(LaunchMode.allCases) { Text($0.name).tag($0) }
                     }.pickerStyle(.segmented).labelsHidden()
                         .disabled(modeLocked)
                     if modeLocked {
-                        Text("Đóng phiên từ menu ⋯ và chờ thao tác quota xong trước khi đổi chế độ.")
-                            .font(.system(size: 10)).foregroundColor(Palette.secondary)
+                        Text(L10n.text("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                     if launchMode == .desktop {
-                        Text("Mỗi tài khoản có một phiên ChatGPT Desktop và backend riêng. Đăng nhập một lần trong cửa sổ vừa mở. Cần ChatGPT mới có Chat, Work và Codex; chế độ thử nghiệm có thể bị ảnh hưởng khi ChatGPT cập nhật.")
-                            .font(.system(size: 10)).foregroundColor(Palette.secondary).fixedSize(horizontal: false, vertical: true)
+                        Text(L10n.text("Each account has a separate ChatGPT Desktop session and backend. Sign in once in its window. Requires the new ChatGPT with Chat, Work, and Codex; app updates may affect this experimental mode."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary).fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text("Chế độ trình duyệt giữ phiên cũ riêng. Đóng phiên từ menu ⋯ trước khi đổi chế độ.")
-                            .font(.system(size: 10)).foregroundColor(Palette.secondary)
+                        Text(L10n.text("Browser mode keeps its previous session separate. Close the session from the ⋯ menu before changing modes."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                 }
 
                 if launchMode == .browser {
                 VStack(alignment: .leading, spacing: 9) {
-                    Text("Trình duyệt giữ phiên đăng nhập").font(.system(size: 12, weight: .medium))
+                    Text(L10n.text("Browser that keeps this login")).font(appearanceTheme.font(size: 12, weight: .medium))
                     if isNew {
-                        Picker("Trình duyệt", selection: $browser) {
+                        Picker(L10n.text("Browser"), selection: $browser) {
                             ForEach(BrowserKind.allCases) { item in
-                                Text(item.name + (model.browserService.applicationURL(for: item) == nil ? " · chưa cài" : "")).tag(item)
+                                Text(item.name + (model.browserService.applicationURL(for: item) == nil ? L10n.text(" · not installed") : "")).tag(item)
                             }
                         }.labelsHidden().frame(maxWidth: .infinity).controlSize(.large)
                     } else {
-                        Label(browser.name, systemImage: "globe").font(.system(size: 12)).foregroundColor(Palette.secondary)
-                        Text("Hồ sơ luôn dùng trình duyệt ban đầu để giữ đúng phiên đăng nhập.")
-                            .font(.system(size: 10)).foregroundColor(Palette.secondary)
+                        Label(browser.name, systemImage: "globe").font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
+                        Text(L10n.text("This profile keeps its original browser to preserve its login."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                     if isNew && model.browserService.applicationURL(for: browser) == nil {
                         HStack {
-                            Text("Cần cài \(browser.name) trước khi thêm hồ sơ.").font(.system(size: 11)).foregroundColor(.orange)
-                            Button("Tải trình duyệt") { openBrowserDownload() }.font(.system(size: 11))
+                            Text(L10n.format("Install %@ before adding a profile.", String(describing: browser.name))).font(appearanceTheme.font(size: 11)).foregroundColor(.orange)
+                            Button(L10n.text("Download browser")) { openBrowserDownload() }.font(appearanceTheme.font(size: 11))
                         }
                     }
                 }
@@ -112,39 +114,39 @@ struct AccountEditorView: View {
             }
 
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "lock.shield").foregroundColor(Palette.accent)
-                Text("Bạn đăng nhập trực tiếp trong ChatGPT. AI Switcher không đọc mật khẩu, cookie hay nội dung trò chuyện. Quota được đọc qua backend Codex của phiên này.")
-                    .font(.system(size: 11)).lineSpacing(4).foregroundColor(Palette.secondary)
+                Image(systemName: "lock.shield").foregroundColor(palette.accent)
+                Text(L10n.text("Sign in directly in ChatGPT. AI Switcher does not read passwords, cookies, or conversations. Quota comes from this session's Codex backend."))
+                    .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
             }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Palette.accent.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 9))
+                .background(palette.accent.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
 
             if isNew {
-                Toggle("Mở ChatGPT để đăng nhập sau khi thêm", isOn: $openAfterSave)
-                    .toggleStyle(.checkbox).font(.system(size: 12))
+                Toggle(L10n.text("Open ChatGPT to sign in after adding"), isOn: $openAfterSave)
+                    .toggleStyle(.checkbox).font(appearanceTheme.font(size: 12))
             }
 
             HStack {
                 Spacer()
-                Button("Hủy") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button { save() } label: { Text(isNew ? "Thêm tài khoản" : "Lưu thay đổi") }
+                Button(L10n.text("Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button { save() } label: { Text(isNew ? L10n.text("Add account") : L10n.text("Save changes")) }
                     .buttonStyle(PrimaryButtonStyle(compact: true)).keyboardShortcut(.defaultAction)
                     .disabled(!valid).opacity(valid ? 1 : 0.5).accessibilityIdentifier("saveAccount")
             }
         }
-        .textFieldStyle(.roundedBorder).foregroundColor(Palette.ink)
-        .padding(30).frame(width: 500).background(Color.white)
-        .preferredColorScheme(.light)
+        .textFieldStyle(.roundedBorder).foregroundColor(palette.ink)
+        .padding(30).frame(width: 500).background(palette.surface)
+
         .onAppear { nameFocused = true }
     }
 
     private func field<Content: View>(_ title: String, detail: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack {
-                Text(title).font(.system(size: 12, weight: .medium))
+                Text(title).font(appearanceTheme.font(size: 12, weight: .medium))
                 Spacer()
-                Text(detail).font(.system(size: 9)).foregroundColor(Palette.secondary)
+                Text(detail).font(appearanceTheme.font(size: 9)).foregroundColor(palette.secondary)
             }
-            content().font(.system(size: 13)).controlSize(.large)
+            content().font(appearanceTheme.font(size: 13)).controlSize(.large)
         }
     }
 

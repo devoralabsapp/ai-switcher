@@ -10,6 +10,7 @@ if [[ ! -x "$APP/Contents/MacOS/AISwitcher" ]]; then
 fi
 
 codesign --verify --deep --strict "$APP"
+"$APP/Contents/MacOS/AISwitcher" --localization-smoke-test
 ditto -c -k --norsrc --keepParent "$APP" "$OUTPUT/AI-Switcher-macOS.zip"
 (
     cd "$OUTPUT"

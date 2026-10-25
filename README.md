@@ -18,7 +18,7 @@ AI Switcher is a native SwiftUI and AppKit utility. Add your accounts, sign in o
 - Bring the exact existing profile process forward when switching.
 - Show Codex quota remaining, hour/week windows, reset times, and the backend's account identity.
 - Refresh quota manually or every five minutes while the profile backend is running.
-- Name, color, favorite, search, and revisit profiles from a Vietnamese dashboard and menu bar.
+- Name, color, favorite, search, and revisit profiles from a Vietnamese or English dashboard and menu bar.
 - Close a profile without deleting its login, or explicitly delete its local data after closing.
 - Keep the previous Chrome/Edge/Brave mode available for browser profiles.
 - Run without an API key, a hosted service, or third-party Swift packages.
@@ -44,6 +44,23 @@ Closing the manager keeps the menu bar available. Quitting AI Switcher leaves De
 | ⌘1–⌘9 | Open the corresponding profile |
 | ⌘N / ⌘K / ⌘0 | Add / search / show manager |
 | ⌘W / ⌘Q | Close manager / quit AI Switcher |
+| ⌘, | Appearance and language |
+
+## Language and appearance
+
+Open **Appearance & Language** from the sidebar, the menu bar, or **⌘,**. Choose **English** or **Tiếng Việt** and one of five themes: **Light**, **Dark**, **Terminal**, **Code** (inspired by VS Code), or **Dracula**. Changes apply immediately and persist after relaunch. Existing users keep Vietnamese and Light until they choose otherwise.
+
+Terminal and Code use monospace typography and compact corners. Themes cover the manager, account cards, dialogs, quota details, and native menu appearance. Language selection also updates menus, errors, quota labels, and date/number formatting. These preferences apply to AI Switcher.
+
+<p align="center"><img src="docs/assets/appearance-en.png" width="550" alt="Appearance settings with English and Vietnamese and five theme choices"></p>
+
+<details>
+<summary>Terminal and Code previews (fictional profiles and quota)</summary>
+
+![Terminal theme in English](docs/assets/terminal-en.png)
+![Code theme in English](docs/assets/code-en.png)
+
+</details>
 
 ## Codex quota
 
@@ -97,9 +114,9 @@ bash scripts/test.sh --browser  # Chrome windows plus loopback cookie/localStora
 bash scripts/test.sh --codex    # Installed CLI handshake in a fresh unauthenticated home
 ```
 
-The core/protocol suite has 46 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, and JSONL lifecycle. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
+The core/protocol suite has 53 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
 
-**Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface is Vietnamese; English localization is planned.
+**Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface supports Vietnamese and English.
 
 Use a separate development profile root:
 

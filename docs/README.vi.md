@@ -2,7 +2,7 @@
 
 [English README](../README.md) · [Tải bản dùng thử](https://github.com/devoralabsapp/ai-switcher/releases)
 
-Chuyển giữa nhiều tài khoản bằng **những phiên ChatGPT Desktop riêng**, không cần Chrome để dùng hằng ngày. App SwiftUI có giao diện tiếng Việt, thanh menu và quota Codex giờ/tuần cho từng hồ sơ.
+Chuyển giữa nhiều tài khoản bằng **những phiên ChatGPT Desktop riêng**, không cần Chrome để dùng hằng ngày. App SwiftUI có giao diện tiếng Việt/tiếng Anh, thanh menu và quota Codex giờ/tuần cho từng hồ sơ.
 
 ## Cách dùng
 
@@ -16,6 +16,14 @@ Chuyển giữa nhiều tài khoản bằng **những phiên ChatGPT Desktop ri�
 Đây là chế độ **thử nghiệm**, dựa trên cơ chế khởi động nội bộ của ChatGPT mới (`com.openai.codex`). OpenAI chưa công bố đây là giao diện chuyển nhiều tài khoản được hỗ trợ; bản cập nhật ChatGPT có thể làm cơ chế này thay đổi. App báo lỗi khi thiếu cơ chế tách phiên, không tự mở Chrome thay thế.
 
 Hồ sơ cũ mặc định chuyển sang Desktop và cần đăng nhập mới một lần. Phiên trình duyệt và kết nối quota cũ vẫn được giữ. Muốn quay lại, chọn **⋯ → Đóng phiên tài khoản…**, sửa hồ sơ và chọn **Trình duyệt**. Không đổi chế độ khi phiên hoặc thao tác quota đang chạy.
+
+## Ngôn ngữ và theme
+
+Mở **Giao diện & Ngôn ngữ** ở thanh bên, menu macOS hoặc bấm **⌘,**. Chọn **Tiếng Việt / English** và theme **Sáng, Tối, Terminal, Code (lấy cảm hứng từ VS Code), Dracula**. Lựa chọn áp dụng ngay và được giữ khi mở lại app.
+
+Terminal và Code dùng font đơn cách, góc gọn cùng bảng màu riêng. Theme áp dụng cho giao diện AI Switcher, hộp thoại và quota. Bản dịch bao gồm menu, thông báo lỗi, hạn mức, số và ngày giờ. Tài khoản và phiên đăng nhập vẫn dùng dữ liệu hiện có.
+
+Xem [ảnh mẫu các theme](../README.md#language-and-appearance); ảnh dùng hồ sơ và quota giả để minh họa.
 
 ## Quota và đóng phiên
 
@@ -51,6 +59,6 @@ bash scripts/package.sh
 bash scripts/test.sh --desktop
 ```
 
-46 unit/protocol test kiểm tra lưu dữ liệu, marker sở hữu, tách môi trường, định tuyến đúng tiến trình, quota và xóa/khôi phục. `--desktop` mở hai phiên ChatGPT thật dùng một lần, xác minh không thừa hưởng tài khoản, tái sử dụng cửa sổ, đóng/mở lại và dọn dữ liệu thử. Không dùng thông tin đăng nhập thật. `--browser` và `--codex` kiểm tra các chế độ tương ứng.
+53 unit/protocol test kiểm tra lưu dữ liệu, marker sở hữu, tách môi trường, định tuyến đúng tiến trình, quota và xóa/khôi phục. `--desktop` mở hai phiên ChatGPT thật dùng một lần, xác minh không thừa hưởng tài khoản, tái sử dụng cửa sổ, đóng/mở lại và dọn dữ liệu thử. Không dùng thông tin đăng nhập thật. `--browser` và `--codex` kiểm tra các chế độ tương ứng.
 
 Đã kiểm tra cục bộ trên Intel; build universal chưa thay thế kiểm tra runtime trên Apple Silicon. Đăng nhập thật, quota thật, cửa sổ thu nhỏ và nhiều Spaces vẫn cần kiểm tra thủ công. Đây là tiện ích độc lập, không phải sản phẩm của OpenAI.

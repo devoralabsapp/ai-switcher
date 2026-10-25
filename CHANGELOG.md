@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 Preview 1 — 2026-10-25
+
+- Added a complete English UI alongside Vietnamese, including native menus, errors, quota units and date/number formatting.
+- Added persistent language/theme settings, available in the sidebar, menu bar and with ⌘,.
+- Added Light, Dark, Terminal, Code (VS Code inspired), and Dracula themes across the dashboard, cards and sheets.
+- Added monospace typography and compact corners for Terminal/Code, plus readable dark-mode account colors.
+- Added offscreen previews using fictional profiles and packaging checks for both language resources.
+- Expanded to 53 tests covering preferences, localization completeness/placeholders and text/button contrast.
+
 ## 1.2.0 Preview 1 — 2026-10-25
 
 - Added experimental real ChatGPT Desktop profiles, each with separate UI data and a local Codex backend; Chrome is no longer required for daily switching.

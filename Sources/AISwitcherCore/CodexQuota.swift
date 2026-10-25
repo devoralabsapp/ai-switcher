@@ -38,11 +38,15 @@ public struct CodexQuotaWindow: Codable, Equatable, Sendable {
     public func resetHasPassed(at date: Date) -> Bool { resetDate.map { $0 <= date } ?? false }
 
     public var durationLabel: String {
-        guard let minutes = windowDurationMins, minutes > 0 else { return "Cửa sổ hạn mức" }
-        if minutes == 10_080 { return "Tuần" }
-        if minutes % 1_440 == 0 { return "\(minutes / 1_440) ngày" }
-        if minutes % 60 == 0 { return "\(minutes / 60) giờ" }
-        return "\(minutes) phút"
+        durationLabel(in: L10n.language)
+    }
+
+    public func durationLabel(in language: AppLanguage) -> String {
+        guard let minutes = windowDurationMins, minutes > 0 else { return L10n.text("Quota window", language: language) }
+        if minutes == 10_080 { return L10n.text("Week", language: language) }
+        if minutes % 1_440 == 0 { return L10n.format(minutes == 1_440 ? "%@ day" : "%@ days", String(minutes / 1_440), language: language) }
+        if minutes % 60 == 0 { return L10n.format(minutes == 60 ? "%@ hour" : "%@ hours", String(minutes / 60), language: language) }
+        return L10n.format(minutes == 1 ? "%@ minute" : "%@ minutes", String(minutes), language: language)
     }
 }
 
@@ -104,17 +108,17 @@ public enum CodexQuotaError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .executableMissing: return "Chưa tìm thấy Codex CLI. Hãy cài Codex CLI hoặc chọn tệp codex đã cài."
-        case .notSignedIn: return "Phiên Codex chưa đăng nhập hoặc đã hết hạn. Hãy kết nối lại tài khoản."
-        case .identityChanged: return "Tài khoản Codex đã thay đổi. Hãy ngắt kết nối rồi xác nhận lại đúng tài khoản cho hồ sơ này."
-        case .identityUnavailable: return "Codex chưa trả về danh tính để xác nhận tài khoản. Hãy cập nhật Codex CLI và thử lại."
-        case .timeout: return "Codex chưa phản hồi kịp. Dữ liệu cũ không được coi là quota hiện tại. Hãy thử làm mới."
-        case .disconnected: return "Kết nối với Codex CLI đã đóng. Hãy thử lại."
-        case .invalidResponse: return "Không đọc được phản hồi Codex. Hãy cập nhật Codex CLI và thử lại."
-        case .loginFailed: return "Đăng nhập Codex chưa hoàn tất. Hãy thử lại hoặc hủy kết nối."
-        case .invalidLoginURL: return "Codex trả về đường dẫn đăng nhập không hợp lệ. App đã dừng kết nối."
-        case .unsupportedCLI: return "Phiên bản Codex CLI chưa hỗ trợ thao tác này. Hãy cập nhật Codex CLI."
-        case .rpc(let code): return "Chưa đọc được quota từ Codex (mã \(code)). Hãy thử lại hoặc kết nối lại tài khoản."
+        case .executableMissing: return L10n.text("Codex CLI was not found. Install it or choose an existing codex executable.")
+        case .notSignedIn: return L10n.text("The Codex session is signed out or expired. Reconnect the account.")
+        case .identityChanged: return L10n.text("The Codex account changed. Disconnect, then verify the intended account for this profile again.")
+        case .identityUnavailable: return L10n.text("Codex has not returned an account identity to verify. Update Codex CLI and try again.")
+        case .timeout: return L10n.text("Codex did not respond in time. Previously read data is not current quota. Try refreshing.")
+        case .disconnected: return L10n.text("The Codex CLI connection closed. Try again.")
+        case .invalidResponse: return L10n.text("Could not read the Codex response. Update Codex CLI and try again.")
+        case .loginFailed: return L10n.text("Codex sign-in did not finish. Try again or cancel the connection.")
+        case .invalidLoginURL: return L10n.text("Codex returned an invalid sign-in URL. The connection was stopped.")
+        case .unsupportedCLI: return L10n.text("This Codex CLI version does not support the operation. Update Codex CLI.")
+        case .rpc(let code): return L10n.format("Could not read Codex quota (code %@). Try refreshing or reconnecting the account.", String(describing: code))
         }
     }
 }

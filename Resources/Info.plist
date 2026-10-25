@@ -6,12 +6,12 @@
     <key>CFBundleExecutable</key><string>AISwitcher</string>
     <key>CFBundleIdentifier</key><string>local.aiswitcher.mac</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.2.0</string>
-    <key>CFBundleVersion</key><string>3</string>
+    <key>CFBundleShortVersionString</key><string>1.3.0</string>
+    <key>CFBundleVersion</key><string>4</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>CFBundleDevelopmentRegion</key><string>vi</string>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleLocalizations</key><array><string>vi</string><string>en</string></array>
     <key>NSHumanReadableCopyright</key><string>AI Switcher — Independent local utility. Not affiliated with OpenAI.</string>
 </dict></plist>

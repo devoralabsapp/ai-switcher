@@ -3,9 +3,15 @@ import AISwitcherCore
 import Combine
 
 enum AccountFilter: String, CaseIterable {
-    case all = "Tất cả tài khoản"
-    case favorites = "Yêu thích"
-    case recent = "Gần đây"
+    case all, favorites, recent
+
+    var title: String {
+        switch self {
+        case .all: return L10n.text("All accounts")
+        case .favorites: return L10n.text("Favorites")
+        case .recent: return L10n.text("Recent")
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -32,13 +38,15 @@ final class AppModel: ObservableObject {
     @Published var accountToDelete: Account?
     @Published var accountToClose: Account?
     @Published var showGuide = false
+    @Published var showPreferences = false
+    @Published private(set) var preferences = AppPreferencesStore().load()
     @Published private(set) var launchingIDs: Set<UUID> = []
     @Published private(set) var runningIDs: Set<UUID> = []
     @Published private(set) var loadFailed = false
     @Published private(set) var lastAction: String?
     @Published var quotaAccountID: UUID?
     @Published private(set) var quotaBusyIDs: Set<UUID> = []
-    @Published private(set) var quotaErrors: [UUID: String] = [:]
+    @Published private(set) var quotaErrors: [UUID: Error] = [:]
     @Published private(set) var pendingConnections: [UUID: CodexConnection] = [:]
     @Published private(set) var connectingID: UUID?
 
@@ -53,12 +61,14 @@ final class AppModel: ObservableObject {
     private var quotaCleanupTasks: [UUID: Task<Void, Never>] = [:]
     private var desktopQuotaClients: [UUID: CodexRPCClient] = [:]
 
-    init(root: URL) {
+    init(root: URL, preferences: AppPreferences? = nil, monitoring: Bool = true) {
+        self.preferences = preferences ?? AppPreferencesStore().load()
         repository = ProfileRepository(root: root)
         browserService = BrowserService(repository: repository)
         desktopService = DesktopService(repository: repository)
         quotaService = CodexQuotaService(repository: repository)
         reload()
+        guard monitoring else { return }
         refreshTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshRunning()
         }
@@ -70,6 +80,21 @@ final class AppModel: ObservableObject {
 
     var accounts: [Account] { snapshot.accounts }
     var lastOpened: Account? { accounts.first { $0.id == snapshot.lastOpenedID } }
+
+    func setLanguage(_ language: AppLanguage) {
+        var updated = preferences
+        updated.language = language
+        AppPreferencesStore().save(updated)
+        lastAction = nil
+        preferences = updated
+    }
+
+    func setTheme(_ theme: AppTheme) {
+        var updated = preferences
+        updated.theme = theme
+        AppPreferencesStore().save(updated)
+        preferences = updated
+    }
 
     var visibleAccounts: [Account] {
         var result = accounts
@@ -100,7 +125,7 @@ final class AppModel: ObservableObject {
             refreshRunning()
         } catch {
             loadFailed = true
-            showError(error, title: "Chưa đọc được danh sách tài khoản")
+            showError(error, title: L10n.text("Could not read account list"))
         }
     }
 
@@ -132,7 +157,7 @@ final class AppModel: ObservableObject {
                 updated.accounts.append(account)
             }
             try persist(updated)
-            lastAction = "Đã lưu hồ sơ \(account.name)"
+            lastAction = L10n.format("Saved profile %@", String(describing: account.name))
             return true
         } catch { showError(error); return false }
     }
@@ -158,9 +183,9 @@ final class AppModel: ObservableObject {
                     updated.lastOpenedID = account.id
                     try persist(updated)
                 }
-                lastAction = "Đã mở \(account.name)"
+                lastAction = L10n.format("Opened %@", String(describing: account.name))
                 if account.effectiveLaunchMode == .desktop { refreshQuota(account) }
-            } catch { showError(error, title: "Chưa mở được tài khoản") }
+            } catch { showError(error, title: L10n.text("Could not open account")) }
         }
     }
 
@@ -172,7 +197,7 @@ final class AppModel: ObservableObject {
             do {
                 try await browserService.close(account)
                 try await desktopService.close(account)
-                lastAction = "Đã đóng phiên \(account.name). Đăng nhập vẫn được giữ."
+                lastAction = L10n.format("Closed session %@. Your login is kept.", String(describing: account.name))
             } catch { showError(error) }
         }
     }
@@ -182,10 +207,10 @@ final class AppModel: ObservableObject {
         do {
             guard !hasRunningSession(account) else { throw DesktopProfileError.profileRunning }
             snapshot = try repository.remove(account.id, from: snapshot)
-            lastAction = "Đã xóa hồ sơ \(account.name) trên máy này"
+            lastAction = L10n.format("Deleted local profile %@", String(describing: account.name))
         } catch {
             reload()
-            showError(error, title: "Chưa xóa xong hồ sơ")
+            showError(error, title: L10n.text("Could not finish deleting profile"))
         }
         refreshRunning()
     }
@@ -216,7 +241,7 @@ final class AppModel: ObservableObject {
                 try Task.checkCancellation()
                 pendingConnections[account.id] = connection
             } catch is CancellationError { }
-            catch { quotaErrors[account.id] = error.localizedDescription }
+            catch { quotaErrors[account.id] = error }
         }
     }
 
@@ -227,12 +252,12 @@ final class AppModel: ObservableObject {
             try storeConnection(connection, for: id)
             pendingConnections[id] = nil
             quotaErrors[id] = nil
-            lastAction = "Đã kết nối quota Codex"
+            lastAction = L10n.text("Codex quota connected")
             // OAuth's success page can be the only or frontmost browser window.
             // Open ChatGPT once after setup so future switches target that app.
             if let account = accounts.first(where: { $0.id == id }) { open(account, newWindow: true) }
             return true
-        } catch { quotaErrors[id] = error.localizedDescription; return false }
+        } catch { quotaErrors[id] = error; return false }
     }
 
     func cancelQuotaConnection(_ id: UUID) {
@@ -244,7 +269,7 @@ final class AppModel: ObservableObject {
         quotaCleanupTasks[id] = Task {
             await operation?.value
             do { try await quotaService.discardUnconfirmed(id) }
-            catch { quotaErrors[id] = error.localizedDescription }
+            catch { quotaErrors[id] = error }
             quotaBusyIDs.remove(id)
             quotaCleanupTasks[id] = nil
         }
@@ -259,8 +284,8 @@ final class AppModel: ObservableObject {
                 try await quotaService.disconnect(id)
                 try storeConnection(nil, for: id)
                 quotaErrors[id] = nil
-                lastAction = "Đã ngắt kết nối Codex cho hồ sơ này"
-            } catch { quotaErrors[id] = error.localizedDescription }
+                lastAction = L10n.text("Disconnected Codex for this profile")
+            } catch { quotaErrors[id] = error }
         }
     }
 
@@ -276,7 +301,7 @@ final class AppModel: ObservableObject {
                 try storeConnection(refreshed, for: account.id)
                 quotaErrors[account.id] = nil
             } catch {
-                quotaErrors[account.id] = error.localizedDescription
+                quotaErrors[account.id] = error
             }
         }
     }
@@ -311,7 +336,7 @@ final class AppModel: ObservableObject {
                 if let error = error as? CodexQuotaError, error == .notSignedIn || error == .identityChanged {
                     try? storeConnection(nil, for: account.id, mode: .desktop)
                 }
-                quotaErrors[account.id] = error.localizedDescription
+                quotaErrors[account.id] = error
             }
         }
     }
@@ -367,7 +392,7 @@ final class AppModel: ObservableObject {
         snapshot = updated
     }
 
-    private func showError(_ error: Error, title: String = "Có lỗi xảy ra") {
+    private func showError(_ error: Error, title: String = L10n.text("Something went wrong")) {
         notice = AppNotice(title: title, message: error.localizedDescription)
     }
 }

@@ -1,0 +1,69 @@
+import Foundation
+
+public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
+    case vietnamese = "vi", english = "en"
+    public var id: String { rawValue }
+    public var name: String { self == .english ? "English" : "Tiếng Việt" }
+    public var locale: Locale { Locale(identifier: self == .english ? "en_US" : "vi_VN") }
+}
+
+public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
+    case light, dark, terminal, code, dracula
+    public var id: String { rawValue }
+    public var isDark: Bool { self != .light }
+    public var monospaced: Bool { self == .terminal || self == .code }
+    public var cornerRadius: Double { self == .terminal ? 3 : self == .code ? 6 : 13 }
+    public var name: String {
+        switch self {
+        case .light: return L10n.text("Light")
+        case .dark: return L10n.text("Dark")
+        case .terminal: return "Terminal"
+        case .code: return "Code"
+        case .dracula: return "Dracula"
+        }
+    }
+    public var detail: String {
+        switch self {
+        case .light: return L10n.text("Soft light with a mint accent")
+        case .dark: return L10n.text("A clear, comfortable dark theme")
+        case .terminal: return L10n.text("Monospace with terminal green")
+        case .code: return L10n.text("Inspired by VS Code")
+        case .dracula: return L10n.text("Deep purple with pink accents")
+        }
+    }
+    public var colors: ThemeColors {
+        switch self {
+        case .light: return .init(canvas: 0xf5f8f8, surface: 0xffffff, sidebar: 0xffffff, ink: 0x19242b, secondary: 0x65737c, accent: 0x147864, onAccent: 0xffffff, line: 0xdce5e5)
+        case .dark: return .init(canvas: 0x101419, surface: 0x1a2027, sidebar: 0x151a20, ink: 0xe8edf2, secondary: 0xa5b1bd, accent: 0x6cd4b4, onAccent: 0x10261f, line: 0x343e48)
+        case .terminal: return .init(canvas: 0x090e0b, surface: 0x101913, sidebar: 0x0b120d, ink: 0xc5f5ce, secondary: 0x8bb795, accent: 0x65ed85, onAccent: 0x0c2112, line: 0x2c4633)
+        case .code: return .init(canvas: 0x1e1e1e, surface: 0x252526, sidebar: 0x181818, ink: 0xe0e0e0, secondary: 0xababab, accent: 0x75beff, onAccent: 0x09243d, line: 0x454545)
+        case .dracula: return .init(canvas: 0x20212c, surface: 0x282a36, sidebar: 0x191a23, ink: 0xf8f8f2, secondary: 0xb3afd0, accent: 0xd2afff, onAccent: 0x2b1644, line: 0x4c4e65)
+        }
+    }
+}
+
+public struct ThemeColors: Equatable, Sendable {
+    public let canvas, surface, sidebar, ink, secondary, accent, onAccent, line: UInt32
+}
+
+public struct AppPreferences: Equatable, Sendable {
+    public var language: AppLanguage
+    public var theme: AppTheme
+    public init(language: AppLanguage = .vietnamese, theme: AppTheme = .light) {
+        self.language = language
+        self.theme = theme
+    }
+}
+
+public struct AppPreferencesStore {
+    private let defaults: UserDefaults
+    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    public func load() -> AppPreferences {
+        AppPreferences(language: defaults.string(forKey: "ui.language").flatMap(AppLanguage.init(rawValue:)) ?? .vietnamese,
+                       theme: defaults.string(forKey: "ui.theme").flatMap(AppTheme.init(rawValue:)) ?? .light)
+    }
+    public func save(_ value: AppPreferences) {
+        defaults.set(value.language.rawValue, forKey: "ui.language")
+        defaults.set(value.theme.rawValue, forKey: "ui.theme")
+    }
+}

@@ -1,6 +1,6 @@
 # Contributing to AI Switcher
 
-Thanks for helping improve a small, native macOS utility. The current interface is Vietnamese; issues and pull requests are welcome in English or Vietnamese.
+Thanks for helping improve a small, native macOS utility. The interface supports Vietnamese and English; issues and pull requests are welcome in English or Vietnamese.
 
 ## Set up
 
@@ -47,3 +47,17 @@ Quota changes must preserve profile isolation and keep unavailable data distinct
 AI-assisted contributions are welcome. Explain the resulting behavior and verification just as you would for any other contribution; generated output is not a substitute for checking a change.
 
 By submitting a contribution, you agree to license that contribution under the repository's MIT License. No separate contributor agreement is required.
+
+## Language and themes
+
+Update both `Sources/AISwitcherCore/Resources/en.lproj/Localizable.strings` and `vi.lproj/Localizable.strings` when adding user-facing text. Use `L10n.text` or `L10n.format`; preserve the same placeholders in both languages. Never translate user-entered account labels. Locale and theme choices belong to AI Switcher preferences, separately from session data.
+
+Use the inherited `appTheme` environment, palette and font helpers for new views. Keep text readable on all surfaces; the unit suite checks palette contrast. Generate offscreen previews with fictional data for visual checks, without opening or capturing real profiles:
+
+```sh
+preview_root="$(mktemp -d /tmp/ai-switcher-preview.XXXXXX)"
+.build/debug/AISwitcher --data-dir "$preview_root" --render-previews dist/previews -ui.language en
+rm -rf "$preview_root"
+```
+
+The language flag uses the process's argument domain without saving a new user preference. Run with `vi` for Vietnamese previews. Package using the provided scripts so localization resources are included and verified before release.

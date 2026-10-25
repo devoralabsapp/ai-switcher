@@ -29,12 +29,12 @@ public enum AccountColor: String, Codable, CaseIterable, Identifiable, Sendable 
     public var id: String { rawValue }
     public var name: String {
         switch self {
-        case .mint: return "Xanh ngọc"
-        case .blue: return "Xanh dương"
-        case .violet: return "Tím"
-        case .peach: return "Cam"
-        case .rose: return "Hồng"
-        case .gold: return "Vàng"
+        case .mint: return L10n.text("Mint")
+        case .blue: return L10n.text("Blue")
+        case .violet: return L10n.text("Violet")
+        case .peach: return L10n.text("Orange")
+        case .rose: return L10n.text("Rose")
+        case .gold: return L10n.text("Gold")
         }
     }
 }
@@ -114,14 +114,14 @@ public enum ProfileError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidName: return "Tên tài khoản cần có từ 1 đến 48 ký tự."
-        case .invalidEmailHint: return "Email hoặc ghi chú cần ngắn hơn 161 ký tự."
-        case .unsupportedVersion: return "Dữ liệu này được tạo bởi phiên bản app mới hơn. Hãy cập nhật AI Switcher."
-        case .duplicateID: return "Dữ liệu có hai hồ sơ trùng mã. App giữ nguyên tệp để bạn có thể khôi phục."
-        case .invalidSelection: return "Tài khoản được chọn không còn trong danh sách."
-        case .browserUnavailable(let name): return "Không tìm thấy \(name). Hãy cài trình duyệt này rồi thử lại."
-        case .browserLaunchFailed: return "Chưa mở được cửa sổ ChatGPT. Hãy thử lại hoặc kiểm tra trình duyệt."
-        case .profileRunning: return "Hồ sơ này vẫn đang chạy. Hãy thoát phiên trình duyệt của hồ sơ từ menu ⋯ rồi thử xóa lại."
+        case .invalidName: return L10n.text("Account names must be 1–48 characters long.")
+        case .invalidEmailHint: return L10n.text("Keep the email or note under 161 characters.")
+        case .unsupportedVersion: return L10n.text("This data was created by a newer app version. Update AI Switcher.")
+        case .duplicateID: return L10n.text("Two profiles have the same ID. The data file has been preserved for recovery.")
+        case .invalidSelection: return L10n.text("The selected account is no longer in the list.")
+        case .browserUnavailable(let name): return L10n.format("%@ was not found. Install this browser and try again.", String(describing: name))
+        case .browserLaunchFailed: return L10n.text("Could not open the ChatGPT window. Try again or check the browser.")
+        case .profileRunning: return L10n.text("This profile is still running. Close its browser session from the ⋯ menu before deleting it.")
         }
     }
 }

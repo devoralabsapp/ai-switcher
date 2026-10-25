@@ -10,11 +10,11 @@ These are proposed next steps, not promised release dates or shipped features. C
 - [ ] Exercise Edge and Brave with the same profile lifecycle checks as Chrome.
 - [ ] Document real ChatGPT sign-in, session expiry, and sign-out behavior with disposable accounts.
 - [ ] Verify minimized windows, multiple windows, and multiple macOS Spaces.
-- [ ] Add screenshots or a short demo using clearly labeled sample profiles.
+- [x] Add screenshots using clearly labeled fictional profiles (1.3 preview).
 
 ## Improve everyday use
 
-- [ ] Add English UI localization and extract Vietnamese strings into localization resources.
+- [x] Add English/Vietnamese localization resources and persistent appearance preferences (1.3 preview).
 - [ ] Review keyboard navigation, VoiceOver labels, and text scaling.
 - [ ] Improve diagnostics for browser startup failures without collecting private profile contents.
 - [ ] Clarify local profile/cache cleanup and recovery after interrupted operations.

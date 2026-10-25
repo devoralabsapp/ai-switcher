@@ -48,7 +48,7 @@ public actor CodexRPCClient {
         process = child
         do {
             try child.run()
-            _ = try await request("initialize", params: ["clientInfo": ["name": "ai_switcher", "title": "AI Switcher", "version": "1.2.0"]])
+            _ = try await request("initialize", params: ["clientInfo": ["name": "ai_switcher", "title": "AI Switcher", "version": "1.3.0"]])
             try write(["method": "initialized"])
         } catch {
             await stop()

@@ -24,9 +24,9 @@ final class CodexQuotaService {
 
     func chooseExecutable() {
         let panel = NSOpenPanel()
-        panel.title = "Chọn Codex CLI đã cài"
-        panel.message = "Chọn tệp thực thi codex. App dùng giao thức app-server để đọc quota."
-        panel.prompt = "Dùng Codex CLI"
+        panel.title = L10n.text("Choose an installed Codex CLI")
+        panel.message = L10n.text("Choose the codex executable. AI Switcher reads quota through the app-server protocol.")
+        panel.prompt = L10n.text("Use Codex CLI")
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url, FileManager.default.isExecutableFile(atPath: url.path) {

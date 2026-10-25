@@ -8,6 +8,18 @@ import Darwin
 struct AISwitcherMain {
     @MainActor
     static func main() {
+        if CommandLine.arguments.contains("--localization-smoke-test") {
+            let root = Bundle.main.bundleURL.standardizedFileURL.path + "/"
+            let english = L10n.bundle(for: .english)
+            guard english.bundleURL.standardizedFileURL.path.hasPrefix(root),
+                  L10n.text("Add account", language: .english) == "Add account",
+                  L10n.text("Add account", language: .vietnamese) == "Thêm tài khoản" else {
+                fputs("FAIL: packaged localization resources are missing\n", stderr)
+                Darwin.exit(1)
+            }
+            print("PASS: packaged English and Vietnamese resources load from the app bundle")
+            Darwin.exit(0)
+        }
         if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--quota-socket-bridge" {
             do { try LocalWebSocket.run(socketPath: CommandLine.arguments[2]); Darwin.exit(0) }
             catch { Darwin.exit(1) }
@@ -28,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var subscription: AnyCancellable?
     private var noticeSubscription: AnyCancellable?
+    private var preferencesSubscription: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = CommandLine.arguments
@@ -38,20 +51,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("AI Switcher", isDirectory: true)
         }
+        if let index = arguments.firstIndex(of: "--render-previews"), arguments.indices.contains(index + 1) {
+            do {
+                guard arguments.contains("--data-dir"), root.lastPathComponent.hasPrefix("ai-switcher-preview.") else {
+                    throw ProfileError.invalidSelection
+                }
+                try AppearancePreview.render(root: root, output: URL(fileURLWithPath: arguments[index + 1]))
+                Darwin.exit(0)
+            } catch { fputs("Preview render failed: \(error.localizedDescription)\n", stderr); Darwin.exit(1) }
+        }
         model = AppModel(root: root)
+        NSApp.appearance = model.preferences.theme.nsAppearance
         buildMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
             let icon = NSImage(systemSymbolName: "arrow.triangle.swap", accessibilityDescription: "AI Switcher")
             icon?.isTemplate = true
             button.image = icon
-            button.toolTip = "AI Switcher — chuyển tài khoản ChatGPT"
+            button.toolTip = L10n.text("AI Switcher — switch ChatGPT accounts")
         }
         rebuildStatusMenu()
         subscription = model.$snapshot.combineLatest(model.$runningIDs, model.$launchingIDs, model.$quotaErrors)
             .receive(on: RunLoop.main).sink { [weak self] _ in self?.rebuildStatusMenu() }
         noticeSubscription = model.$notice.compactMap { $0 }.receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.showDashboard() }
+        preferencesSubscription = model.$preferences.dropFirst().receive(on: RunLoop.main).sink { [weak self] preferences in
+            guard let self else { return }
+            NSApp.appearance = preferences.theme.nsAppearance
+            self.window?.backgroundColor = NSColor(Color(hex: preferences.theme.colors.canvas))
+            self.buildMainMenu()
+            self.rebuildStatusMenu()
+        }
 
         if arguments.contains("--desktop-smoke-test") {
             Task { await desktopSmokeTest(root: root) }
@@ -86,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                   backing: .buffered, defer: false)
             window.title = "AI Switcher"
             window.titlebarAppearsTransparent = true
-            window.backgroundColor = .white
+            window.backgroundColor = NSColor(Color(hex: model.preferences.theme.colors.canvas))
             window.minSize = NSSize(width: 900, height: 670)
             window.contentView = NSHostingView(rootView: Dashboard(model: model))
             window.isReleasedWhenClosed = false
@@ -100,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func addAccount() { showDashboard(); model.addAccount() }
     @objc private func showGuide() { showDashboard(); model.showGuide = true }
+    @objc private func showPreferences() { showDashboard(); model.showPreferences = true }
     @objc private func revealData() { model.revealData() }
     @objc private func focusSearch() {
         showDashboard()
@@ -131,11 +162,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu(title: "AI Switcher")
         menu.autoenablesItems = false
         menu.delegate = self
-        let title = NSMenuItem(title: "CHỌN TÀI KHOẢN CHATGPT", action: nil, keyEquivalent: "")
+        let title = NSMenuItem(title: L10n.text("CHOOSE A CHATGPT ACCOUNT"), action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
         if model.accounts.isEmpty {
-            let empty = NSMenuItem(title: "Thêm tài khoản để bắt đầu", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: L10n.text("Add an account to get started"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
         }
@@ -148,17 +179,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.isEnabled = !busy
             item.state = model.snapshot.lastOpenedID == account.id ? .on : .off
             item.image = NSImage(systemSymbolName: account.isFavorite ? "star.fill" : "person.crop.circle", accessibilityDescription: nil)
-            item.toolTip = "Mở hồ sơ \(account.name) bằng \(account.effectiveLaunchMode == .desktop ? "ChatGPT Desktop" : account.browser.name)"
+            item.toolTip = L10n.format("Open profile %@ with %@", String(describing: account.name), String(describing: account.effectiveLaunchMode == .desktop ? "ChatGPT Desktop" : account.browser.name))
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        addItem("Thêm tài khoản…", action: #selector(addAccount), to: menu)
-        addItem("Quản lý tài khoản…", action: #selector(showDashboard), to: menu)
+        addItem(L10n.text("Add account…"), action: #selector(addAccount), to: menu)
+        addItem(L10n.text("Manage accounts…"), action: #selector(showDashboard), to: menu)
+        addItem(L10n.text("Appearance & Language…"), action: #selector(showPreferences), to: menu)
         menu.addItem(.separator())
-        addItem("Thoát AI Switcher", action: #selector(quit), to: menu)
+        addItem(L10n.text("Quit AI Switcher"), action: #selector(quit), to: menu)
         statusItem?.menu = menu
-        statusItem?.button?.toolTip = model.lastOpened.map { "AI Switcher — dùng gần nhất: \($0.name)" }
-            ?? "AI Switcher — chuyển tài khoản ChatGPT"
+        statusItem?.button?.toolTip = model.lastOpened.map { L10n.format("AI Switcher — last used: %@", String(describing: $0.name)) }
+            ?? L10n.text("AI Switcher — switch ChatGPT accounts")
         rebuildAccountMenu()
     }
 
@@ -166,17 +198,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let suffix = account.emailHint.isEmpty ? "" : "  ·  \(account.emailHint)"
         var quotaLabel = ""
         if let quota = account.displayedCodexConnection?.quota {
-            if quota.isStale(at: Date()) || model.quotaErrors[account.id] != nil { quotaLabel = "  ·  Codex: dữ liệu cũ" }
+            if quota.isStale(at: Date()) || model.quotaErrors[account.id] != nil { quotaLabel = L10n.text("  ·  Codex: stale data") }
             else if let bucket = quota.limits.buckets.first {
                 let windows = [bucket.value.primary, bucket.value.secondary].compactMap { $0 }.compactMap { window -> String? in
                     guard let remaining = window.remainingPercent else { return nil }
                     return "\(window.durationLabel) \(Int(remaining.rounded()))%"
                 }
                 let name = bucket.id == "codex" ? "Codex" : (bucket.value.limitName ?? bucket.id)
-                if !windows.isEmpty { quotaLabel = "  ·  \(name) còn: " + windows.joined(separator: " / ") }
+                if !windows.isEmpty { quotaLabel = L10n.format("  ·  %@ remaining: ", String(describing: name)) + windows.joined(separator: " / ") }
             }
         }
-        return account.name + suffix + quotaLabel + (model.launchingIDs.contains(account.id) ? "  (đang mở…)" : "")
+        return account.name + suffix + quotaLabel + (model.launchingIDs.contains(account.id) ? L10n.text("  (opening…)") : "")
     }
 
     private var accountMenu: NSMenu?
@@ -187,42 +219,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let appItem = NSMenuItem()
         appItem.submenu = appMenu
         main.addItem(appItem)
-        addItem("Về AI Switcher", action: #selector(showGuide), to: appMenu)
+        addItem(L10n.text("About AI Switcher"), action: #selector(showGuide), to: appMenu)
+        addItem(L10n.text("Appearance & Language…"), action: #selector(showPreferences), key: ",", to: appMenu)
         appMenu.addItem(.separator())
-        addItem("Quản lý tài khoản", action: #selector(showDashboard), key: "0", to: appMenu)
-        addItem("Thêm tài khoản…", action: #selector(addAccount), key: "n", to: appMenu)
+        addItem(L10n.text("Manage accounts"), action: #selector(showDashboard), key: "0", to: appMenu)
+        addItem(L10n.text("Add account…"), action: #selector(addAccount), key: "n", to: appMenu)
         appMenu.addItem(.separator())
-        let hide = NSMenuItem(title: "Ẩn AI Switcher", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hide = NSMenuItem(title: L10n.text("Hide AI Switcher"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(hide)
         appMenu.addItem(.separator())
-        addItem("Thoát AI Switcher", action: #selector(quit), key: "q", to: appMenu)
+        addItem(L10n.text("Quit AI Switcher"), action: #selector(quit), key: "q", to: appMenu)
 
-        let editMenu = NSMenu(title: "Chỉnh sửa")
-        let editItem = NSMenuItem(title: "Chỉnh sửa", action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: L10n.text("Edit"))
+        let editItem = NSMenuItem(title: L10n.text("Edit"), action: nil, keyEquivalent: "")
         editItem.submenu = editMenu
         for (title, selector, key) in [
-            ("Hoàn tác", Selector(("undo:")), "z"),
-            ("Cắt", #selector(NSText.cut(_:)), "x"),
-            ("Sao chép", #selector(NSText.copy(_:)), "c"),
-            ("Dán", #selector(NSText.paste(_:)), "v"),
-            ("Chọn tất cả", #selector(NSText.selectAll(_:)), "a"),
+            (L10n.text("Undo"), Selector(("undo:")), "z"),
+            (L10n.text("Cut"), #selector(NSText.cut(_:)), "x"),
+            (L10n.text("Copy"), #selector(NSText.copy(_:)), "c"),
+            (L10n.text("Paste"), #selector(NSText.paste(_:)), "v"),
+            (L10n.text("Select All"), #selector(NSText.selectAll(_:)), "a"),
         ] { editMenu.addItem(NSMenuItem(title: title, action: selector, keyEquivalent: key)) }
         editMenu.addItem(.separator())
-        addItem("Tìm tài khoản", action: #selector(focusSearch), key: "k", to: editMenu)
+        addItem(L10n.text("Find accounts"), action: #selector(focusSearch), key: "k", to: editMenu)
         main.addItem(editItem)
 
-        let accounts = NSMenu(title: "Tài khoản")
+        let accounts = NSMenu(title: L10n.text("Account"))
         accounts.autoenablesItems = false
-        let accountsItem = NSMenuItem(title: "Tài khoản", action: nil, keyEquivalent: "")
+        let accountsItem = NSMenuItem(title: L10n.text("Account"), action: nil, keyEquivalent: "")
         accountsItem.submenu = accounts
         main.addItem(accountsItem)
         accountMenu = accounts
 
-        let windowMenu = NSMenu(title: "Cửa sổ")
-        let windowItem = NSMenuItem(title: "Cửa sổ", action: nil, keyEquivalent: "")
+        let windowMenu = NSMenu(title: L10n.text("Window"))
+        let windowItem = NSMenuItem(title: L10n.text("Window"), action: nil, keyEquivalent: "")
         windowItem.submenu = windowMenu
-        windowMenu.addItem(NSMenuItem(title: "Thu nhỏ", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
-        windowMenu.addItem(NSMenuItem(title: "Đóng cửa sổ", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        windowMenu.addItem(NSMenuItem(title: L10n.text("Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
+        windowMenu.addItem(NSMenuItem(title: L10n.text("Close Window"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
         main.addItem(windowItem)
         NSApp.windowsMenu = windowMenu
         NSApp.mainMenu = main
@@ -239,8 +272,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        addItem("Mở tài khoản gần nhất", action: #selector(openLastAccount), to: menu)
-        addItem("Thêm tài khoản…", action: #selector(addAccount), to: menu)
+        addItem(L10n.text("Open last account"), action: #selector(openLastAccount), to: menu)
+        addItem(L10n.text("Add account…"), action: #selector(addAccount), to: menu)
     }
 
     private func addItem(_ title: String, action: Selector, key: String = "", to menu: NSMenu) {

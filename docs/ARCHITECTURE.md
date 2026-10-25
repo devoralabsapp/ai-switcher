@@ -58,4 +58,14 @@ Protocol reference: [Codex App Server](https://learn.chatgpt.com/docs/app-server
 
 The offline core/protocol suite verifies persistence, migration, owner markers, environment isolation, routing, permissions, staged deletion/rollback, quota semantics and JSONL lifecycle. `--desktop` uses two new real Desktop profiles, verifies separate PIDs, blank identities through each daemon, reuse, close/reopen persistence and cleanup while existing instances remain alive. `--browser` adds Chrome GUI checks and a headless loopback cookie/localStorage fixture; `--codex` probes an empty standalone CLI home.
 
-CI runs offline tests and universal compilation/packaging. Real account authentication, live quota, Apple Silicon runtime behavior, minimized windows and multiple Spaces require manual coverage. The interface is Vietnamese.
+CI runs offline tests and universal compilation/packaging. Real account authentication, live quota, Apple Silicon runtime behavior, minimized windows and multiple Spaces require manual coverage. The interface supports Vietnamese and English.
+
+## Language and appearance
+
+`AppPreferencesStore` stores language/theme identifiers in the app's UserDefaults domain, separately from account metadata and authentication. Unknown preferences fall back independently to Vietnamese/Light, preserving the behavior of earlier releases. SwiftUI observes the preferences through `AppModel`; views inherit the selected theme and locale. AppKit rebuilds native menus and updates the manager window appearance when preferences change.
+
+`L10n` uses English source keys with matching `en.lproj` and `vi.lproj` resources. All interpolated arguments use string placeholders, with catalog parity and source-key coverage tests. Quota formatting uses the selected locale and supports singular English window units. Stored quota errors retain their error value so their description follows the selected language.
+
+Five palettes define foreground, secondary, accent, button foreground, borders, and surfaces. Terminal and Code also use monospace fonts and compact corners. Contrast tests check body/secondary text against every surface and primary button text against its accent. `AppearancePreview` renders app-owned offscreen views with fictional data; it captures no screen pixels or real profiles.
+
+The build copies the SwiftPM localization resource bundle into the app's Resources directory before signing. Packaging runs `--localization-smoke-test`, which verifies both languages load from inside the distributable app rather than a developer build-cache path.

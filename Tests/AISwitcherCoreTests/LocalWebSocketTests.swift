@@ -36,7 +36,7 @@ final class LocalWebSocketTests: XCTestCase {
         server.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         server.arguments = ["-u", fixture.path, socket.path]
         server.standardOutput = FileHandle.nullDevice
-        server.standardError = FileHandle.nullDevice
+        server.standardError = FileHandle.standardError
         try server.run()
         defer { if server.isRunning { server.terminate() } }
         for _ in 0..<100 {

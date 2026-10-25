@@ -15,12 +15,19 @@ else
     swift build -c release --disable-sandbox
     BINARY="$(swift build -c release --show-bin-path --disable-sandbox)/AISwitcher"
 fi
+RESOURCE_BUNDLE="$(dirname "$BINARY")/AISwitcher_AISwitcherCore.bundle"
+if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+    printf 'Missing localization resource bundle: %s\n' "$RESOURCE_BUNDLE" >&2
+    exit 1
+fi
 
 APP="$PROJECT_ROOT/dist/AI Switcher.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/AISwitcher"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 cp "$PROJECT_ROOT/LICENSE" "$APP/Contents/Resources/LICENSE"
+rm -rf "$APP/Contents/Resources/AISwitcher_AISwitcherCore.bundle"
+ditto "$RESOURCE_BUNDLE" "$APP/Contents/Resources/AISwitcher_AISwitcherCore.bundle"
 swift "$PROJECT_ROOT/scripts/make-icon.swift" "$PROJECT_ROOT/.build/AppIcon.iconset"
 python3 "$PROJECT_ROOT/scripts/make-icns.py" "$PROJECT_ROOT/.build/AppIcon.iconset" "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$APP"

@@ -4,7 +4,7 @@ import CryptoKit
 public enum LaunchMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case desktop, browser
     public var id: String { rawValue }
-    public var name: String { self == .desktop ? "ChatGPT Desktop" : "Trình duyệt" }
+    public var name: String { self == .desktop ? "ChatGPT Desktop" : L10n.text("Browser") }
 }
 
 public enum DesktopProfileError: LocalizedError {
@@ -13,15 +13,15 @@ public enum DesktopProfileError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .appMissing: return "Chưa tìm thấy ChatGPT Desktop mới. Hãy cài app có Chat, Work và Codex; ChatGPT Classic chưa được hỗ trợ."
-        case .unsupportedApp: return "Bản ChatGPT này chưa có cơ chế tách hồ sơ mà AI Switcher hỗ trợ. App đã dừng mở phiên."
-        case .launchFailed: return "Chưa mở được phiên ChatGPT Desktop riêng. App không tự chuyển sang Chrome."
-        case .backendFailed: return "Chưa kết nối được backend riêng của hồ sơ Desktop. Hãy thử mở lại hoặc cập nhật ChatGPT Desktop."
-        case .backendExit(let code): return "Backend Desktop chưa khởi động được (mã \(code)). Hãy thử lại hoặc cập nhật ChatGPT."
-        case .backendTimeout: return "Backend Desktop chưa khởi động sau 90 giây. Lần đầu cần cài backend riêng; hãy thử mở lại."
-        case .profileRunning: return "Phiên Desktop hoặc backend của hồ sơ vẫn đang chạy. Hãy đóng hoàn toàn phiên từ menu ⋯ trước khi xóa."
-        case .unsafeStorage: return "Thư mục hồ sơ Desktop không khớp thông tin sở hữu. App đã dừng để bảo vệ dữ liệu."
-        case .socketPathTooLong: return "Đường dẫn backend Desktop quá dài cho socket macOS. Chế độ này chưa hỗ trợ vị trí thư mục người dùng hiện tại."
+        case .appMissing: return L10n.text("The new ChatGPT Desktop app was not found. Install the app with Chat, Work, and Codex; ChatGPT Classic is not supported.")
+        case .unsupportedApp: return L10n.text("This ChatGPT version does not have the profile isolation mechanisms AI Switcher needs. The session was not opened.")
+        case .launchFailed: return L10n.text("Could not open the separate ChatGPT Desktop session. AI Switcher will not fall back to Chrome.")
+        case .backendFailed: return L10n.text("Could not connect to this Desktop profile's backend. Try opening it again or update ChatGPT Desktop.")
+        case .backendExit(let code): return L10n.format("The Desktop backend could not start (code %@). Try again or update ChatGPT.", String(describing: code))
+        case .backendTimeout: return L10n.text("The Desktop backend did not start within 90 seconds. First launch installs a separate backend; try opening it again.")
+        case .profileRunning: return L10n.text("This profile's Desktop session or backend is still running. Close it fully from the ⋯ menu before deleting it.")
+        case .unsafeStorage: return L10n.text("The Desktop profile ownership marker does not match. AI Switcher stopped to protect your data.")
+        case .socketPathTooLong: return L10n.text("The Desktop backend path is too long for a macOS socket. This mode does not support the current home directory location.")
         }
     }
 }
