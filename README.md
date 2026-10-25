@@ -126,7 +126,7 @@ bash scripts/test.sh --browser  # Chrome windows plus loopback cookie/localStora
 bash scripts/test.sh --codex    # Installed CLI handshake in a fresh unauthenticated home
 ```
 
-The core/protocol, Desktop discovery and shared-workspace suite has 67 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
+The core/protocol, Desktop discovery and shared-workspace suite has 68 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
 
 **Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface supports Vietnamese and English.
 

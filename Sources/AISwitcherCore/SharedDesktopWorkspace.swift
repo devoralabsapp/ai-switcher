@@ -67,7 +67,7 @@ public struct SharedDesktopWorkspace {
         try makeDirectory(databaseHome)
         let existing = try binding(id)
         if let existing {
-            guard existing.sourceHome == sourceHome, existing.databaseHome == databaseHome else {
+            guard existing.sourceHome.path == sourceHome.path, existing.databaseHome.path == databaseHome.path else {
                 throw SharedWorkspaceError.unsafeStorage
             }
             try validateLinks(id, home: home, source: sourceHome, artifactSessions: existing.artifactSessions)
@@ -208,8 +208,8 @@ public struct SharedDesktopWorkspace {
         try ownedFile(marker)
         let result = try JSONDecoder().decode(Binding.self, from: Data(contentsOf: marker))
         guard result.version == 1, result.sourceHome.isFileURL, result.databaseHome.isFileURL,
-              result.sourceHome == result.sourceHome.standardizedFileURL,
-              result.databaseHome == result.databaseHome.standardizedFileURL else { throw SharedWorkspaceError.unsafeStorage }
+              result.sourceHome.path == result.sourceHome.standardizedFileURL.path,
+              result.databaseHome.path == result.databaseHome.standardizedFileURL.path else { throw SharedWorkspaceError.unsafeStorage }
         try ownedDirectory(result.sourceHome)
         try ownedDirectory(result.databaseHome)
         return result

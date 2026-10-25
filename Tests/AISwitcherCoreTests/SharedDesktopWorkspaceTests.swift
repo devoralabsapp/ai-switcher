@@ -189,4 +189,17 @@ final class SharedDesktopWorkspaceTests: XCTestCase {
         _ = try repository.remove(second.id, from: repository.load())
         XCTAssertEqual(try String(contentsOf: workspace.sourceUserData.appendingPathComponent("artifact-sessions/document")), "document state")
     }
+
+    func testEquivalentDirectoryURLRepresentationsRemainValidAfterReload() throws {
+        let account = try profile(), home = repository.desktopHomeURL(for: account.id)
+        try workspace.prepare(account.id)
+        let marker = home.appendingPathComponent("ai-switcher-workspace.json")
+        var value = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: marker)) as? [String: Any])
+        value["sourceHome"] = URL(fileURLWithPath: source.path, isDirectory: true).absoluteString
+        value["databaseHome"] = URL(fileURLWithPath: source.path, isDirectory: false).absoluteString
+        try JSONSerialization.data(withJSONObject: value).write(to: marker)
+        XCTAssertEqual(try workspace.prepare(account.id).path, source.path)
+        XCTAssertNoThrow(try workspace.archiveMetadata(account.id))
+        XCTAssertNoThrow(try workspace.restorePrivateWorkspace(account.id))
+    }
 }
