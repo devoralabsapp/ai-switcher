@@ -54,23 +54,28 @@ final class AppModel: ObservableObject {
     let browserService: BrowserService
     let desktopService: DesktopService
     let quotaService: CodexQuotaService
+    private let desktopQuotaSource: any DesktopQuotaSource
     private var refreshTimer: AnyCancellable?
     private var quotaTimer: AnyCancellable?
     private var quotaTasks: [UUID: Task<Void, Never>] = [:]
     private var quotaSweepTask: Task<Void, Never>?
     private var quotaCleanupTasks: [UUID: Task<Void, Never>] = [:]
     private var desktopQuotaClients: [UUID: CodexRPCClient] = [:]
+    private var desktopQuotaRetryAt: [UUID: Date] = [:]
 
-    init(root: URL, preferences: AppPreferences? = nil, monitoring: Bool = true) {
+    init(root: URL, preferences: AppPreferences? = nil, monitoring: Bool = true,
+         desktopQuotaSource: (any DesktopQuotaSource)? = nil) {
         self.preferences = preferences ?? AppPreferencesStore().load()
         repository = ProfileRepository(root: root)
         browserService = BrowserService(repository: repository)
         desktopService = DesktopService(repository: repository)
+        self.desktopQuotaSource = desktopQuotaSource ?? desktopService
         quotaService = CodexQuotaService(repository: repository)
         reload()
         guard monitoring else { return }
         refreshTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshRunning()
+            self?.refreshDesktopQuotaIfNeeded()
         }
         quotaTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshAllQuotas()
@@ -222,7 +227,37 @@ final class AppModel: ObservableObject {
 
     func hasRunningSession(_ account: Account) -> Bool {
         browserService.runningApplication(for: account) != nil || desktopService.runningApplication(for: account) != nil
-            || desktopService.hasBackend(account.id)
+            || desktopQuotaSource.hasBackend(account.id)
+    }
+
+    /// Opening Desktop normally precedes OAuth completion. Retry local identity
+    /// reads until that existing session can return quota; never start another login.
+    func refreshDesktopQuotaIfNeeded(now: Date = Date()) {
+        let active = accounts.filter { $0.effectiveLaunchMode == .desktop && desktopQuotaSource.hasBackend($0.id) }
+        let activeIDs = Set(active.map(\.id))
+        desktopQuotaRetryAt = desktopQuotaRetryAt.filter { activeIDs.contains($0.key) }
+        for account in active where !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id) {
+            guard account.desktopCodexConnection?.quota == nil || quotaErrors[account.id] != nil,
+                  now >= (desktopQuotaRetryAt[account.id] ?? .distantPast) else { continue }
+            refreshQuota(account)
+        }
+    }
+
+    func quotaErrorDescription(for account: Account) -> String? {
+        guard let error = quotaErrors[account.id] else { return nil }
+        guard account.effectiveLaunchMode == .desktop, let codexError = error as? CodexQuotaError else {
+            return error.localizedDescription
+        }
+        switch codexError {
+        case .notSignedIn:
+            return L10n.text("Waiting for sign-in in this ChatGPT Desktop window. Quota will appear automatically; no separate Codex sign-in is needed.")
+        case .identityChanged:
+            return L10n.text("The Desktop account changed. Quota will refresh automatically.")
+        case .rpc:
+            return L10n.text("Could not read quota from this Desktop session. AI Switcher will retry automatically.")
+        default:
+            return error.localizedDescription
+        }
     }
 
     func connectQuota(_ account: Account) {
@@ -311,11 +346,24 @@ final class AppModel: ObservableObject {
         quotaTasks[account.id] = Task {
             defer { finishQuotaOperation(account.id) }
             do {
-                let client = try desktopService.quotaClient(account.id)
+                var client = try desktopQuotaSource.quotaClient(account.id)
                 desktopQuotaClients[account.id] = client
                 do {
                     try await client.start()
-                    let identity = try await client.readIdentity()
+                    let identity: CodexIdentity
+                    do {
+                        identity = try await client.readIdentity()
+                    } catch CodexQuotaError.notSignedIn {
+                        await client.stop()
+                        try Task.checkCancellation()
+                        guard let persisted = try desktopQuotaSource.persistedSessionQuotaClient(account.id) else {
+                            throw CodexQuotaError.notSignedIn
+                        }
+                        client = persisted
+                        desktopQuotaClients[account.id] = client
+                        try await client.start()
+                        identity = try await client.readIdentity()
+                    }
                     let limits = try await client.readLimits()
                     let after = try await client.readIdentity()
                     guard identity.matches(after) else { throw CodexQuotaError.identityChanged }
@@ -324,6 +372,7 @@ final class AppModel: ObservableObject {
                     try storeConnection(CodexConnection(identity: current, quota: CodexQuotaSnapshot(limits: limits)),
                                         for: account.id, mode: .desktop)
                     quotaErrors[account.id] = nil
+                    desktopQuotaRetryAt[account.id] = nil
                     await client.stop()
                     desktopQuotaClients[account.id] = nil
                 } catch {
@@ -337,6 +386,8 @@ final class AppModel: ObservableObject {
                     try? storeConnection(nil, for: account.id, mode: .desktop)
                 }
                 quotaErrors[account.id] = error
+                let waitingForSession = (error as? CodexQuotaError).map { $0 == .notSignedIn || $0 == .identityChanged } ?? false
+                desktopQuotaRetryAt[account.id] = Date().addingTimeInterval(waitingForSession ? 3 : 30)
             }
         }
     }
@@ -345,7 +396,7 @@ final class AppModel: ObservableObject {
         guard quotaSweepTask == nil else { return }
         quotaSweepTask = Task {
             defer { quotaSweepTask = nil }
-            for id in accounts.filter({ $0.effectiveLaunchMode == .desktop ? desktopService.hasBackend($0.id) : $0.codexConnection != nil }).map(\.id) {
+            for id in accounts.filter({ $0.effectiveLaunchMode == .desktop ? desktopQuotaSource.hasBackend($0.id) : $0.codexConnection != nil }).map(\.id) {
                 if Task.isCancelled { return }
                 guard let account = accounts.first(where: { $0.id == id }) else { continue }
                 refreshQuota(account)
@@ -355,6 +406,7 @@ final class AppModel: ObservableObject {
     }
 
     func shutdownQuota() async {
+        refreshTimer?.cancel()
         quotaTimer?.cancel()
         quotaSweepTask?.cancel()
         if let id = connectingID { cancelQuotaConnection(id) }

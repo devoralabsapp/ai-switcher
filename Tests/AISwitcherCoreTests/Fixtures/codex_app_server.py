@@ -32,7 +32,8 @@ for line in sys.stdin:
         assert 'OPENAI_API_KEY' not in os.environ
         assert 'CODEX_API_KEY' not in os.environ
     elif method == 'account/read':
-        result = {'account': None if mode == 'unauthed' else {'type': 'chatgpt', 'email': mode + '@example.test', 'planType': 'plus'}}
+        signed_out = '--signed-out' in sys.argv or mode == 'unauthed' or (mode == 'desktop-login' and not (home / 'signed-in').exists())
+        result = {'account': None if signed_out else {'type': 'chatgpt', 'email': mode + '@example.test', 'planType': 'plus'}}
     elif method == 'account/rateLimits/read':
         if mode == 'timeout':
             continue

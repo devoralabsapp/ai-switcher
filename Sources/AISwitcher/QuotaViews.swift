@@ -7,6 +7,20 @@ struct QuotaSummaryView: View {
     @ObservedObject var model: AppModel
     let account: Account
 
+    private var emptyStatus: String {
+        if account.effectiveLaunchMode == .browser {
+            return model.connectingID == account.id ? L10n.text("Waiting for sign-in…") : L10n.text("Not connected")
+        }
+        if model.quotaBusyIDs.contains(account.id) { return L10n.text("Reading Desktop quota…") }
+        if !model.runningIDs.contains(account.id) { return L10n.text("Open Desktop to read quota") }
+        if let error = model.quotaErrors[account.id] {
+            return (error as? CodexQuotaError) == .notSignedIn
+                ? L10n.text("Waiting for Desktop sign-in…")
+                : L10n.text("Could not read quota · view details")
+        }
+        return L10n.text("Detecting Desktop session…")
+    }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { timeline in
             VStack(alignment: .leading, spacing: 9) {
@@ -15,7 +29,7 @@ struct QuotaSummaryView: View {
                     Spacer()
                     if model.quotaBusyIDs.contains(account.id) {
                         ProgressView().controlSize(.mini)
-                    } else if account.displayedCodexConnection != nil {
+                    } else if account.displayedCodexConnection != nil || (account.effectiveLaunchMode == .desktop && model.runningIDs.contains(account.id)) {
                         Button { model.refreshQuota(account) } label: { Image(systemName: "arrow.clockwise").font(appearanceTheme.font(size: 11)) }
                             .buttonStyle(.plain).help(L10n.text("Refresh Codex quota"))
                     }
@@ -41,10 +55,10 @@ struct QuotaSummaryView: View {
                     }.buttonStyle(.plain).help(L10n.text("View quota, reset times, and the connected Codex account"))
                 } else {
                     HStack {
-                        Text(model.connectingID == account.id ? L10n.text("Waiting for sign-in…") : (account.effectiveLaunchMode == .desktop ? L10n.text("Sign in in Desktop") : L10n.text("Not connected")))
+                        Text(emptyStatus)
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                         Spacer()
-                        Button(model.connectingID == account.id ? L10n.text("Details") : L10n.text("Connect")) { model.quotaAccountID = account.id }
+                        Button(account.effectiveLaunchMode == .desktop || model.connectingID == account.id ? L10n.text("Details") : L10n.text("Connect")) { model.quotaAccountID = account.id }
                             .buttonStyle(.plain).font(appearanceTheme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent)
                     }
                 }
@@ -139,8 +153,8 @@ struct QuotaDetailView: View {
                     } else if let account {
                         onboarding(account)
                     }
-                    if let error = model.quotaErrors[accountID] {
-                        Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+                    if let account, let message = model.quotaErrorDescription(for: account) {
+                        Label(message, systemImage: "exclamationmark.triangle")
                             .font(appearanceTheme.font(size: 11)).foregroundColor(.orange).fixedSize(horizontal: false, vertical: true)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 4)
@@ -153,6 +167,11 @@ struct QuotaDetailView: View {
         }
         .padding(28).frame(width: 530, height: 600).background(palette.surface).foregroundColor(palette.ink)
 
+        .onAppear {
+            if let account, account.effectiveLaunchMode == .desktop, model.runningIDs.contains(accountID) {
+                model.refreshQuota(account)
+            }
+        }
         .onDisappear { model.cancelQuotaConnection(accountID) }
         .alert(L10n.text("Disconnect Codex?"), isPresented: $confirmDisconnect) {
             Button(L10n.text("Cancel"), role: .cancel) { }
@@ -167,9 +186,9 @@ struct QuotaDetailView: View {
         if account.effectiveLaunchMode == .desktop {
             VStack(alignment: .leading, spacing: 16) {
                 Text(L10n.text("Quota from this Desktop session")).font(appearanceTheme.font(size: 15, weight: .semibold))
-                Text(L10n.text("Open this profile's ChatGPT Desktop session and sign in to the intended account. Hour/week quota is read from the same backend and refreshes every 5 minutes while it is running."))
+                Text(L10n.text("Quota appears automatically after you sign in to this profile's ChatGPT Desktop window. No separate Codex sign-in is needed."))
                     .font(appearanceTheme.font(size: 12)).lineSpacing(4).foregroundColor(palette.secondary)
-                Text(L10n.text("After signing in, choose Refresh. To change the session's account, sign out inside that ChatGPT window. The email on the card comes from the backend."))
+                Text(L10n.text("AI Switcher checks the Desktop session every few seconds until quota is available, then refreshes every 5 minutes. To change accounts, sign out inside that ChatGPT window."))
                     .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
                 Button { model.open(account) } label: { Label(L10n.text("Open ChatGPT Desktop"), systemImage: "macwindow") }
                     .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.launchingIDs.contains(accountID))

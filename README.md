@@ -64,7 +64,7 @@ Terminal and Code use monospace typography and compact corners. Themes cover the
 
 ## Codex quota
 
-For Desktop profiles, sign in inside that Desktop window, then choose **Làm mới quota**. The reader connects to the **same local backend** as that window, using a local WebSocket bridge included in AI Switcher. It does not establish a second quota login or import your default Codex session. The returned email/plan identifies the quota account; profile names remain user-entered labels. Sign out within the relevant ChatGPT window when changing its account.
+For Desktop profiles, sign in inside that Desktop window; quota appears automatically within a few seconds. AI Switcher retries while waiting for sign-in and backs off on read errors; **Làm mới quota** is also available for a manual refresh. The reader first checks that profile’s local daemon through a WebSocket bridge. Some Desktop configurations use a separate stdio backend, leaving the daemon signed out after a successful Desktop login. In that case the bundled Codex CLI reads the saved session from the **same profile home**. AI Switcher never starts a second quota login or imports your default Codex session. The returned email/plan identifies the quota account; profile names remain user-entered labels. Sign out within the relevant ChatGPT window when changing its account.
 
 Cards and the menu bar show **remaining** quota in the windows returned by Codex, such as five hours and a week. Details include all separate limit buckets and reset timestamps. Missing windows remain unknown. Snapshots are marked stale after six minutes, reset expiry, or a failed refresh; a reset timestamp never invents a refill. Closing the profile stops live refresh and leaves the last cached snapshot.
 
@@ -114,7 +114,7 @@ bash scripts/test.sh --browser  # Chrome windows plus loopback cookie/localStora
 bash scripts/test.sh --codex    # Installed CLI handshake in a fresh unauthenticated home
 ```
 
-The core/protocol suite has 53 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
+The core/protocol and Desktop discovery suite has 58 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
 
 **Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface supports Vietnamese and English.
 

@@ -11,7 +11,7 @@ Chuyển giữa nhiều tài khoản bằng **những phiên ChatGPT Desktop ri�
 3. Bấm **Thêm tài khoản**, đặt tên/màu, giữ chế độ **ChatGPT Desktop**. Email chỉ là nhãn tùy chọn.
 4. Đăng nhập đúng tài khoản trong cửa sổ ChatGPT vừa mở. Lần đầu có thể chờ lâu hơn để cài backend riêng; xác thực có thể mở trình duyệt mặc định một lần.
 5. Lặp lại cho tài khoản khác. Sau đó bấm **Mở ChatGPT** trên thẻ hoặc chọn hồ sơ từ thanh menu để đưa đúng cửa sổ lên trước.
-6. Đăng nhập xong, mở mục **Quota Codex → Làm mới quota**. Quota được đọc từ cùng backend với cửa sổ Desktop, không cần đăng nhập Codex lần thứ hai.
+6. Đăng nhập xong, quota tự hiện sau vài giây từ phiên của đúng hồ sơ Desktop, không cần đăng nhập Codex lần thứ hai. Nếu daemon còn giữ trạng thái chưa đăng nhập, Codex đọc phiên đã lưu trong chính thư mục hồ sơ đó qua giao thức app-server. App tự thử lại khi đang chờ đăng nhập hoặc gặp lỗi đọc; bạn cũng có thể bấm **Làm mới quota**.
 
 Đây là chế độ **thử nghiệm**, dựa trên cơ chế khởi động nội bộ của ChatGPT mới (`com.openai.codex`). OpenAI chưa công bố đây là giao diện chuyển nhiều tài khoản được hỗ trợ; bản cập nhật ChatGPT có thể làm cơ chế này thay đổi. App báo lỗi khi thiếu cơ chế tách phiên, không tự mở Chrome thay thế.
 

@@ -9,7 +9,18 @@ struct DesktopInstallation {
 }
 
 @MainActor
-final class DesktopService {
+protocol DesktopQuotaSource {
+    func hasBackend(_ id: UUID) -> Bool
+    func quotaClient(_ id: UUID) throws -> CodexRPCClient
+    func persistedSessionQuotaClient(_ id: UUID) throws -> CodexRPCClient?
+}
+
+extension DesktopQuotaSource {
+    func persistedSessionQuotaClient(_ id: UUID) throws -> CodexRPCClient? { nil }
+}
+
+@MainActor
+final class DesktopService: DesktopQuotaSource {
     let repository: ProfileRepository
     private var cachedInstallation: DesktopInstallation?
     private var cachedArchiveDate: Date?
@@ -123,6 +134,15 @@ final class DesktopService {
         guard let executable = Bundle.main.executableURL else { throw DesktopProfileError.launchFailed }
         return CodexRPCClient(executable: executable, home: home,
                               arguments: DesktopLaunch.bridgeArguments(home: home))
+    }
+
+    func persistedSessionQuotaClient(_ id: UUID) throws -> CodexRPCClient? {
+        try repository.validateDesktopOwnership(for: id)
+        // Desktop can choose a stdio backend when it needs config overrides.
+        // In that case its login is persisted in this home, while the daemon
+        // started before sign-in can retain an unauthenticated AuthManager.
+        // Let Codex read its own session; never import the default Codex home.
+        return CodexRPCClient(executable: try installation().cli, home: repository.desktopHomeURL(for: id))
     }
 }
 

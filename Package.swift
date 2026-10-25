@@ -9,6 +9,6 @@ let package = Package(
     targets: [
         .target(name: "AISwitcherCore", resources: [.process("Resources")]),
         .executableTarget(name: "AISwitcher", dependencies: ["AISwitcherCore"]),
-        .testTarget(name: "AISwitcherCoreTests", dependencies: ["AISwitcherCore"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "AISwitcherCoreTests", dependencies: ["AISwitcherCore", "AISwitcher"], resources: [.copy("Fixtures")]),
     ]
 )
