@@ -68,4 +68,6 @@ CI runs offline tests and universal compilation/packaging. Real account authenti
 
 Five palettes define foreground, secondary, accent, button foreground, borders, and surfaces. Terminal and Code also use monospace fonts and compact corners. Contrast tests check body/secondary text against every surface and primary button text against its accent. `AppearancePreview` renders app-owned offscreen views with fictional data; it captures no screen pixels or real profiles.
 
+`appAppearance` applies the selected theme, native color scheme, and locale at the dashboard's presentation boundary and explicitly to sheets. The account editor also derives its palette from the observed preferences, so opening it after a theme change cannot mix a default Light palette with dark native text fields. Offscreen previews include empty Add account and populated Edit profile forms for every theme in either language.
+
 The build copies the SwiftPM localization resource bundle into the app's Resources directory before signing. Packaging runs `--localization-smoke-test`, which verifies both languages load from inside the distributable app rather than a developer build-cache path.

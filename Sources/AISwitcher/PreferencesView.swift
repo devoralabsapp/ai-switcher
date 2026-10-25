@@ -43,8 +43,7 @@ struct PreferencesView: View {
             }
         }
         .padding(28).frame(width: 580).foregroundColor(palette.ink).background(palette.surface)
-        .environment(\.appTheme, appearanceTheme).preferredColorScheme(appearanceTheme.colorScheme)
-        .environment(\.locale, model.preferences.language.locale)
+        .appAppearance(model.preferences)
     }
 
     private func themeCard(_ theme: AppTheme) -> some View {

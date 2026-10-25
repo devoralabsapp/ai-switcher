@@ -30,16 +30,11 @@ struct Dashboard: View {
         .foregroundColor(palette.ink)
         .background(palette.surface)
         .frame(minWidth: 900, minHeight: 640)
-        .environment(\.appTheme, model.preferences.theme)
-        .preferredColorScheme(model.preferences.theme.colorScheme)
-        .environment(\.locale, model.preferences.language.locale)
-
-
         .sheet(item: $model.editor) { editor in AccountEditorView(model: model, editor: editor) }
         .sheet(isPresented: $model.showPreferences) { PreferencesView(model: model) }
-        .sheet(isPresented: $model.showGuide) { GuideView() }
+        .sheet(isPresented: $model.showGuide) { GuideView().appAppearance(model.preferences) }
         .sheet(isPresented: Binding(get: { model.quotaAccountID != nil }, set: { if !$0 { model.quotaAccountID = nil } })) {
-            if let id = model.quotaAccountID { QuotaDetailView(model: model, accountID: id) }
+            if let id = model.quotaAccountID { QuotaDetailView(model: model, accountID: id).appAppearance(model.preferences) }
         }
         .alert(item: $model.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text(L10n.text("Got it"))))
@@ -63,6 +58,7 @@ struct Dashboard: View {
             Text(L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", String(describing: account.name)))
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusAccountSearch)) { _ in searchFocused = true }
+        .appAppearance(model.preferences)
     }
 
     private var sidebar: some View {

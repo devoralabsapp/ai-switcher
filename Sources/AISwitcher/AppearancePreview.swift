@@ -23,6 +23,12 @@ enum AppearancePreview {
             NSApp.appearance = theme.nsAppearance
             try renderView(Dashboard(model: model), size: NSSize(width: 1120, height: 850), to: output.appendingPathComponent("\(theme.rawValue)-\(L10n.language.rawValue).png"))
             try renderView(PreferencesView(model: model), size: NSSize(width: 580, height: 720), to: output.appendingPathComponent("settings-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+            try renderView(AccountEditorView(model: model, editor: AccountEditor(account: nil)),
+                           size: NSSize(width: 520, height: 760),
+                           to: output.appendingPathComponent("add-account-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+            try renderView(AccountEditorView(model: model, editor: AccountEditor(account: accounts[0])),
+                           size: NSSize(width: 520, height: 760),
+                           to: output.appendingPathComponent("edit-account-\(theme.rawValue)-\(L10n.language.rawValue).png"))
         }
         print("Rendered appearance previews with fictional profiles: \(output.path)")
     }

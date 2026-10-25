@@ -2,7 +2,7 @@ import SwiftUI
 import AISwitcherCore
 
 struct AccountEditorView: View {
-    @Environment(\.appTheme) private var appearanceTheme
+    private var appearanceTheme: AppTheme { model.preferences.theme }
     private var palette: ThemePalette { ThemePalette(theme: appearanceTheme) }
     @ObservedObject var model: AppModel
     let editor: AccountEditor
@@ -135,6 +135,7 @@ struct AccountEditorView: View {
         }
         .textFieldStyle(.roundedBorder).foregroundColor(palette.ink)
         .padding(30).frame(width: 500).background(palette.surface)
+        .appAppearance(model.preferences)
 
         .onAppear { nameFocused = true }
     }

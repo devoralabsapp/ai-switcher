@@ -61,3 +61,5 @@ rm -rf "$preview_root"
 ```
 
 The language flag uses the process's argument domain without saving a new user preference. Run with `vi` for Vietnamese previews. Package using the provided scripts so localization resources are included and verified before release.
+
+Preview output includes `add-account-<theme>-<language>.png` and `edit-account-<theme>-<language>.png`. Check both forms after changing theme or sheet appearance code, including text-field contents, placeholders, mode selection, and buttons.
