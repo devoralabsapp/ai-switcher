@@ -12,6 +12,7 @@ struct AccountEditorView: View {
     @State private var browser: BrowserKind
     @State private var launchMode: LaunchMode
     @State private var color: AccountColor
+    @State private var sharesLocalWorkspace: Bool
     @State private var openAfterSave = true
     @FocusState private var nameFocused: Bool
 
@@ -23,6 +24,7 @@ struct AccountEditorView: View {
         _browser = State(initialValue: editor.account?.browser ?? editor.defaultBrowser)
         _launchMode = State(initialValue: editor.account?.effectiveLaunchMode ?? .desktop)
         _color = State(initialValue: editor.account?.color ?? editor.defaultColor)
+        _sharesLocalWorkspace = State(initialValue: editor.account?.usesSharedLocalWorkspace ?? true)
     }
 
     private var isNew: Bool { editor.account == nil }
@@ -81,6 +83,14 @@ struct AccountEditorView: View {
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                     if launchMode == .desktop {
+                        Toggle(L10n.text("Share local projects and Work history"), isOn: $sharesLocalWorkspace)
+                            .toggleStyle(.checkbox).font(appearanceTheme.font(size: 11))
+                            .disabled(modeLocked)
+                        if sharesLocalWorkspace {
+                            Text(L10n.text("Use this Mac's existing ChatGPT projects and local history. Each profile keeps its own sign-in; cloud chats belong to the signed-in account."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Text(L10n.text("Each account has a separate ChatGPT Desktop session and backend. Sign in once in its window. Requires the new ChatGPT with Chat, Work, and Codex; app updates may affect this experimental mode."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary).fixedSize(horizontal: false, vertical: true)
                     } else {
@@ -157,6 +167,7 @@ struct AccountEditorView: View {
         account.emailHint = email.trimmingCharacters(in: .whitespacesAndNewlines)
         account.color = color
         account.launchMode = launchMode
+        account.sharesLocalWorkspace = sharesLocalWorkspace
         guard model.saveAccount(account) else { return }
         dismiss()
         if isNew && openAfterSave { model.open(account) }

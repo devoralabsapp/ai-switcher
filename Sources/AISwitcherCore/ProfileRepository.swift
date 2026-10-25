@@ -113,6 +113,7 @@ public struct ProfileRepository: Sendable {
     public func remove(_ id: UUID, from snapshot: AccountSnapshot) throws -> AccountSnapshot {
         let fm = FileManager.default
         try validateDesktopOwnership(for: id)
+        try SharedDesktopWorkspace(repository: self).archiveMetadata(id)
         var moved: [(source: URL, staged: URL)] = []
         do {
             for source in [profileURL(for: id), codexHomeURL(for: id), desktopProfileURL(for: id), desktopHomeURL(for: id)] where fm.fileExists(atPath: source.path) {

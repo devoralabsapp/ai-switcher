@@ -249,3 +249,9 @@
 "Could not read quota from this Desktop session. AI Switcher will retry automatically." = "Could not read quota from this Desktop session. AI Switcher will retry automatically.";
 "Quota appears automatically after you sign in to this profile's ChatGPT Desktop window. No separate Codex sign-in is needed." = "Quota appears automatically after you sign in to this profile's ChatGPT Desktop window. No separate Codex sign-in is needed.";
 "AI Switcher checks the Desktop session every few seconds until quota is available, then refreshes every 5 minutes. To change accounts, sign out inside that ChatGPT window." = "AI Switcher checks the Desktop session every few seconds until quota is available, then refreshes every 5 minutes. To change accounts, sign out inside that ChatGPT window.";
+"Share local projects and Work history" = "Share local projects and Work history";
+"Use this Mac's existing ChatGPT projects and local history. Each profile keeps its own sign-in; cloud chats belong to the signed-in account." = "Use this Mac's existing ChatGPT projects and local history. Each profile keeps its own sign-in; cloud chats belong to the signed-in account.";
+"The local workspace paths could not be verified. No existing workspace data was replaced." = "The local workspace paths could not be verified. No existing workspace data was replaced.";
+"This profile already has private local history. Its data was kept. Use a new profile to share the existing ChatGPT workspace." = "This profile already has private local history. Its data was kept. Use a new profile to share the existing ChatGPT workspace.";
+"Could not access the local history database. Close this profile and try again." = "Could not access the local history database. Close this profile and try again.";
+"The existing ChatGPT history location could not be resolved. Check its sqlite_home setting." = "The existing ChatGPT history location could not be resolved. Check its sqlite_home setting.";

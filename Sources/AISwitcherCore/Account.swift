@@ -51,8 +51,10 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var codexConnection: CodexConnection?
     public var launchMode: LaunchMode?
     public var desktopCodexConnection: CodexConnection?
+    public var sharesLocalWorkspace: Bool?
 
     public var effectiveLaunchMode: LaunchMode { launchMode ?? .desktop }
+    public var usesSharedLocalWorkspace: Bool { sharesLocalWorkspace == true }
     public var displayedCodexConnection: CodexConnection? {
         effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection
     }
@@ -60,7 +62,8 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public init(id: UUID = UUID(), name: String, emailHint: String = "", browser: BrowserKind = .chrome,
                 color: AccountColor = .mint, isFavorite: Bool = false, createdAt: Date = Date(),
                 lastOpenedAt: Date? = nil, codexConnection: CodexConnection? = nil,
-                launchMode: LaunchMode? = nil, desktopCodexConnection: CodexConnection? = nil) {
+                launchMode: LaunchMode? = nil, desktopCodexConnection: CodexConnection? = nil,
+                sharesLocalWorkspace: Bool? = nil) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.emailHint = emailHint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -72,6 +75,7 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
         self.codexConnection = codexConnection
         self.launchMode = launchMode
         self.desktopCodexConnection = desktopCodexConnection
+        self.sharesLocalWorkspace = sharesLocalWorkspace
     }
 
     public var initials: String {

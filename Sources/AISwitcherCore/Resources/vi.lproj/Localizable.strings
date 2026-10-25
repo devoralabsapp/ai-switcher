@@ -249,3 +249,9 @@
 "Could not read quota from this Desktop session. AI Switcher will retry automatically." = "Chưa đọc được quota của phiên Desktop này. AI Switcher sẽ tự thử lại.";
 "Quota appears automatically after you sign in to this profile's ChatGPT Desktop window. No separate Codex sign-in is needed." = "Quota tự hiện sau khi bạn đăng nhập trong cửa sổ ChatGPT Desktop của hồ sơ này. Không cần đăng nhập Codex lần nữa.";
 "AI Switcher checks the Desktop session every few seconds until quota is available, then refreshes every 5 minutes. To change accounts, sign out inside that ChatGPT window." = "AI Switcher kiểm tra phiên Desktop vài giây một lần cho đến khi đọc được quota, sau đó làm mới mỗi 5 phút. Để đổi tài khoản, đăng xuất trong chính cửa sổ ChatGPT đó.";
+"Share local projects and Work history" = "Chia sẻ project và lịch sử Work trên máy";
+"Use this Mac's existing ChatGPT projects and local history. Each profile keeps its own sign-in; cloud chats belong to the signed-in account." = "Dùng các project và lịch sử ChatGPT đang có trên máy Mac này. Mỗi hồ sơ giữ đăng nhập riêng; chat cloud thuộc tài khoản đang đăng nhập.";
+"The local workspace paths could not be verified. No existing workspace data was replaced." = "Không xác minh được đường dẫn dữ liệu local. Dữ liệu công việc hiện có được giữ nguyên.";
+"This profile already has private local history. Its data was kept. Use a new profile to share the existing ChatGPT workspace." = "Hồ sơ này đã có lịch sử local riêng. Dữ liệu được giữ nguyên. Hãy dùng hồ sơ mới để chia sẻ kho công việc ChatGPT hiện có.";
+"Could not access the local history database. Close this profile and try again." = "Không truy cập được cơ sở dữ liệu lịch sử local. Hãy đóng phiên hồ sơ này rồi thử lại.";
+"The existing ChatGPT history location could not be resolved. Check its sqlite_home setting." = "Không xác định được nơi lưu lịch sử ChatGPT hiện có. Hãy kiểm tra cấu hình sqlite_home.";

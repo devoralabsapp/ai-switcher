@@ -36,10 +36,12 @@ public enum DesktopLaunch {
             .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
     }
 
-    public static func environment(base: [String: String], home: URL, userData: URL) -> [String: String] {
+    public static func environment(base: [String: String], home: URL, userData: URL,
+                                   sharedDatabaseHome: URL? = nil) -> [String: String] {
         var environment = CodexProcessConfiguration.environment(base: base, home: home)
         environment["CODEX_ELECTRON_USER_DATA_PATH"] = userData.path
         environment["CODEX_APP_SERVER_USE_LOCAL_DAEMON"] = "1"
+        if let sharedDatabaseHome { environment["CODEX_SQLITE_HOME"] = sharedDatabaseHome.path }
         return environment
     }
 

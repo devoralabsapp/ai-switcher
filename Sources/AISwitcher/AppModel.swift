@@ -148,7 +148,8 @@ final class AppModel: ObservableObject {
             var updated = snapshot
             if let index = updated.accounts.firstIndex(where: { $0.id == account.id }) {
                 var edited = account
-                if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode {
+                if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode
+                    || edited.usesSharedLocalWorkspace != updated.accounts[index].usesSharedLocalWorkspace {
                     guard !hasRunningSession(account), !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
                         throw DesktopProfileError.profileRunning
                     }

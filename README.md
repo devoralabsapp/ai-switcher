@@ -18,7 +18,7 @@ AI Switcher is a native SwiftUI and AppKit utility. Add your accounts, sign in o
 
 ## What it does
 
-- Launch the installed, official ChatGPT app with separate UI data and a separate local backend for each profile.
+- Launch the installed, official ChatGPT app with a separate sign-in and backend for each profile; optionally share local projects and Work history.
 - Bring the exact existing profile process forward when switching.
 - Show Codex quota remaining, hour/week windows, reset times, and the backend's account identity.
 - Refresh quota manually or every five minutes while the profile backend is running.
@@ -65,6 +65,14 @@ Terminal and Code use monospace typography and compact corners. Themes cover the
 
 </details>
 
+## Local projects and Work history
+
+New Desktop profiles offer **Share local projects and Work history**. When selected, they use this Mac’s existing ChatGPT local project/history database, transcript folders, and Work artifact storage, while keeping their own authentication and browser storage. Cloud chats and cloud projects still belong to the signed-in account; this option does not transfer them between accounts.
+
+For an existing profile, close its session fully from **⋯ → Close account session…**, edit the profile, enable sharing, then open it again. Existing profiles stay private until explicitly enabled. Profiles that already contain private local chats are preserved and cannot be switched automatically; create a new shared profile instead. Disable sharing only after closing the profile to restore its previous local workspace settings.
+
+Local work is shared storage on this Mac. Continue a local chat in one Desktop window at a time. Deleting a shared profile keeps its shared transcripts and project/history database. Project/sidebar metadata is refreshed from the original workspace and other shared profiles on launch; existing windows may need reopening to pick up sidebar changes.
+
 ## Codex quota
 
 For Desktop profiles, sign in inside that Desktop window; quota appears automatically within a few seconds. AI Switcher retries while waiting for sign-in and backs off on read errors; **Làm mới quota** is also available for a manual refresh. The reader first checks that profile’s local daemon through a WebSocket bridge. Some Desktop configurations use a separate stdio backend, leaving the daemon signed out after a successful Desktop login. In that case the bundled Codex CLI reads the saved session from the **same profile home**. AI Switcher never starts a second quota login or imports your default Codex session. The returned email/plan identifies the quota account; profile names remain user-entered labels. Sign out within the relevant ChatGPT window when changing its account.
@@ -84,6 +92,7 @@ AI Switcher does not read passwords, cookies, token files, or conversations. Cha
 ├── accounts.json                  # Labels, selected mode, identities and cached quota
 ├── Desktop/<UUID>/UserData/        # ChatGPT Desktop UI and browser storage
 ├── Desktop/<UUID>/backend-location.txt
+├── SharedWorkspaceMetadata/       # Local sidebar metadata retained for shared history
 ├── Profiles/<UUID>/               # Optional legacy browser profile
 └── Codex/<UUID>/                  # Optional browser-mode quota login
 
@@ -91,7 +100,7 @@ AI Switcher does not read passwords, cookies, token files, or conversations. Cha
 └── ai-switcher-profile.json       # Ownership marker: app-data root and profile UUID
 ```
 
-The short `~/.aisw` location keeps Unix socket paths within macOS limits. Its stable key hashes the app-data root and profile UUID, so development and production profiles do not share a backend. An ownership marker must match before the app reuses or removes a backend. A new profile never imports your default ChatGPT or `~/.codex` data. Desktop backends use file-based credentials managed by Codex.
+The short `~/.aisw` location keeps Unix socket paths within macOS limits. Its stable key hashes the app-data root and profile UUID, so development and production profiles do not share a backend. An ownership marker must match before the app reuses or removes a backend. Authentication is never imported from your default ChatGPT or `~/.codex` session. With local workspace sharing enabled, AI Switcher carries over selected project/sidebar metadata, uses `CODEX_SQLITE_HOME` for the shared database, and links the local transcript directories. Other UI state, browser storage and authentication remain private. Desktop backends use file-based credentials managed by Codex.
 
 New app directories use `0700`, and metadata uses `0600`. These are private sessions belonging to the current macOS user, **not an encrypted vault** or protection from other software running as that user. Do not upload profile data to GitHub. Exact process arguments identify the profile before focus or termination; the app never quits every process named ChatGPT.
 
@@ -117,7 +126,7 @@ bash scripts/test.sh --browser  # Chrome windows plus loopback cookie/localStora
 bash scripts/test.sh --codex    # Installed CLI handshake in a fresh unauthenticated home
 ```
 
-The core/protocol and Desktop discovery suite has 58 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
+The core/protocol, Desktop discovery and shared-workspace suite has 67 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, and theme text contrast. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. No real accounts or model requests are used in automated checks.
 
 **Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface supports Vietnamese and English.
 

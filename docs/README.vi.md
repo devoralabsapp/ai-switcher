@@ -29,6 +29,14 @@ Terminal và Code dùng font đơn cách, góc gọn cùng bảng màu riêng. T
 
 Xem [ảnh mẫu các theme](../README.md#language-and-appearance); ảnh dùng hồ sơ và quota giả để minh họa.
 
+## Project và lịch sử Work local
+
+Khi thêm hồ sơ Desktop, bật **Chia sẻ project và lịch sử Work trên máy** để thấy các project và chat/Work local đang có trong ChatGPT gốc. Các hồ sơ vẫn giữ đăng nhập và dữ liệu trình duyệt riêng. Chat và project cloud vẫn thuộc tài khoản đang đăng nhập; đây không phải tính năng chuyển dữ liệu cloud giữa tài khoản.
+
+Với hồ sơ cũ, chọn **⋯ → Đóng phiên tài khoản…**, sửa hồ sơ, bật chia sẻ rồi mở lại. Hồ sơ đã có lịch sử riêng sẽ được giữ nguyên và không tự ghép; hãy tạo hồ sơ chia sẻ mới trong trường hợp đó. Tắt chia sẻ khi phiên đã đóng để khôi phục cấu hình local riêng trước đây.
+
+Dữ liệu công việc và các artifact của Work được dùng chung trên máy Mac này. Hãy tiếp tục một chat local trong một cửa sổ Desktop tại một thời điểm. Xóa hồ sơ không xóa lịch sử/project chung. Danh sách và bố cục sidebar được cập nhật khi mở phiên; cửa sổ đang mở có thể cần đóng/mở lại để nhận thay đổi.
+
 ## Quota và đóng phiên
 
 Thẻ hiển thị phần trăm **còn lại** và thời điểm reset của các cửa sổ do Codex trả về, thường là giờ/tuần. Bấm chi tiết để xem mọi nhóm hạn mức, email/gói và lần đọc gần nhất. Email trong mục quota do backend trả về, khác với nhãn bạn tự đặt.

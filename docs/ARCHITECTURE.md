@@ -17,7 +17,7 @@ flowchart LR
 
 ## Profile identity and storage
 
-Each account UUID selects stable storage independent of its editable labels. Versioned JSON retains optional launch mode, separate Desktop/browser quota connections, and recent-use metadata. Old snapshots decode without new fields; an absent mode now selects Desktop. Browser sessions are retained, never converted by copying authentication.
+Each account UUID selects stable storage independent of its editable labels. Versioned JSON retains optional launch mode, separate Desktop/browser quota connections, and recent-use metadata. Old snapshots decode without new fields; an absent mode now selects Desktop. Browser sessions are retained, never converted by copying authentication. `sharesLocalWorkspace` is optional and absent values preserve private storage for old profiles; new-account UI offers shared local work explicitly.
 
 UI data stays at `Desktop/<UUID>/UserData` under the app-data root. Backend homes use `~/.aisw/<key>`, where the key is the first 128 bits of SHA-256 of the normalized app root and UUID, encoded as base64url. This keeps the backend Unix socket path under macOS's 104-byte limit, including when the app-data root is long. A marker records the original root and UUID; existing backend directories require a matching marker. Owned directories reject symlinks and wrong OS ownership. The UI profile records the backend location for recovery.
 
@@ -34,11 +34,19 @@ The service starts a profile-owned `codex app-server daemon` with an explicit `C
 - `CODEX_APP_SERVER_USE_LOCAL_DAEMON=1`: connect to that profile's daemon.
 - `--user-data-dir=<exact UI directory>`: separate Electron storage and instance lock.
 
-Arguments go directly to `Process`, with no shell. The environment is allowlisted; inherited authentication keys, forced CLI overrides and other profile settings are dropped. Default ChatGPT and Codex directories are never imported or rewritten.
+Arguments go directly to `Process`, with no shell. The environment is allowlisted; inherited authentication keys, forced CLI overrides and other profile settings are dropped. Default authentication and browser storage are never imported or rewritten. Shared local work is an explicit per-profile option, described below.
 
 `ManagedApplications` matches a full data-directory argument on the correct bundle ID, excluding renderer/helper processes. CoreGraphics provides window metadata, not screenshots. Existing windows activate by exact process; launching the same profile again forwards a reopen request through its Electron instance lock if all windows were closed. Closing requests normal termination of only that matched UI process, waits for exit, then stops its exact backend. It never force-quits or kills applications by name.
 
 Profile windows/backends persist after AI Switcher quits. The daemon is the preferred quota source. Desktop can select a stdio backend when its runtime config overrides prevent daemon reuse, so daemon liveness alone does not establish that it owns the authenticated session. macOS integrations keyed by bundle ID (deep links, permissions, notifications) can still be shared; they are outside the profile routing guarantee.
+
+## Shared local workspace
+
+`SharedDesktopWorkspace` keeps `CODEX_HOME` and Electron user data private but sets `CODEX_SQLITE_HOME` to the original local database home for opted-in profiles. It honors a top-level `sqlite_home` configuration. `sessions` and `archived_sessions` link to the original transcript directories, allowing the backend to scan and resume the same local history. The UI’s `artifact-sessions` directory also links to the original Work artifact store; existing per-profile runtime caches are retained in a sibling backup for restoration. SQLite uses its normal multi-process locking; live database files and WALs are never copied or linked individually.
+
+Only allowlisted project/sidebar metadata is merged into a stopped profile. Authentication, browser storage, remote enrollments and arbitrary persisted atoms are excluded. The original global-state JSON is read only, because the Desktop app caches and atomically replaces that file. Other shared profiles and retained metadata archives supply Work/projectless identifiers for subsequent launches. Already-open sidebar caches are not refreshed across processes automatically.
+
+Preparation validates ownership and links, saves previous profile metadata, and rolls back links on failure. Nonempty private transcripts or a private thread database block conversion instead of hiding private work. Existing profiles require explicit opt-in while stopped. Returning to private mode restores the previous metadata projection and empty private directories. On close or deletion, transcript paths in the shared index are canonicalized to their original home and sidebar metadata is retained outside the deleted profile. Removing a profile never removes shared transcripts or database rows.
 
 ## Quota
 

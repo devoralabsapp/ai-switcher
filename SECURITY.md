@@ -14,7 +14,8 @@ There is currently no guaranteed response time or funded security support. This 
 
 - The application does not collect account credentials or inspect ChatGPT conversations.
 - Quota uses a child app-server with a UUID-specific `CODEX_HOME` and file-based credentials managed by Codex CLI. Host API keys and authentication environment overrides are not inherited.
-- Desktop quota uses a local Unix WebSocket bridge to the same profile backend as its window; the returned account identity is displayed. Desktop launch settings are experimental.
+- Desktop quota first uses the profile's local Unix WebSocket bridge. If that daemon has no session, the bundled CLI reads the persisted session from the same profile home. The returned account identity is displayed. Desktop launch settings are experimental.
+- Opted-in Desktop profiles share local projects, history/transcripts and Work artifact storage on this Mac. They can access the same local work while authentication and browser storage remain separate. Cloud account data is not transferred. Deleting a shared profile retains the shared work; metadata and transcript paths are preserved before its private directories are removed.
 - For browser quota, users confirm the returned Codex identity. Backend account IDs are pinned when available; mismatching accounts are refused on refresh.
 - OAuth URLs require an allowed official HTTPS origin. Raw RPC errors and authentication URLs are not written to app logs.
 - The client exposes only initialization and account/login/logout/quota methods; it starts no model turns and consumes no reset credits.

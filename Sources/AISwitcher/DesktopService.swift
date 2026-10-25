@@ -71,11 +71,23 @@ final class DesktopService: DesktopQuotaSource {
            running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) {
             return running
         }
+        let workspace = SharedDesktopWorkspace(repository: repository)
+        guard !hasBackend(account.id) || workspace.isPrepared(account.id) == account.usesSharedLocalWorkspace else {
+            throw DesktopProfileError.profileRunning
+        }
+        let databaseHome: URL?
+        if account.usesSharedLocalWorkspace {
+            databaseHome = try workspace.prepare(account.id)
+        } else {
+            try workspace.restorePrivateWorkspace(account.id)
+            databaseHome = nil
+        }
         // With no windows, launch the same profile again. Electron's per-profile
         // instance lock forwards the request to its own running process.
         let home = repository.desktopHomeURL(for: account.id)
         let environment = DesktopLaunch.environment(base: ProcessInfo.processInfo.environment, home: home,
-                                                     userData: repository.desktopUserDataURL(for: account.id))
+                                                     userData: repository.desktopUserDataURL(for: account.id),
+                                                     sharedDatabaseHome: databaseHome)
         try await DesktopCommand.run(executable: installed.cli, arguments: ["app-server", "daemon", "start", "-c", "cli_auth_credentials_store=\"file\"", "-c", "analytics.enabled=false"], environment: environment, directory: home)
         // daemon start publishes a PID before the server binds its socket.
         for _ in 0..<100 {
@@ -125,6 +137,7 @@ final class DesktopService: DesktopQuotaSource {
             }
             guard !hasBackend(account.id) else { throw DesktopProfileError.profileRunning }
         }
+        try SharedDesktopWorkspace(repository: repository).archiveMetadata(account.id)
     }
 
     func quotaClient(_ id: UUID) throws -> CodexRPCClient {
