@@ -34,6 +34,8 @@ For release-related changes, run `bash scripts/build.sh --universal`. CI tests t
 
 ## Design expectations
 
+Quota changes must preserve profile isolation and keep unavailable data distinct from zero usage. Run the protocol fixture tests with `bash scripts/test.sh`. Optionally use `bash scripts/test.sh --codex` to probe an installed CLI with a disposable, unauthenticated home; never import real credentials into test fixtures.
+
 - Keep authentication inside the real browser. Do not collect or copy passwords, cookies, or tokens.
 - Match a dedicated profile exactly before focusing or terminating its process.
 - Preserve existing metadata when reading or saving fails.

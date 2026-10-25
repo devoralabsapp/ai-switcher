@@ -123,4 +123,29 @@ final class ProfileRepositoryTests: XCTestCase {
         XCTAssertThrowsError(try Account(name: "  ").validate())
         XCTAssertThrowsError(try Account(name: String(repeating: "a", count: 49)).validate())
     }
+
+    func testCodexHomesArePrivateAndDeletedOnlyWithTheirOwnProfile() throws {
+        let a = Account(name: "A"), b = Account(name: "B")
+        let first = try repository.prepareCodexHome(for: a.id)
+        let second = try repository.prepareCodexHome(for: b.id)
+        XCTAssertNotEqual(first, second)
+        let mode = try FileManager.default.attributesOfItem(atPath: first.path)[.posixPermissions] as? Int
+        XCTAssertEqual(mode, 0o700)
+        try Data("disposable-fixture".utf8).write(to: first.appendingPathComponent("fixture"))
+        let snapshot = AccountSnapshot(accounts: [a, b])
+        try repository.save(snapshot)
+        _ = try repository.remove(a.id, from: snapshot)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: second.path))
+    }
+
+    func testFailedDeletionRestoresBothBrowserAndCodexData() throws {
+        let account = Account(name: "A")
+        let browser = try repository.prepareProfile(for: account.id)
+        let codex = try repository.prepareCodexHome(for: account.id)
+        let invalid = AccountSnapshot(accounts: [account], version: 99)
+        XCTAssertThrowsError(try repository.remove(account.id, from: invalid))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: browser.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: codex.path))
+    }
 }

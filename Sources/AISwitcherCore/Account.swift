@@ -48,10 +48,11 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var isFavorite: Bool
     public let createdAt: Date
     public var lastOpenedAt: Date?
+    public var codexConnection: CodexConnection?
 
     public init(id: UUID = UUID(), name: String, emailHint: String = "", browser: BrowserKind = .chrome,
                 color: AccountColor = .mint, isFavorite: Bool = false, createdAt: Date = Date(),
-                lastOpenedAt: Date? = nil) {
+                lastOpenedAt: Date? = nil, codexConnection: CodexConnection? = nil) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.emailHint = emailHint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -60,6 +61,7 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
         self.isFavorite = isFavorite
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
+        self.codexConnection = codexConnection
     }
 
     public var initials: String {

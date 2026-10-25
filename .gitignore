@@ -10,3 +10,5 @@ accounts.json
 Profiles/
 submission/
 __pycache__/
+Codex/
+auth.json

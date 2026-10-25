@@ -28,6 +28,7 @@ This is an independent utility. It opens ChatGPT in dedicated browser windows an
 - Keep browser sessions separate with a unique data directory for every profile.
 - Name profiles, add an optional email label, assign colors, and mark favorites.
 - Search profiles and filter by favorites or recent use.
+- Show Codex quota remaining and reset times per account, with a separate optional Codex connection for each profile.
 - Edit labels, open another window, close a profile session, or delete its local data.
 - Use Google Chrome, Microsoft Edge, or Brave; each profile stays with its original browser.
 - Use a Vietnamese interface, with English contributor documentation.
@@ -35,7 +36,7 @@ This is an independent utility. It opens ChatGPT in dedicated browser windows an
 
 ## Project status
 
-**Early preview.** The initial implementation has 13 unit tests. Local integration checks with Google Chrome verify separate processes, correct profile selection, reuse of an existing window, and persistent, isolated cookies and localStorage on a loopback fixture.
+**Early preview.** The core and protocol suite has 32 tests. Local integration checks with Google Chrome verify separate processes, correct profile selection, reuse of an existing window, and persistent, isolated cookies and localStorage on a loopback fixture. Codex tests use offline fixtures, plus an installed-CLI probe in an empty, isolated home. Real OAuth login and live account quota remain manual checks.
 
 The initial build was tested on an Intel Mac. The bundle also compiles for Apple Silicon, but it has not yet been validated on Apple Silicon hardware or on every supported macOS version. Edge and Brave are implemented but do not yet have the same integration coverage. Real ChatGPT sign-in remains a manual check; there are no credentials in tests or CI.
 
@@ -49,6 +50,7 @@ Requirements:
 - Xcode or Command Line Tools with Swift 5.9 or newer. The universal build uses Xcode's build tools.
 - At least one supported browser installed.
 - Python 3 for packaging the app icon.
+- Optional: a recent Codex CLI with app-server support, for quota display. Browser switching works without it.
 
 From the repository root:
 
@@ -82,6 +84,19 @@ bash scripts/package.sh
 
 Sessions are reused while the browser and ChatGPT consider them valid. If you sign out or the service expires a session, sign in again inside that profile.
 
+## Codex quota per account
+
+1. Choose **Kết nối** (Connect) under **Quota Codex** on a profile card.
+2. Choose **Đăng nhập Codex** and complete sign-in in that profile's browser window.
+3. Check the returned Codex email/plan and choose **Dùng tài khoản này** (Use this account). The browser and Codex accounts are separate; you confirm the association.
+4. The card and menu bar show quota **remaining** in the windows returned by Codex, such as five hours and a week. Click quota details for all buckets, reset times, and the last read timestamp.
+
+A compatible installed Codex CLI is required. The app discovers common installation locations, or you can choose the executable in the connection dialog. See the [official CLI guide](https://learn.chatgpt.com/docs/cli).
+
+Quota uses the documented `account/rateLimits/read` protocol. Connected profiles refresh every five minutes, one at a time; manual refresh is available. Missing windows stay unknown. Values are marked stale after six minutes, after a reset timestamp passes, or after a failed refresh. A passed reset timestamp never fabricates a refill. No model turns or reset-credit redemption are performed.
+
+**Ngắt kết nối** (Disconnect) removes that profile's local Codex session and cached quota. This connection does not change the account used by a separate Codex app or terminal.
+
 ### Shortcuts
 
 These apply while AI Switcher is the active app.
@@ -99,6 +114,8 @@ These apply while AI Switcher is the active app.
 
 The application does not inspect passwords, cookies, authentication tokens, or conversations. The browser manages sign-in in its own profile directory. AI Switcher does not add analytics, a backend, browser extensions, remote debugging ports, or credential synchronization. ChatGPT and the browser still make their usual network requests.
 
+Optional quota connections use Codex-managed OAuth in `Codex/<UUID>/` under the app data directory. Codex CLI owns and refreshes its profile-local `auth.json`; AI Switcher does not read that token file or import your regular Codex session. It reads identity and quota responses and caches those in `accounts.json`. Codex CLI also makes its usual service requests. New Codex directories use `0700`, with `0600` enforced for the credential file after sign-in. Treat these directories as private authentication data, not an encrypted vault.
+
 ```text
 ~/Library/Application Support/AI Switcher/
 ├── accounts.json          # Names, optional email labels, colors, and recent-use metadata
@@ -111,6 +128,8 @@ New app directories use permissions `0700`; the metadata file uses `0600`. These
 The app creates its own profiles. It does not import or edit your everyday browser profile. When switching windows or closing sessions, it matches the browser's exact data-directory argument, not just the browser name.
 
 Close a profile session before deleting it. Deleting a profile removes its app-managed local data and label; it does not delete the ChatGPT account, delete server-side conversations, or revoke every session on the service. Browser-managed caches may also exist outside the app's profile directory.
+
+Deletion also removes that profile's dedicated Codex home. Wait for any quota operation to finish before deleting a profile; browser and Codex directories share the metadata-save rollback operation.
 
 For security reports, see [SECURITY.md](SECURITY.md).
 
@@ -137,6 +156,8 @@ Use a separate development data directory:
 ```
 
 The unit tests cover metadata round trips, corrupt-file handling, permissions, validation, profile separation, exact process matching, deletion isolation, and rollback when a deletion cannot save metadata.
+
+Quota tests also cover remaining-vs-used values, multiple buckets, unknown/expired windows, identity matching, sanitized child environments, fragmented JSONL, early login notifications, timeouts, cancellation, EOF, and sanitized errors. CI uses offline fixtures without Codex credentials. To probe an installed CLI in a fresh, unauthenticated home, run `bash scripts/test.sh --codex`; it can be combined with `--browser`.
 
 ## Repository layout
 

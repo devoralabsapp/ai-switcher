@@ -11,7 +11,7 @@ struct GuideView: View {
             row("3", "Một cú bấm để quay lại", "Bấm Mở ChatGPT trong app hoặc chọn tài khoản từ biểu tượng AI Switcher trên thanh menu macOS. Cửa sổ đang mở sẽ được đưa lên trước.")
             VStack(alignment: .leading, spacing: 9) {
                 Text("Một vài điều cần biết").font(.system(size: 12, weight: .semibold))
-                Text("• App quản lý các cửa sổ ChatGPT riêng, độc lập với app ChatGPT chính thức.\n• Đóng cửa sổ quản lý vẫn giữ biểu tượng trên thanh menu.\n• ChatGPT có thể yêu cầu đăng nhập lại khi phiên hết hạn hoặc bạn đăng xuất.\n• Dữ liệu hồ sơ thuộc người dùng macOS hiện tại; đây không phải kho tài khoản được mã hóa riêng.\n• Xóa hồ sơ chỉ xóa dữ liệu trên máy này, không xóa tài khoản ChatGPT.")
+                Text("• App quản lý các cửa sổ ChatGPT riêng, độc lập với app ChatGPT chính thức.\n• Bấm Kết nối trong mục Quota Codex để đăng nhập một lần và xác nhận danh tính cho từng hồ sơ. Cần Codex CLI; quota tự làm mới mỗi 5 phút.\n• Đóng cửa sổ quản lý vẫn giữ biểu tượng trên thanh menu.\n• ChatGPT/Codex có thể yêu cầu đăng nhập lại khi phiên hết hạn.\n• Dữ liệu hồ sơ thuộc người dùng macOS hiện tại; đây không phải kho tài khoản được mã hóa riêng.\n• Xóa hồ sơ chỉ xóa dữ liệu trên máy này, không xóa tài khoản trên dịch vụ.")
                     .font(.system(size: 11)).lineSpacing(6).foregroundColor(Palette.secondary)
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Palette.canvas).clipShape(RoundedRectangle(cornerRadius: 10))

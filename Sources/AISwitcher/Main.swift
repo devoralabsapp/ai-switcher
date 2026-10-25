@@ -44,12 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.toolTip = "AI Switcher — chuyển tài khoản ChatGPT"
         }
         rebuildStatusMenu()
-        subscription = model.$snapshot.combineLatest(model.$runningIDs, model.$launchingIDs)
+        subscription = model.$snapshot.combineLatest(model.$runningIDs, model.$launchingIDs, model.$quotaErrors)
             .receive(on: RunLoop.main).sink { [weak self] _ in self?.rebuildStatusMenu() }
         noticeSubscription = model.$notice.compactMap { $0 }.receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.showDashboard() }
 
-        if arguments.contains("--smoke-test") {
+        if arguments.contains("--quota-smoke-test") {
+            Task { await quotaSmokeTest(root: root) }
+        } else if arguments.contains("--smoke-test") {
             Task { await smokeTest(root: root) }
         } else {
             showDashboard()
@@ -57,6 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task {
+            await model.shutdownQuota()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showDashboard()
@@ -104,6 +114,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         model.refreshRunning()
+        for item in menu.items {
+            if let id = item.representedObject as? UUID, let account = model.accounts.first(where: { $0.id == id }) {
+                item.title = statusTitle(account)
+            }
+        }
     }
 
     private func rebuildStatusMenu() {
@@ -119,9 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(empty)
         }
         for account in model.menuAccounts {
-            let suffix = account.emailHint.isEmpty ? "" : "  ·  \(account.emailHint)"
             let busy = model.launchingIDs.contains(account.id)
-            let item = NSMenuItem(title: account.name + suffix + (busy ? "  (đang mở…)" : ""),
+            let item = NSMenuItem(title: statusTitle(account),
                                   action: #selector(openAccount(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = account.id
@@ -140,6 +154,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem?.button?.toolTip = model.lastOpened.map { "AI Switcher — dùng gần nhất: \($0.name)" }
             ?? "AI Switcher — chuyển tài khoản ChatGPT"
         rebuildAccountMenu()
+    }
+
+    private func statusTitle(_ account: Account) -> String {
+        let suffix = account.emailHint.isEmpty ? "" : "  ·  \(account.emailHint)"
+        var quotaLabel = ""
+        if let quota = account.codexConnection?.quota {
+            if quota.isStale(at: Date()) || model.quotaErrors[account.id] != nil { quotaLabel = "  ·  Codex: dữ liệu cũ" }
+            else if let bucket = quota.limits.buckets.first {
+                let windows = [bucket.value.primary, bucket.value.secondary].compactMap { $0 }.compactMap { window -> String? in
+                    guard let remaining = window.remainingPercent else { return nil }
+                    return "\(window.durationLabel) \(Int(remaining.rounded()))%"
+                }
+                let name = bucket.id == "codex" ? "Codex" : (bucket.value.limitName ?? bucket.id)
+                if !windows.isEmpty { quotaLabel = "  ·  \(name) còn: " + windows.joined(separator: " / ") }
+            }
+        }
+        return account.name + suffix + quotaLabel + (model.launchingIDs.contains(account.id) ? "  (đang mở…)" : "")
     }
 
     private var accountMenu: NSMenu?
@@ -210,6 +241,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         menu.addItem(item)
+    }
+
+    /// Uses throwaway browser profiles only; never touches user accounts.
+    private func quotaSmokeTest(root: URL) async {
+        guard let executable = model.quotaService.executableURL,
+              CommandLine.arguments.contains("--data-dir") else {
+            fputs("FAIL: isolated --data-dir and an installed Codex CLI are required\n", stderr)
+            Darwin.exit(1)
+        }
+        do {
+            let home = try model.repository.prepareCodexHome(for: UUID())
+            let client = CodexRPCClient(executable: executable, home: home)
+            do {
+                try await client.start()
+                do {
+                    _ = try await client.readIdentity()
+                    throw CodexQuotaError.identityChanged
+                } catch CodexQuotaError.notSignedIn {
+                    print("PASS: installed Codex app-server handshake; isolated home has no inherited account")
+                }
+                await client.stop()
+            } catch { await client.stop(); throw error }
+            print("PASS: quota helper stopped; no login or model request was performed")
+            Darwin.exit(0)
+        } catch {
+            fputs("FAIL: \(error.localizedDescription)\n", stderr)
+            Darwin.exit(1)
+        }
     }
 
     /// Uses throwaway browser profiles only; never touches user accounts.

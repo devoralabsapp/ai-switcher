@@ -1,15 +1,28 @@
 import Foundation
 
-/// Stores labels only. Browser cookies and credentials are owned by the browser.
+/// Stores labels, a confirmed Codex identity, and cached quota. Never reads tokens.
 public struct ProfileRepository: Sendable {
     public let root: URL
     public var metadataURL: URL { root.appendingPathComponent("accounts.json") }
     public var profilesURL: URL { root.appendingPathComponent("Profiles", isDirectory: true) }
+    public var codexURL: URL { root.appendingPathComponent("Codex", isDirectory: true) }
 
     public init(root: URL) { self.root = root.standardizedFileURL }
 
     public func profileURL(for id: UUID) -> URL {
         profilesURL.appendingPathComponent(id.uuidString, isDirectory: true)
+    }
+
+    public func codexHomeURL(for id: UUID) -> URL {
+        codexURL.appendingPathComponent(id.uuidString, isDirectory: true)
+    }
+
+    public func prepareCodexHome(for id: UUID) throws -> URL {
+        try prepareDirectory(root)
+        try prepareDirectory(codexURL)
+        let home = codexHomeURL(for: id)
+        try prepareDirectory(home)
+        return home
     }
 
     public func load() throws -> AccountSnapshot {
@@ -40,21 +53,28 @@ public struct ProfileRepository: Sendable {
     /// The caller must first ensure this browser profile has stopped.
     public func remove(_ id: UUID, from snapshot: AccountSnapshot) throws -> AccountSnapshot {
         let fm = FileManager.default
-        let source = profileURL(for: id)
-        let staged = root.appendingPathComponent(".removed-\(id.uuidString)-\(UUID().uuidString)")
-        let hasData = fm.fileExists(atPath: source.path)
-        if hasData { try fm.moveItem(at: source, to: staged) }
+        var moved: [(source: URL, staged: URL)] = []
+        do {
+            for source in [profileURL(for: id), codexHomeURL(for: id)] where fm.fileExists(atPath: source.path) {
+                let staged = root.appendingPathComponent(".removed-\(UUID().uuidString)")
+                try fm.moveItem(at: source, to: staged)
+                moved.append((source, staged))
+            }
+        } catch {
+            for item in moved.reversed() { try? fm.moveItem(at: item.staged, to: item.source) }
+            throw error
+        }
         var updated = snapshot
         updated.accounts.removeAll { $0.id == id }
         if updated.lastOpenedID == id { updated.lastOpenedID = nil }
         do {
             try save(updated)
         } catch {
-            if hasData { try? fm.moveItem(at: staged, to: source) }
+            for item in moved.reversed() { try? fm.moveItem(at: item.staged, to: item.source) }
             throw error
         }
         // If cleanup fails the error is surfaced and the caller reloads saved metadata.
-        if hasData { try fm.removeItem(at: staged) }
+        for item in moved { try fm.removeItem(at: item.staged) }
         return updated
     }
 

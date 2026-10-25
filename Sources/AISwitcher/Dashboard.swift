@@ -32,6 +32,9 @@ struct Dashboard: View {
         .environment(\.locale, Locale(identifier: "vi_VN"))
         .sheet(item: $model.editor) { editor in AccountEditorView(model: model, editor: editor) }
         .sheet(isPresented: $model.showGuide) { GuideView() }
+        .sheet(isPresented: Binding(get: { model.quotaAccountID != nil }, set: { if !$0 { model.quotaAccountID = nil } })) {
+            if let id = model.quotaAccountID { QuotaDetailView(model: model, accountID: id) }
+        }
         .alert(item: $model.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("Đã hiểu")))
         }
@@ -42,7 +45,7 @@ struct Dashboard: View {
             Button("Hủy", role: .cancel) { model.accountToDelete = nil }
             Button("Xóa hồ sơ", role: .destructive) { model.delete(account); model.accountToDelete = nil }
         } message: { account in
-            Text("Hồ sơ “\(account.name)” và phiên đăng nhập cục bộ sẽ bị xóa. Tài khoản ChatGPT và lịch sử trên ChatGPT vẫn được giữ.")
+            Text("Hồ sơ “\(account.name)”, phiên trình duyệt và phiên Codex riêng trên máy sẽ bị xóa. Tài khoản và lịch sử trên dịch vụ vẫn được giữ.")
         }
         .alert("Đóng phiên trình duyệt?", isPresented: Binding(
             get: { model.accountToClose != nil },
@@ -292,7 +295,7 @@ struct Dashboard: View {
             Circle().fill(Palette.accent).frame(width: 4, height: 4)
             Text(model.lastAction ?? "Sẵn sàng khi bạn cần").lineLimit(1)
             Spacer()
-            Text("AI Switcher 1.0").foregroundColor(Palette.secondary.opacity(0.7))
+            Text("AI Switcher 1.1").foregroundColor(Palette.secondary.opacity(0.7))
         }
         .font(.system(size: 10)).foregroundColor(Palette.secondary)
         .padding(.horizontal, 31).frame(height: 34)
@@ -322,10 +325,12 @@ private struct AccountCard: View {
                 .buttonStyle(.plain).help(account.isFavorite ? "Bỏ yêu thích" : "Thêm vào yêu thích")
                 Menu {
                     Button("Chỉnh sửa hồ sơ…") { model.editor = AccountEditor(account: account) }
+                    Button("Quota Codex…") { model.quotaAccountID = account.id }
                     Button("Mở cửa sổ ChatGPT mới") { model.open(account, newWindow: true) }
                     Divider()
                     Button("Đóng phiên trình duyệt…") { model.accountToClose = account }.disabled(!running)
                     Button("Xóa hồ sơ trên máy…", role: .destructive) { model.accountToDelete = account }
+                        .disabled(model.quotaBusyIDs.contains(account.id) || model.pendingConnections[account.id] != nil)
                 } label: { Image(systemName: "ellipsis").font(.system(size: 13, weight: .medium)).frame(width: 18, height: 24) }
                     .menuStyle(.borderlessButton).fixedSize().help("Tùy chọn hồ sơ").disabled(busy)
             }
@@ -345,6 +350,8 @@ private struct AccountCard: View {
                 Circle().fill(running ? Palette.accent : Palette.secondary.opacity(0.35)).frame(width: 4, height: 4)
                 Text(running ? "Đang mở" : account.lastOpenedAt == nil ? "Chưa mở" : "Đã lưu hồ sơ")
             }.font(.system(size: 10)).foregroundColor(Palette.secondary)
+
+            QuotaSummaryView(model: model, account: account)
 
             Button { model.open(account) } label: {
                 HStack(spacing: 7) {

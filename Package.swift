@@ -8,6 +8,6 @@ let package = Package(
     targets: [
         .target(name: "AISwitcherCore"),
         .executableTarget(name: "AISwitcher", dependencies: ["AISwitcherCore"]),
-        .testTarget(name: "AISwitcherCoreTests", dependencies: ["AISwitcherCore"]),
+        .testTarget(name: "AISwitcherCoreTests", dependencies: ["AISwitcherCore"], resources: [.copy("Fixtures")]),
     ]
 )

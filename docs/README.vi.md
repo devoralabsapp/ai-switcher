@@ -17,6 +17,17 @@ Mỗi tài khoản có **một thư mục dữ liệu trình duyệt riêng**. B
 
 Menu **⋯** cho phép sửa nhãn, mở cửa sổ mới, đóng phiên trình duyệt hoặc xóa hồ sơ. Hãy đóng phiên trước khi xóa; app không ép đóng trình duyệt nếu có nội dung chưa gửi hoặc hộp thoại ngăn thoát.
 
+## Quota Codex của từng tài khoản
+
+1. Bấm **Kết nối** trong phần **Quota Codex** của thẻ tài khoản.
+2. Bấm **Đăng nhập Codex**, hoàn tất đăng nhập trong cửa sổ của hồ sơ.
+3. Kiểm tra email/gói Codex trả về và bấm **Dùng tài khoản này** để xác nhận gắn quota vào hồ sơ.
+4. Thẻ và thanh menu hiển thị phần trăm **còn lại** theo các cửa sổ Codex trả về. Bấm quota để xem thời gian reset, mọi nhóm hạn mức và thời điểm đọc gần nhất.
+
+Cần Codex CLI có hỗ trợ app-server. App tự tìm bản đã cài; có thể chọn tệp `codex` trong hộp thoại kết nối. Phiên này tách biệt với ChatGPT trên trình duyệt và Codex CLI/app mặc định của bạn. Quota tự làm mới mỗi 5 phút, hoặc bấm làm mới. Dữ liệu quá hạn hoặc lỗi cập nhật được đánh dấu cũ; app không tự suy ra quota đã đầy khi tới giờ reset.
+
+Codex CLI quản lý phiên OAuth trong `~/Library/Application Support/AI Switcher/Codex/<UUID>/`; app không đọc tệp token. Danh tính đã xác nhận và quota được lưu trong `accounts.json`. Không chia sẻ các thư mục phiên. **Ngắt kết nối** trong cửa sổ quota xóa phiên Codex riêng và quota đã lưu trên máy. Xóa hồ sơ cũng xóa thư mục Codex của hồ sơ đó.
+
 ## Dữ liệu và giới hạn
 
 - App dùng cửa sổ ChatGPT của trình duyệt, **không thay đổi tài khoản trong app ChatGPT chính thức**. Đây là tiện ích độc lập, không phải sản phẩm của OpenAI.
@@ -58,6 +69,7 @@ bash scripts/package.sh
 ```sh
 bash scripts/test.sh
 bash scripts/test.sh --browser
+bash scripts/test.sh --codex
 ```
 
 Kiểm tra đầu tiên chạy các unit test về lưu/khôi phục, tách hồ sơ, định tuyến tiến trình, quyền tệp và xóa đúng dữ liệu. `--browser` cần Google Chrome, sẽ mở hai cửa sổ kiểm thử tạm để xác minh chuyển đúng tiến trình và tái sử dụng cửa sổ. Sau đó kiểm tra cookie/localStorage bằng trang HTTP loopback trong Chrome headless. Các hồ sơ tạm được dọn sau kiểm tra; không dùng tài khoản ChatGPT thật.
