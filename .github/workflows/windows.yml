@@ -5,6 +5,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: Existing draft preview release to receive verified Windows assets
+        type: string
+        default: ''
       daemon_probe:
         description: Attempt the ordinary-user daemon probe (hosted runner may block Task Scheduler)
         type: boolean
@@ -94,3 +98,37 @@ jobs:
           path: Windows/artifacts/previews/
           if-no-files-found: warn
           retention-days: 14
+  release-assets:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Attach verified standalone EXEs, ZIPs and checksums to draft
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$'){throw 'Expected an explicit preview release tag'}
+          $draft=gh release view $env:RELEASE_TAG --json isDraft | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or -not $draft.isDraft){throw 'Release must already exist and remain a draft'}
+          gh run download $env:GITHUB_RUN_ID -p "AI-Switcher-Windows-*-$env:GITHUB_SHA" -D release-files
+          if($LASTEXITCODE -ne 0){throw 'Could not download verified packages'}
+          $checksums=@(Get-ChildItem release-files -Recurse -Filter '*.sha256')
+          if($checksums.Count -ne 4){throw 'Expected checksums for two EXEs and two ZIPs'}
+          foreach($file in $checksums){
+            $parts=(Get-Content $file.FullName).Trim() -split '\s+',2
+            $payload=Join-Path $file.DirectoryName $parts[1]
+            if((Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant() -ne $parts[0]){throw 'Package checksum mismatch'}
+          }
+          $paths=@(Get-ChildItem release-files -Recurse -File | ForEach-Object {$_.FullName})
+          if($paths.Count -ne 8){throw 'Expected exactly eight Windows release files'}
+          gh release edit $env:RELEASE_TAG --target $env:GITHUB_SHA
+          if($LASTEXITCODE -ne 0){throw 'Could not select the verified source revision'}
+          gh release upload $env:RELEASE_TAG @paths --clobber
+          if($LASTEXITCODE -ne 0){throw 'Could not attach Windows release assets'}
