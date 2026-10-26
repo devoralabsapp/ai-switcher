@@ -38,7 +38,7 @@ Dữ liệu Windows nằm trong `%LOCALAPPDATA%\AISwitcher`; backend riêng nằ
 
 ## Phạm vi kiểm tra
 
-Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện bảy theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. Bản macOS tiếp tục có bộ kiểm tra riêng.
+Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện bảy theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. Phiên nền được thử riêng bằng Codex native Windows với tài khoản người dùng thường: kết nối, xác nhận chưa đăng nhập, khởi động lại và dừng. Bản macOS tiếp tục có bộ kiểm tra riêng.
 
 Tích hợp Desktop vẫn là preview: đăng nhập ChatGPT/Claude thực tế, OAuth/deep link, cập nhật Store, quota của tài khoản thật, Claude Code/Cowork và hành vi giao diện Work cần kiểm tra thêm trên máy Windows có các app đó. Không dùng tài khoản thật hoặc gửi yêu cầu model trong kiểm tra tự động.
 

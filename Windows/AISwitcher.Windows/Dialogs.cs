@@ -32,9 +32,9 @@ internal sealed partial class MainWindow {
     }
     public void EditAccount(Account? original=null){ShowManager();var dialog=Dialog(L[original==null?"Add account":"Edit profile"],550,760);
         var name=new TextBox{Text=original?.Name??"",MaxLength=48};var note=new TextBox{Text=original?.EmailHint??"",MaxLength=160};
-        var agent=new ComboBox{ItemsSource=Enum.GetValues<Agent>().Select(x=>new KeyValuePair<Agent,string>(x,x.Name())).ToArray(),DisplayMemberPath="Value",SelectedValuePath="Key",SelectedValue=original?.Agent??engine.Preferences.AgentFilter??Agent.Chatgpt,IsEnabled=original==null};
+        var agentValues=Enum.GetValues<Agent>();var agent=new ComboBox{ItemsSource=agentValues.Select(x=>x.Name()).ToArray(),SelectedIndex=Array.IndexOf(agentValues,original?.Agent??engine.Preferences.AgentFilter??Agent.Chatgpt),IsEnabled=original==null};System.Windows.Automation.AutomationProperties.SetAutomationId(agent,"accountAgent");
         var browser=new ComboBox{ItemsSource=Enum.GetValues<Browser>(),SelectedItem=original?.Browser??Browser.Chrome,IsEnabled=original==null};
-        var mode=new ComboBox{ItemsSource=Enum.GetValues<LaunchMode>(),SelectedItem=original?.EffectiveMode??LaunchMode.Desktop};
+        var mode=new ComboBox{ItemsSource=new[]{L["Desktop"],L["Browser"]},SelectedIndex=(int)(original?.EffectiveMode??LaunchMode.Desktop)};
         var color=new ComboBox{ItemsSource=ProfileColors.Names.Select(x=>L[char.ToUpperInvariant(x[0])+x[1..]]).ToArray(),SelectedIndex=original==null?engine.Snapshot.Accounts.Count%ProfileColors.Names.Length:Array.IndexOf(ProfileColors.Names,original.Color)};
         var defaultAction=new ComboBox{ItemsSource=new[]{L["Open ChatGPT"],L["Connect in background"]},SelectedIndex=original?.DefaultAction==DefaultAction.ConnectSession||original==null&&engine.Preferences.QuotaOnlyMode?1:0};
         var startup=new CheckBox{Content=L["Connect in background when AI Switcher starts"],IsChecked=original?.ConnectOnStartup??false};
@@ -46,7 +46,7 @@ internal sealed partial class MainWindow {
         var desktopOptions=Stack(Text(L["Default account action"],12,true),Space(6),defaultAction,startup,shared,Text(L["Sharing uses the workspace folder selected in Settings. Authentication stays private."],11,false,T.Secondary),Space(16));fields.Children.Add(desktopOptions);
         if(original==null)fields.Children.Add(openAfter);
         var support=Text(L["Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."],11,false,T.Secondary);support.Margin=new Thickness(0,16,0,20);fields.Children.Add(support);
-        void UpdateFields(){var selected=(Agent)agent.SelectedValue;var selectedMode=(LaunchMode)mode.SelectedItem;
+        void UpdateFields(){var selected=agentValues[agent.SelectedIndex];var selectedMode=(LaunchMode)mode.SelectedIndex;
             mode.IsEnabled=(selected is Agent.Chatgpt or Agent.Claude)&&(original==null||!engine.Running(original)&&!engine.Busy.Contains(original.Id));
             var effective=selected is Agent.Chatgpt or Agent.Claude?selectedMode:selected.IsShared()?LaunchMode.Desktop:LaunchMode.Browser;
             modeField.Visibility=selected is Agent.Claude or Agent.Chatgpt?Visibility.Visible:Visibility.Collapsed;browserField.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
@@ -54,8 +54,8 @@ internal sealed partial class MainWindow {
         }
         agent.SelectionChanged+=(_,_)=>UpdateFields();mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
-            var selected=(Agent)agent.SelectedValue;
-            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedItem,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true};
+            var selected=agentValues[agent.SelectedIndex];
+            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedIndex,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true};
             if(engine.SaveAccount(edited)){dialog.Close();if(original==null&&openAfter.IsChecked==true)_=engine.OpenAsync(edited);}
         },true,T);save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;name.TextChanged+=(_,_)=>save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;
         var body=new DockPanel{LastChildFill=true,Margin=new Thickness(25)};var footer=Row(Button(L["Cancel"],()=>dialog.Close()),save);footer.HorizontalAlignment=HorizontalAlignment.Right;DockPanel.SetDock(footer,Dock.Bottom);body.Children.Add(footer);body.Children.Add(new ScrollViewer{Content=Stack(Text(L[original==null?"Another account.\nKeep your flow.":"Edit profile"],24,true),Space(20),fields),VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new Thickness(0,0,0,14)});dialog.Content=body;dialog.ShowDialog();

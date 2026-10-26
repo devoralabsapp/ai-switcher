@@ -27,7 +27,7 @@ internal sealed class BackendService {
         await SharedWorkspace.PrepareAsync(account,repository,preferences);
         await CommandAsync(account,"start");
         for(var i=0;i<40;i++){
-            try{await using var client=await SocketClientAsync(account);active.Add(account.Id);return;}catch{await Task.Delay(250);}
+            try{await using var client=await SocketClientAsync(account);active.Add(account.Id);return;}catch(Exception error){FixtureDiagnostic?.Invoke("Local connection: "+error.GetType().Name+": "+error.Message);await Task.Delay(250);}
         }
         throw new AppError("Could not connect to this Desktop profile's backend. Try opening it again or update ChatGPT Desktop.");
     }

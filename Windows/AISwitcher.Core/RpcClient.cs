@@ -63,7 +63,7 @@ public sealed class LocalSocketTransport : IRpcTransport {
             catch{unix.Dispose();throw;}
         }};
         transport.invoker=new HttpMessageInvoker(handler);
-        try { await transport.socket.ConnectAsync(new Uri("ws://localhost/rpc"),transport.invoker,ct);return transport; }
+        try { await transport.socket.ConnectAsync(new Uri("ws://localhost/"),transport.invoker,ct);return transport; }
         catch{await transport.DisposeAsync();throw;}
     }
     public Task SendAsync(string json,CancellationToken ct)=>socket.SendAsync(Encoding.UTF8.GetBytes(json).AsMemory(),WebSocketMessageType.Text,true,ct).AsTask();

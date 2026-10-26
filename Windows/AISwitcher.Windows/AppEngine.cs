@@ -31,7 +31,7 @@ internal sealed class AppEngine {
         Platform=new(Repository,Preferences);Backend=new(Repository,Platform,Preferences);
     }
     public void Notify()=>Changed?.Invoke();
-    public void SavePreferences(){try{Repository.SavePreferences(Preferences);Notify();}catch(Exception error){Error?.Invoke(Message(error));}}
+    public void SavePreferences(){if(ReadOnly){Notify();return;}try{Repository.SavePreferences(Preferences);Notify();}catch(Exception error){Error?.Invoke(Message(error));}}
     public void SetQuotaOnly(bool enabled){Preferences.SetQuotaOnly(enabled);SavePreferences();}
     public void SetAgent(Agent? agent){Preferences.AgentFilter=agent;SavePreferences();}
     public async Task<bool> SetExecutableAsync(string key,string? path){
