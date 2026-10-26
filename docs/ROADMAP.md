@@ -16,8 +16,25 @@ These are proposed next steps, not promised release dates or shipped features. C
 
 - [x] Add English/Vietnamese localization resources and persistent appearance preferences (1.3 preview).
 - [ ] Review keyboard navigation, VoiceOver labels, and text scaling.
-- [ ] Improve diagnostics for browser startup failures without collecting private profile contents.
+- [x] Add session diagnostics, Desktop compatibility checks, and targeted background recovery without collecting private profile contents.
 - [ ] Clarify local profile/cache cleanup and recovery after interrupted operations.
+
+## Quota workspace
+
+- [x] Add opt-in quota-only mode and per-profile default actions.
+- [x] Connect selected Desktop sessions in the background at startup.
+- [x] Distinguish background backends, Desktop windows, disconnected sessions, and sign-in needs.
+- [x] Add a sortable quota overview with freshness and reset information.
+
+- [x] Add per-account menu-bar quota summaries and quick actions.
+- [x] Add opt-in low/recovered quota notifications with persistent transition deduplication.
+
+## Multiple AI agents
+
+- [x] Add Claude, Gemini, Perplexity, and DeepSeek with separate browser profiles.
+- [x] Add an Antigravity launcher with explicit shared application sign-in semantics.
+- [x] Add persistent sidebar agent filters combined with search and workspace filters.
+- [ ] Evaluate documented per-agent quota APIs and independent native session support before expanding capabilities.
 
 ## Make releases easier to trust
 
@@ -25,4 +42,4 @@ These are proposed next steps, not promised release dates or shipped features. C
 - [ ] Automate release archives and checksums from tagged source.
 - [ ] Expand CI coverage based on maintainers' available macOS runners.
 
-The scope stays focused on local profile switching. Credential extraction, shared login sessions, and automatic rotation to evade service limits are outside that scope.
+The scope stays focused on local profile switching. Credential extraction, sharing credentials between profiles, and automatic rotation to evade service limits are outside that scope.

@@ -39,9 +39,9 @@ final class BrowserService {
         }.count
     }
 
-    /// Focus an existing session. Reopen ChatGPT if the browser has no windows.
+    /// Focus an existing session. Reopen the agent if the browser has no windows.
     @discardableResult
-    func open(_ account: Account, forceNewWindow: Bool = false, url: URL = BrowserLaunch.chatURL) async throws -> NSRunningApplication {
+    func open(_ account: Account, forceNewWindow: Bool = false, url: URL? = nil) async throws -> NSRunningApplication {
         guard let bundleURL = applicationURL(for: account.browser),
               let executableURL = Bundle(url: bundleURL)?.executableURL else {
             throw ProfileError.browserUnavailable(account.browser.name)
@@ -54,7 +54,7 @@ final class BrowserService {
         let profileURL = try repository.prepareProfile(for: account.id)
         let process = Process()
         process.executableURL = executableURL
-        process.arguments = BrowserLaunch.arguments(profileURL: profileURL, url: url)
+        process.arguments = BrowserLaunch.arguments(profileURL: profileURL, url: url ?? account.effectiveAgent.webURL)
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice

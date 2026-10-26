@@ -66,9 +66,24 @@ public struct ThemeColors: Equatable, Sendable {
 public struct AppPreferences: Equatable, Sendable {
     public var language: AppLanguage
     public var theme: AppTheme
-    public init(language: AppLanguage = .vietnamese, theme: AppTheme = .light) {
+    public var quotaOnlyMode: Bool
+    public var workspaceLayout: WorkspaceLayout
+    public var quotaSortKey: QuotaSortKey
+    public var quotaSortAscending: Bool
+    public var quotaAlerts: QuotaAlertSettings
+    public var agentFilter: AIAgent?
+    public init(language: AppLanguage = .vietnamese, theme: AppTheme = .light,
+                quotaOnlyMode: Bool = false, workspaceLayout: WorkspaceLayout = .cards,
+                quotaSortKey: QuotaSortKey = .name, quotaSortAscending: Bool = true,
+                quotaAlerts: QuotaAlertSettings = .init(), agentFilter: AIAgent? = nil) {
         self.language = language
         self.theme = theme
+        self.quotaOnlyMode = quotaOnlyMode
+        self.workspaceLayout = workspaceLayout
+        self.quotaSortKey = quotaSortKey
+        self.quotaSortAscending = quotaSortAscending
+        self.quotaAlerts = quotaAlerts
+        self.agentFilter = agentFilter
     }
 }
 
@@ -77,10 +92,33 @@ public struct AppPreferencesStore {
     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
     public func load() -> AppPreferences {
         AppPreferences(language: defaults.string(forKey: "ui.language").flatMap(AppLanguage.init(rawValue:)) ?? .vietnamese,
-                       theme: defaults.string(forKey: "ui.theme").flatMap(AppTheme.init(rawValue:)) ?? .light)
+                       theme: defaults.string(forKey: "ui.theme").flatMap(AppTheme.init(rawValue:)) ?? .light,
+                       quotaOnlyMode: defaults.bool(forKey: "ui.quotaOnlyMode"),
+                       workspaceLayout: defaults.string(forKey: "ui.workspaceLayout").flatMap(WorkspaceLayout.init(rawValue:)) ?? .cards,
+                       quotaSortKey: defaults.string(forKey: "ui.quotaSortKey").flatMap(QuotaSortKey.init(rawValue:)) ?? .name,
+                       quotaSortAscending: defaults.object(forKey: "ui.quotaSortAscending") as? Bool ?? true,
+                       quotaAlerts: .init(enabled: defaults.bool(forKey: "quotaAlerts.enabled"),
+                           threshold: defaults.object(forKey: "quotaAlerts.threshold") as? Int ?? 20,
+                           notifyRecovery: defaults.object(forKey: "quotaAlerts.recovery") as? Bool ?? true),
+                       agentFilter: defaults.string(forKey: "ui.agentFilter").flatMap(AIAgent.init(rawValue:)))
     }
     public func save(_ value: AppPreferences) {
         defaults.set(value.language.rawValue, forKey: "ui.language")
         defaults.set(value.theme.rawValue, forKey: "ui.theme")
+        defaults.set(value.quotaOnlyMode, forKey: "ui.quotaOnlyMode")
+        defaults.set(value.workspaceLayout.rawValue, forKey: "ui.workspaceLayout")
+        defaults.set(value.quotaSortKey.rawValue, forKey: "ui.quotaSortKey")
+        defaults.set(value.quotaSortAscending, forKey: "ui.quotaSortAscending")
+        defaults.set(value.quotaAlerts.enabled, forKey: "quotaAlerts.enabled")
+        defaults.set(value.quotaAlerts.threshold, forKey: "quotaAlerts.threshold")
+        defaults.set(value.quotaAlerts.notifyRecovery, forKey: "quotaAlerts.recovery")
+        defaults.set(value.agentFilter?.rawValue, forKey: "ui.agentFilter")
+    }
+
+    public func loadAlertTracker() -> QuotaAlertTracker {
+        defaults.data(forKey: "quotaAlerts.observations").flatMap { try? JSONDecoder().decode(QuotaAlertTracker.self, from: $0) } ?? .init()
+    }
+    public func saveAlertTracker(_ tracker: QuotaAlertTracker) {
+        if let data = try? JSONEncoder().encode(tracker) { defaults.set(data, forKey: "quotaAlerts.observations") }
     }
 }

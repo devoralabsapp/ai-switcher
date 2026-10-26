@@ -37,11 +37,22 @@ final class AppModel: ObservableObject {
     @Published var notice: AppNotice?
     @Published var accountToDelete: Account?
     @Published var accountToClose: Account?
+    @Published var accountToRestart: Account?
+    @Published var showDiagnostics = false
+    @Published private(set) var desktopCompatibility: DesktopCompatibility?
+    @Published private(set) var diagnosticStorageErrors: [UUID: String] = [:]
+    @Published private(set) var lastQuotaChecks: [UUID: Date] = [:]
+    @Published private(set) var notificationPermission: QuotaNotificationPermission = .notRequested
+    @Published private(set) var notificationSettingsBusy = false
+    @Published private(set) var notificationError: String?
     @Published var showGuide = false
     @Published var showPreferences = false
     @Published private(set) var preferences = AppPreferencesStore().load()
     @Published private(set) var launchingIDs: Set<UUID> = []
     @Published private(set) var connectingSessionIDs: Set<UUID> = []
+    @Published private(set) var closingSessionIDs: Set<UUID> = []
+    @Published private(set) var desktopWindowIDs: Set<UUID> = []
+    @Published private(set) var backendIDs: Set<UUID> = []
     @Published private(set) var runningIDs: Set<UUID> = []
     @Published private(set) var loadFailed = false
     @Published private(set) var lastAction: String?
@@ -55,6 +66,7 @@ final class AppModel: ObservableObject {
     let browserService: BrowserService
     let desktopService: DesktopService
     let quotaService: CodexQuotaService
+    let agentApplications = AgentApplicationService()
     private let desktopQuotaSource: any DesktopQuotaSource
     private var refreshTimer: AnyCancellable?
     private var quotaTimer: AnyCancellable?
@@ -64,10 +76,21 @@ final class AppModel: ObservableObject {
     private var desktopQuotaClients: [UUID: CodexRPCClient] = [:]
     private var desktopQuotaRetryAt: [UUID: Date] = [:]
     private var sessionTasks: [UUID: Task<Void, Never>] = [:]
+    private var startupTask: Task<Void, Never>?
+    private var didConnectStartupAccounts = false
+    private var shuttingDown = false
+    private let preferencesStore: AppPreferencesStore
+    private let notifications: any QuotaNotificationSending
+    private var quotaAlertTracker: QuotaAlertTracker
 
     init(root: URL, preferences: AppPreferences? = nil, monitoring: Bool = true,
-         desktopQuotaSource: (any DesktopQuotaSource)? = nil) {
-        self.preferences = preferences ?? AppPreferencesStore().load()
+         desktopQuotaSource: (any DesktopQuotaSource)? = nil,
+         preferencesStore: AppPreferencesStore = AppPreferencesStore(),
+         notifications: (any QuotaNotificationSending)? = nil) {
+        self.preferencesStore = preferencesStore
+        self.notifications = notifications ?? QuotaNotificationService()
+        quotaAlertTracker = preferencesStore.loadAlertTracker()
+        self.preferences = preferences ?? preferencesStore.load()
         repository = ProfileRepository(root: root)
         browserService = BrowserService(repository: repository)
         desktopService = DesktopService(repository: repository)
@@ -82,7 +105,10 @@ final class AppModel: ObservableObject {
         quotaTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshAllQuotas()
         }
-        Task { [weak self] in self?.refreshAllQuotas() }
+        startupTask = Task { [weak self] in
+            await self?.connectStartupAccounts()
+            if !Task.isCancelled { self?.refreshAllQuotas() }
+        }
     }
 
     var accounts: [Account] { snapshot.accounts }
@@ -91,7 +117,7 @@ final class AppModel: ObservableObject {
     func setLanguage(_ language: AppLanguage) {
         var updated = preferences
         updated.language = language
-        AppPreferencesStore().save(updated)
+        preferencesStore.save(updated)
         lastAction = nil
         preferences = updated
     }
@@ -99,8 +125,197 @@ final class AppModel: ObservableObject {
     func setTheme(_ theme: AppTheme) {
         var updated = preferences
         updated.theme = theme
-        AppPreferencesStore().save(updated)
+        preferencesStore.save(updated)
         preferences = updated
+    }
+
+    func setQuotaOnlyMode(_ enabled: Bool) {
+        var updated = preferences
+        updated.quotaOnlyMode = enabled
+        if enabled { updated.workspaceLayout = .quotaTable }
+        savePreferences(updated)
+    }
+
+    func setWorkspaceLayout(_ layout: WorkspaceLayout) {
+        var updated = preferences
+        updated.workspaceLayout = layout
+        savePreferences(updated)
+    }
+
+    func setAgentFilter(_ agent: AIAgent?) {
+        var updated = preferences
+        updated.agentFilter = agent
+        savePreferences(updated)
+    }
+
+    func agentCount(_ agent: AIAgent?) -> Int {
+        accounts.filter { agent == nil || $0.effectiveAgent == agent }.count
+    }
+
+    func setQuotaSort(_ key: QuotaSortKey) {
+        var updated = preferences
+        updated.quotaSortAscending = key == updated.quotaSortKey ? !updated.quotaSortAscending : key != .lastUpdated
+        updated.quotaSortKey = key
+        savePreferences(updated)
+    }
+
+    private func savePreferences(_ updated: AppPreferences) {
+        preferencesStore.save(updated)
+        preferences = updated
+    }
+
+    func refreshNotificationPermission() async {
+        notificationPermission = await notifications.permission()
+    }
+
+    func setQuotaNotifications(_ enabled: Bool) async {
+        guard !notificationSettingsBusy else { return }
+        notificationSettingsBusy = true
+        notificationError = nil
+        defer { notificationSettingsBusy = false }
+        var updated = preferences
+        if enabled {
+            do {
+                let permission = await notifications.permission()
+                let granted: Bool
+                if permission == .notRequested { granted = try await notifications.requestPermission() }
+                else { granted = permission == .allowed }
+                notificationPermission = await notifications.permission()
+                guard granted else { return }
+            } catch {
+                notificationError = L10n.text("Could not enable notifications. Try again from the packaged app.")
+                return
+            }
+        }
+        // Re-read after the permission prompt so unrelated settings are preserved.
+        updated = preferences
+        if updated.quotaAlerts.enabled != enabled {
+            quotaAlertTracker = .init()
+            preferencesStore.saveAlertTracker(quotaAlertTracker)
+        }
+        updated.quotaAlerts.enabled = enabled
+        savePreferences(updated)
+        if !enabled { notifications.clearPending() }
+    }
+
+    func setQuotaAlertThreshold(_ threshold: Int) {
+        var updated = preferences
+        updated.quotaAlerts.threshold = min(95, max(1, threshold))
+        savePreferences(updated)
+    }
+
+    func setQuotaRecoveryAlerts(_ enabled: Bool) {
+        var updated = preferences
+        updated.quotaAlerts.notifyRecovery = enabled
+        savePreferences(updated)
+    }
+
+    private func notifyQuota(_ id: UUID) async {
+        guard !shuttingDown, preferences.quotaAlerts.enabled,
+              let account = accounts.first(where: { $0.id == id }), let quota = account.displayedCodexConnection?.quota else { return }
+        notificationPermission = await notifications.permission()
+        guard notificationPermission == .allowed, preferences.quotaAlerts.enabled, !shuttingDown else { return }
+        var next = quotaAlertTracker
+        next.retainAccounts(Set(accounts.map(\.id)))
+        let events = next.evaluate(account: account, snapshot: quota, settings: preferences.quotaAlerts)
+        // Reserve transitions before delivery so simultaneous account reads cannot
+        // overwrite one another or send the same transition twice.
+        quotaAlertTracker = next
+        preferencesStore.saveAlertTracker(next)
+        do {
+            if !events.isEmpty { try await notifications.send(events, accountName: account.name, sound: false) }
+        } catch { notificationError = L10n.text("A quota notification could not be delivered. Check macOS notification settings.") }
+    }
+
+    func refreshDiagnostics() {
+        refreshRunning()
+        do { desktopCompatibility = .available(try desktopQuotaSource.installationVersion()) }
+        catch { desktopCompatibility = .unavailable(error.localizedDescription) }
+        var failures: [UUID: String] = [:]
+        for account in accounts where account.usesCodexDesktop {
+            do { try repository.validateDesktopOwnership(for: account.id) }
+            catch { failures[account.id] = error.localizedDescription }
+        }
+        diagnosticStorageErrors = failures
+    }
+
+    func restartSession(_ account: Account) {
+        guard !shuttingDown, !loadFailed, let current = accounts.first(where: { $0.id == account.id }),
+              current.usesCodexDesktop,
+              !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
+        launchingIDs.insert(account.id)
+        closingSessionIDs.insert(account.id)
+        sessionTasks[account.id] = Task {
+            defer {
+                launchingIDs.remove(account.id)
+                closingSessionIDs.remove(account.id)
+                connectingSessionIDs.remove(account.id)
+                sessionTasks[account.id] = nil
+                refreshDiagnostics()
+            }
+            do {
+                try await browserService.close(current)
+                try await desktopQuotaSource.closeSession(current)
+                try Task.checkCancellation()
+                closingSessionIDs.remove(account.id)
+                connectingSessionIDs.insert(account.id)
+                try await desktopQuotaSource.connectSession(current)
+                try Task.checkCancellation()
+                quotaErrors[account.id] = nil
+                lastAction = L10n.format("Restarted background session %@. Your login is kept.", current.name)
+                refreshDesktopQuota(current)
+            } catch is CancellationError { }
+            catch { quotaErrors[account.id] = error }
+        }
+    }
+
+    func defaultAction(for account: Account) -> AccountAction {
+        account.usesCodexDesktop && preferences.quotaOnlyMode ? .connectSession : account.effectiveDefaultAction
+    }
+
+    func performDefaultAction(_ account: Account) {
+        if defaultAction(for: account) == .connectSession { connectSession(account) }
+        else { open(account) }
+    }
+
+    func defaultActionTitle(for account: Account) -> String {
+        if connectingSessionIDs.contains(account.id) { return L10n.text("Connecting session…") }
+        if closingSessionIDs.contains(account.id) { return L10n.text("Closing session…") }
+        if launchingIDs.contains(account.id) { return L10n.text("Opening…") }
+        if defaultAction(for: account) == .connectSession {
+            if quotaBusyIDs.contains(account.id) { return L10n.text("Reading Desktop quota…") }
+            return backendIDs.contains(account.id) ? L10n.text("Refresh quota") : L10n.text("Connect account session")
+        }
+        return account.effectiveAgent.openTitle
+    }
+
+    /// Opt-in startup connections are sequential and never launch a Desktop window.
+    func connectStartupAccounts() async {
+        guard !didConnectStartupAccounts, !loadFailed, !shuttingDown else { return }
+        didConnectStartupAccounts = true
+        for id in accounts.filter(\.automaticallyConnects).map(\.id) {
+            guard !Task.isCancelled, !shuttingDown else { return }
+            guard let account = accounts.first(where: { $0.id == id }), account.automaticallyConnects else { continue }
+            connectSession(account, reportFailure: false)
+            await sessionTasks[id]?.value
+            await quotaTasks[id]?.value
+        }
+    }
+
+    func sessionStatus(for account: Account) -> SessionStatus {
+        if connectingSessionIDs.contains(account.id) { return .connecting }
+        if closingSessionIDs.contains(account.id) { return .closing }
+        if launchingIDs.contains(account.id) { return .opening }
+        if account.effectiveAgent.isSharedApplication {
+            return agentApplications.isRunning(account.effectiveAgent) ? .applicationRunning : .disconnected
+        }
+        if (quotaErrors[account.id] as? CodexQuotaError) == .notSignedIn { return .needsSignIn }
+        if account.effectiveLaunchMode == .browser {
+            return runningIDs.contains(account.id) ? .browserOpen : .disconnected
+        }
+        if desktopWindowIDs.contains(account.id) { return .desktopOpen }
+        if backendIDs.contains(account.id) { return .background }
+        return quotaErrors[account.id] == nil ? .disconnected : .connectionFailed
     }
 
     var visibleAccounts: [Account] {
@@ -115,6 +330,7 @@ final class AppModel: ObservableObject {
         if !query.isEmpty {
             result = result.filter { $0.name.localizedCaseInsensitiveContains(query) || $0.emailHint.localizedCaseInsensitiveContains(query) }
         }
+        if let agent = preferences.agentFilter { result = result.filter { $0.effectiveAgent == agent } }
         return result
     }
 
@@ -139,7 +355,8 @@ final class AppModel: ObservableObject {
     func addAccount() {
         guard !loadFailed else { reload(); return }
         editor = AccountEditor(account: nil, defaultBrowser: browserService.installedBrowsers.first ?? .chrome,
-                               defaultColor: AccountColor.allCases[accounts.count % AccountColor.allCases.count])
+                               defaultColor: AccountColor.allCases[accounts.count % AccountColor.allCases.count],
+                               defaultAgent: preferences.agentFilter ?? .chatgpt)
     }
 
     @discardableResult
@@ -147,8 +364,13 @@ final class AppModel: ObservableObject {
         guard !loadFailed else { return false }
         do {
             try account.validate()
+            if account.effectiveAgent.isSharedApplication,
+               accounts.contains(where: { $0.id != account.id && $0.effectiveAgent == account.effectiveAgent }) {
+                throw AgentLaunchError.duplicateSharedApplication
+            }
             var updated = snapshot
             if let index = updated.accounts.firstIndex(where: { $0.id == account.id }) {
+                guard account.effectiveAgent == updated.accounts[index].effectiveAgent else { throw AgentLaunchError.fixedAgent }
                 var edited = account
                 if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode
                     || edited.usesSharedLocalWorkspace != updated.accounts[index].usesSharedLocalWorkspace {
@@ -182,7 +404,8 @@ final class AppModel: ObservableObject {
         Task {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
-                if account.effectiveLaunchMode == .desktop { try await desktopService.open(account) }
+                if account.effectiveAgent.isSharedApplication { try await agentApplications.open(account.effectiveAgent) }
+                else if account.usesCodexDesktop { try await desktopService.open(account) }
                 else { try await browserService.open(account, forceNewWindow: newWindow) }
                 // Preserve label edits made while the application was launching.
                 var updated = snapshot
@@ -192,14 +415,14 @@ final class AppModel: ObservableObject {
                     try persist(updated)
                 }
                 lastAction = L10n.format("Opened %@", String(describing: account.name))
-                if account.effectiveLaunchMode == .desktop && !quotaBusyIDs.contains(account.id) { refreshDesktopQuota(account) }
+                if account.usesCodexDesktop && !quotaBusyIDs.contains(account.id) { refreshDesktopQuota(account) }
             } catch { showError(error, title: L10n.text("Could not open account")) }
         }
     }
 
-    func connectSession(_ account: Account) {
-        guard !loadFailed, let current = accounts.first(where: { $0.id == account.id }),
-              current.effectiveLaunchMode == .desktop,
+    func connectSession(_ account: Account, reportFailure: Bool = true) {
+        guard !shuttingDown, !loadFailed, let current = accounts.first(where: { $0.id == account.id }),
+              current.usesCodexDesktop,
               !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
         launchingIDs.insert(account.id)
         connectingSessionIDs.insert(account.id)
@@ -218,19 +441,22 @@ final class AppModel: ObservableObject {
             } catch is CancellationError { }
             catch {
                 quotaErrors[account.id] = error
-                showError(error, title: L10n.text("Could not connect account session"))
+                if reportFailure { showError(error, title: L10n.text("Could not connect account session")) }
             }
         }
     }
 
     func closeSession(_ account: Account) {
+        guard !account.effectiveAgent.isSharedApplication else { return }
         guard !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
         launchingIDs.insert(account.id)
+        closingSessionIDs.insert(account.id)
         Task {
-            defer { launchingIDs.remove(account.id); refreshRunning() }
+            defer { launchingIDs.remove(account.id); closingSessionIDs.remove(account.id); refreshRunning() }
             do {
                 try await browserService.close(account)
-                try await desktopService.close(account)
+                if account.effectiveAgent.supportsCodexQuota { try await desktopQuotaSource.closeSession(account) }
+                quotaErrors[account.id] = nil
                 lastAction = L10n.format("Closed session %@. Your login is kept.", String(describing: account.name))
             } catch { showError(error) }
         }
@@ -252,17 +478,23 @@ final class AppModel: ObservableObject {
     func refreshRunning() {
         let ids = Set(accounts.filter { hasRunningSession($0) }.map(\.id))
         if ids != runningIDs { runningIDs = ids }
+        let windows = Set(accounts.filter { $0.usesCodexDesktop && desktopQuotaSource.hasDesktopWindow($0) }.map(\.id))
+        if windows != desktopWindowIDs { desktopWindowIDs = windows }
+        let backends = Set(accounts.filter { $0.usesCodexDesktop && desktopQuotaSource.hasBackend($0.id) }.map(\.id))
+        if backends != backendIDs { backendIDs = backends }
     }
 
     func hasRunningSession(_ account: Account) -> Bool {
-        browserService.runningApplication(for: account) != nil || desktopService.runningApplication(for: account) != nil
-            || desktopQuotaSource.hasBackend(account.id)
+        if account.effectiveAgent.isSharedApplication { return false }
+        return browserService.runningApplication(for: account) != nil
+            || (account.effectiveAgent.supportsCodexQuota && desktopService.runningApplication(for: account) != nil)
+            || (account.usesCodexDesktop && desktopQuotaSource.hasBackend(account.id))
     }
 
     /// Opening Desktop normally precedes OAuth completion. Retry local identity
     /// reads until that existing session can return quota; never start another login.
     func refreshDesktopQuotaIfNeeded(now: Date = Date()) {
-        let active = accounts.filter { $0.effectiveLaunchMode == .desktop && desktopQuotaSource.hasBackend($0.id) }
+        let active = accounts.filter { $0.usesCodexDesktop && desktopQuotaSource.hasBackend($0.id) }
         let activeIDs = Set(active.map(\.id))
         desktopQuotaRetryAt = desktopQuotaRetryAt.filter { activeIDs.contains($0.key) }
         for account in active where !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id) {
@@ -290,6 +522,7 @@ final class AppModel: ObservableObject {
     }
 
     func connectQuota(_ account: Account) {
+        guard account.effectiveAgent.supportsCodexQuota else { return }
         if account.effectiveLaunchMode == .desktop { connectSession(account); return }
         guard connectingID == nil, !quotaBusyIDs.contains(account.id), quotaCleanupTasks[account.id] == nil,
               account.codexConnection == nil else { return }
@@ -340,7 +573,8 @@ final class AppModel: ObservableObject {
     }
 
     func disconnectQuota(_ id: UUID) {
-        guard !quotaBusyIDs.contains(id), accounts.first(where: { $0.id == id })?.effectiveLaunchMode == .browser else { return }
+        guard !quotaBusyIDs.contains(id), let account = accounts.first(where: { $0.id == id }),
+              account.effectiveAgent.supportsCodexQuota, account.effectiveLaunchMode == .browser else { return }
         quotaBusyIDs.insert(id)
         quotaTasks[id] = Task {
             defer { finishQuotaOperation(id) }
@@ -354,6 +588,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshQuota(_ account: Account) {
+        guard account.effectiveAgent.supportsCodexQuota else { return }
         guard !quotaBusyIDs.contains(account.id) else { return }
         if account.effectiveLaunchMode == .desktop {
             if !desktopQuotaSource.hasBackend(account.id) { connectSession(account) }
@@ -368,6 +603,7 @@ final class AppModel: ObservableObject {
                 let refreshed = try await quotaService.refresh(account.id, connection: connection)
                 try storeConnection(refreshed, for: account.id)
                 quotaErrors[account.id] = nil
+                await notifyQuota(account.id)
             } catch {
                 quotaErrors[account.id] = error
             }
@@ -408,6 +644,7 @@ final class AppModel: ObservableObject {
                     desktopQuotaRetryAt[account.id] = nil
                     await client.stop()
                     desktopQuotaClients[account.id] = nil
+                    await notifyQuota(account.id)
                 } catch {
                     await client.stop()
                     desktopQuotaClients[account.id] = nil
@@ -429,7 +666,7 @@ final class AppModel: ObservableObject {
         guard quotaSweepTask == nil else { return }
         quotaSweepTask = Task {
             defer { quotaSweepTask = nil }
-            for id in accounts.filter({ $0.effectiveLaunchMode == .desktop ? desktopQuotaSource.hasBackend($0.id) : $0.codexConnection != nil }).map(\.id) {
+            for id in accounts.filter({ $0.effectiveAgent.supportsCodexQuota && ($0.usesCodexDesktop ? desktopQuotaSource.hasBackend($0.id) : $0.codexConnection != nil) }).map(\.id) {
                 if Task.isCancelled { return }
                 guard let account = accounts.first(where: { $0.id == id }) else { continue }
                 refreshQuota(account)
@@ -439,12 +676,15 @@ final class AppModel: ObservableObject {
     }
 
     func shutdownQuota() async {
+        shuttingDown = true
+        startupTask?.cancel()
         refreshTimer?.cancel()
         quotaTimer?.cancel()
         quotaSweepTask?.cancel()
         let sessions = Array(sessionTasks.values)
         for task in sessions { task.cancel() }
         for task in sessions { await task.value }
+        await startupTask?.value
         if let id = connectingID { cancelQuotaConnection(id) }
         for id in Array(pendingConnections.keys) { cancelQuotaConnection(id) }
         for task in quotaTasks.values { task.cancel() }
@@ -454,8 +694,10 @@ final class AppModel: ObservableObject {
     }
 
     private func finishQuotaOperation(_ id: UUID) {
+        lastQuotaChecks[id] = Date()
         if quotaCleanupTasks[id] == nil { quotaBusyIDs.remove(id) }
         quotaTasks[id] = nil
+        refreshRunning()
     }
 
     private func storeConnection(_ connection: CodexConnection?, for id: UUID, mode: LaunchMode = .browser) throws {
@@ -490,10 +732,12 @@ struct AccountEditor: Identifiable {
     let account: Account?
     let defaultBrowser: BrowserKind
     let defaultColor: AccountColor
+    let defaultAgent: AIAgent
 
-    init(account: Account?, defaultBrowser: BrowserKind = .chrome, defaultColor: AccountColor = .mint) {
+    init(account: Account?, defaultBrowser: BrowserKind = .chrome, defaultColor: AccountColor = .mint, defaultAgent: AIAgent = .chatgpt) {
         self.account = account
         self.defaultBrowser = defaultBrowser
         self.defaultColor = defaultColor
+        self.defaultAgent = defaultAgent
     }
 }

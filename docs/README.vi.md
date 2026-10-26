@@ -2,13 +2,29 @@
 
 [English README](../README.md) · [Tải bản dùng thử](https://github.com/devoralabsapp/ai-switcher/releases)
 
-Chuyển giữa nhiều tài khoản bằng **những phiên ChatGPT Desktop riêng**, không cần Chrome để dùng hằng ngày. App SwiftUI có giao diện tiếng Việt/tiếng Anh, thanh menu và quota Codex giờ/tuần cho từng hồ sơ.
+Quản lý **ChatGPT, Claude, Gemini, Antigravity, Perplexity và DeepSeek** trong một app SwiftUI có giao diện tiếng Việt/tiếng Anh và thanh menu macOS. ChatGPT giữ các phiên Desktop riêng cùng quota Codex; các agent khác dùng khả năng được mô tả bên dưới.
 
 ![Màn hình chính AI Switcher bằng tiếng Anh với theme Code](assets/code-en.png)
 
 *Giao diện tiếng Anh, theme Code. Tên tài khoản và quota trong ảnh là dữ liệu mẫu.*
 
-## Cách dùng
+## AI agent và bộ lọc bên trái
+
+Khi thêm tài khoản, chọn **AI agent** rồi đặt tên hồ sơ. Agent không đổi được sau khi lưu để giữ đăng nhập đúng dịch vụ; hồ sơ cũ tiếp tục là ChatGPT.
+
+| Agent | Cách mở và đăng nhập | Quota và kết nối nền |
+| --- | --- | --- |
+| ChatGPT | Phiên Desktop riêng hoặc hồ sơ trình duyệt riêng | Quota Codex; kết nối nền cho Desktop |
+| Claude, Gemini, Perplexity, DeepSeek | Hồ sơ Chrome/Edge/Brave riêng cho từng tài khoản | Chưa hỗ trợ |
+| Antigravity | Mở ứng dụng đã cài, dùng đăng nhập chung của ứng dụng | Chưa hỗ trợ |
+
+Chọn agent hoặc **Tất cả agent** ở thanh điều hướng bên trái. Bộ lọc kết hợp với tìm kiếm, Yêu thích và Gần đây; số đếm thể hiện tổng hồ sơ đã lưu của từng agent. App nhớ bộ lọc khi mở lại và tự chọn agent đó khi thêm hồ sơ.
+
+Với agent trình duyệt, cài Chrome, Edge hoặc Brave rồi đăng nhập trực tiếp trong cửa sổ của hồ sơ. Antigravity chỉ có một mục mở ứng dụng: app không tách/chuyển tài khoản, đóng ứng dụng dùng chung hoặc đọc quota của Antigravity. Thẻ tài khoản, bảng quota, menu bar và kiểm tra phiên hiển thị đúng khả năng từng agent. Chỉ xem quota, kết nối nền và thông báo quota áp dụng cho ChatGPT/Codex.
+
+![Danh sách AI agent với theme Playful Retro và dữ liệu mẫu](assets/ai-agents-vi.png)
+
+## Cách dùng ChatGPT Desktop
 
 1. Cài ChatGPT Desktop mới có Chat, Work và Codex vào Applications. **ChatGPT Classic chưa được hỗ trợ.**
 2. Tải ZIP từ Releases, giải nén và kéo **AI Switcher.app** vào Applications. Bản preview ký ad hoc, chưa notarize.
@@ -35,6 +51,38 @@ Terminal và Code dùng font đơn cách, góc gọn cùng bảng màu riêng. P
 </details>
 
 Xem [ảnh mẫu các theme](../README.md#language-and-appearance); ảnh dùng hồ sơ và quota giả để minh họa.
+
+## Menu bar, thông báo quota và khôi phục phiên
+
+Mở tài khoản trong menu bar để xem trạng thái, mọi nhóm quota, thời điểm reset và lần đọc cuối. Menu riêng có nút kết nối/làm mới, mở đúng cửa sổ Desktop, đóng phiên có xác nhận và xem chi tiết. Kết nối hoặc đóng phiên không cần mở dashboard.
+
+Trong **Giao diện & Ngôn ngữ → Thông báo quota**, bật thông báo và cho phép trong hộp thoại macOS. Mặc định thông báo tắt. Chọn ngưỡng quota còn lại từ 1–95%, cùng tùy chọn báo quota hồi. Chỉ dữ liệu mới đọc thành công mới tạo thông báo: báo thấp một lần khi chạm/xuống ngưỡng, và chỉ báo hồi khi đọc được quota vượt ngưỡng sau đó. Đến giờ reset không tự tạo thông báo. App lưu trạng thái ngưỡng để tránh lặp sau khi mở lại; tắt thông báo sẽ xóa mốc theo dõi. AI Switcher cần đang chạy, thông báo không phát âm thanh. Bấm thông báo để xem quota của đúng tài khoản. Nếu bị chặn, phần trạng thái quyền hướng dẫn bạn bật lại trong cài đặt macOS.
+
+Chọn **Kiểm tra phiên** ở thanh bên hoặc menu bar để xem phiên bản Desktop và tính năng cần thiết, kiểm tra dữ liệu hồ sơ, trạng thái và kết quả quota gần nhất. **Thử lại** đọc quota hoặc kết nối phiên nền đã dừng. **Khởi động lại phiên…** có xác nhận trước khi đóng cửa sổ, chỉ dừng đúng hồ sơ rồi kết nối lại trong nền, giữ đăng nhập và dữ liệu, không tự mở Desktop. Nếu phiên từ chối đóng, app không khởi chạy chồng thêm backend. Dữ liệu hồ sơ không xác minh được sẽ tắt nút kết nối/khởi động lại; tài khoản hết phiên vẫn cần đăng nhập lại rõ ràng.
+
+<details>
+<summary>Xem trang kiểm tra phiên với dữ liệu mẫu</summary>
+
+![Kiểm tra phiên](assets/session-diagnostics-vi.png)
+
+</details>
+
+## Chỉ xem quota và trạng thái phiên
+
+Bật **Chỉ xem quota** ở dashboard hoặc **Giao diện & Ngôn ngữ** để các thao tác mặc định trên hồ sơ Desktop kết nối nền. Muốn mở cửa sổ, chọn **⋯ → Mở ChatGPT Desktop**. Hồ sơ trình duyệt vẫn hoạt động như trước.
+
+Trong **Sửa hồ sơ**, chọn **Thao tác mặc định** cho từng hồ sơ và bật **Kết nối nền khi mở AI Switcher** nếu muốn. Tự kết nối mặc định tắt, chỉ áp dụng cho hồ sơ Desktop được chọn và không mở cửa sổ hay tự đăng nhập. Khi bật Chỉ xem quota, app ưu tiên Kết nối nền; khi tắt, lựa chọn riêng của hồ sơ được dùng lại.
+
+Chọn **Tổng quan quota** để xem hạn mức ngắn/dài hạn, thời lượng thực tế, reset tiếp theo, lần cập nhật cuối và trạng thái. Bấm tiêu đề cột để đổi thứ tự; quota thiếu, cũ, lỗi hoặc đã qua reset được xếp cuối khi sắp xếp hạn mức. Mỗi hàng hiển thị một nhóm hạn mức, ưu tiên `codex`; mở **Chi tiết** để xem mọi nhóm. Cửa sổ nhỏ có thể cuộn bảng ngang. Kiểu hiển thị và cách sắp xếp được lưu cho lần mở sau.
+
+Nhãn trạng thái phân biệt **Đã ngắt kết nối**, **Đang chạy nền**, **Desktop đang mở**, **Cần đăng nhập lại**, **Kết nối thất bại** và các thao tác đang xử lý. Kết nối nền không thay đổi danh sách tài khoản đã mở gần đây.
+
+<details>
+<summary>Xem bảng tổng quan quota với dữ liệu mẫu</summary>
+
+![Tổng quan quota](assets/quota-overview-vi.png)
+
+</details>
 
 ## Project và lịch sử Work local
 

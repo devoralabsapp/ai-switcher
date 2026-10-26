@@ -13,7 +13,10 @@ struct AccountEditorView: View {
     @State private var launchMode: LaunchMode
     @State private var color: AccountColor
     @State private var sharesLocalWorkspace: Bool
-    @State private var openAfterSave = true
+    @State private var openAfterSave: Bool
+    @State private var defaultAction: AccountAction
+    @State private var connectOnStartup: Bool
+    @State private var agent: AIAgent
     @FocusState private var nameFocused: Bool
 
     init(model: AppModel, editor: AccountEditor) {
@@ -25,24 +28,50 @@ struct AccountEditorView: View {
         _launchMode = State(initialValue: editor.account?.effectiveLaunchMode ?? .desktop)
         _color = State(initialValue: editor.account?.color ?? editor.defaultColor)
         _sharesLocalWorkspace = State(initialValue: editor.account?.usesSharedLocalWorkspace ?? true)
+        _defaultAction = State(initialValue: editor.account?.effectiveDefaultAction ?? (model.preferences.quotaOnlyMode ? .connectSession : .openDesktop))
+        _connectOnStartup = State(initialValue: editor.account?.automaticallyConnects ?? false)
+        _agent = State(initialValue: editor.account?.effectiveAgent ?? editor.defaultAgent)
+        _openAfterSave = State(initialValue: !model.preferences.quotaOnlyMode)
     }
 
     private var isNew: Bool { editor.account == nil }
+    private var selectedMode: LaunchMode { agent == .chatgpt ? launchMode : agent.isSharedApplication ? .desktop : .browser }
     private var modeLocked: Bool {
         editor.account.map { model.hasRunningSession($0) || model.launchingIDs.contains($0.id) || model.quotaBusyIDs.contains($0.id) || model.pendingConnections[$0.id] != nil } ?? false
     }
     private var valid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 48 && email.count <= 160
-            && (launchMode == .desktop || !isNew || model.browserService.applicationURL(for: browser) != nil)
+            && (selectedMode == .desktop || !isNew || model.browserService.applicationURL(for: browser) != nil)
+            && (!isNew || !agent.isSharedApplication || !model.accounts.contains { $0.effectiveAgent == agent })
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                editorContent.padding(30)
+            }
+            HStack {
+                Spacer()
+                Button(L10n.text("Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button { save() } label: { Text(isNew ? L10n.text("Add account") : L10n.text("Save changes")) }
+                    .buttonStyle(PrimaryButtonStyle(compact: true)).keyboardShortcut(.defaultAction)
+                    .disabled(!valid).opacity(valid ? 1 : 0.5).accessibilityIdentifier("saveAccount")
+            }
+            .padding(.horizontal, 30).padding(.vertical, 16)
+        }
+        .textFieldStyle(.roundedBorder).foregroundColor(palette.ink)
+        .frame(width: 500, height: 740).background(appearanceTheme.isPlayfulRetro ? palette.canvas : palette.surface)
+        .appAppearance(model.preferences)
+        .onAppear { nameFocused = true }
+    }
+
+    private var editorContent: some View {
         VStack(alignment: .leading, spacing: 23) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(isNew ? L10n.text("Another account.\nKeep your flow.") : L10n.text("Edit profile"))
                         .font(appearanceTheme.font(size: 24, weight: .semibold)).tracking(-0.5)
-                    Text(isNew ? L10n.text("Create a separate space for your ChatGPT account.") : L10n.text("Names and emails are labels to help you recognize accounts."))
+                    Text(isNew ? L10n.text("Choose an AI agent and give its account a recognizable name.") : L10n.text("Names and emails are labels to help you recognize accounts."))
                         .font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
                 }
                 Spacer()
@@ -51,6 +80,20 @@ struct AccountEditorView: View {
             }
 
             VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker(L10n.text("AI agent"), selection: $agent) {
+                        ForEach(AIAgent.allCases) { Text($0.name).tag($0) }
+                    }.disabled(!isNew).accessibilityIdentifier("accountAgent")
+                    Text(agent.supportDetail).font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
+                    if !isNew {
+                        Text(L10n.text("The agent is fixed for existing profiles. Create another profile to use a different agent."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                    }
+                    if isNew && agent.isSharedApplication && model.accounts.contains(where: { $0.effectiveAgent == agent }) {
+                        Text(L10n.text("An Antigravity entry already exists. Edit it from the agent filter."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                    }
+                }
                 field(L10n.text("Account name"), detail: L10n.text("For example: Personal, Work, Study")) {
                     TextField(L10n.text("Give this account a name"), text: $name).themedTextField().focused($nameFocused)
                         .accessibilityIdentifier("accountName")
@@ -73,6 +116,7 @@ struct AccountEditorView: View {
                     }
                 }
 
+                if agent == .chatgpt {
                 VStack(alignment: .leading, spacing: 9) {
                     Text(L10n.text("Open accounts with")).font(appearanceTheme.font(size: 12, weight: .medium))
                     Picker(L10n.text("Mode"), selection: $launchMode) {
@@ -84,6 +128,18 @@ struct AccountEditorView: View {
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                     if launchMode == .desktop {
+                        Picker(L10n.text("Default account action"), selection: $defaultAction) {
+                            ForEach(AccountAction.allCases) { Text($0.title).tag($0) }
+                        }.accessibilityIdentifier("defaultAccountAction")
+                        if model.preferences.quotaOnlyMode {
+                            Text(L10n.text("Quota-only mode currently overrides this action to Connect in background."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        }
+                        Toggle(L10n.text("Connect in background when AI Switcher starts"), isOn: $connectOnStartup)
+                            .toggleStyle(.checkbox).font(appearanceTheme.font(size: 11))
+                            .accessibilityIdentifier("connectOnStartup")
+                        Text(L10n.text("Uses the saved sign-in without opening Desktop. Sign in once first using Open ChatGPT."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                         Toggle(L10n.text("Share local projects and Work history"), isOn: $sharesLocalWorkspace)
                             .toggleStyle(.checkbox).font(appearanceTheme.font(size: 11))
                             .disabled(modeLocked)
@@ -100,7 +156,9 @@ struct AccountEditorView: View {
                     }
                 }
 
-                if launchMode == .browser {
+                }
+
+                if selectedMode == .browser {
                 VStack(alignment: .leading, spacing: 9) {
                     Text(L10n.text("Browser that keeps this login")).font(appearanceTheme.font(size: 12, weight: .medium))
                     if isNew {
@@ -126,30 +184,19 @@ struct AccountEditorView: View {
 
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "lock.shield").foregroundColor(palette.accent)
-                Text(L10n.text("Sign in directly in ChatGPT. AI Switcher does not read passwords, cookies, or conversations. Quota comes from this session's Codex backend."))
+                Text(agent == .chatgpt ? L10n.text("Sign in directly in ChatGPT. AI Switcher does not read passwords, cookies, or conversations. Quota comes from this session's Codex backend.") : L10n.text("Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."))
                     .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
             }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
                 .background(appearanceTheme.isPlayfulRetro ? palette.mint : palette.accent.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
                 .retroOutline(radius: appearanceTheme.radius(9), shadow: false)
 
             if isNew {
-                Toggle(L10n.text("Open ChatGPT to sign in after adding"), isOn: $openAfterSave)
+                Toggle(L10n.format("Open %@ after adding", agent.name), isOn: $openAfterSave)
                     .toggleStyle(.checkbox).font(appearanceTheme.font(size: 12))
             }
 
-            HStack {
-                Spacer()
-                Button(L10n.text("Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button { save() } label: { Text(isNew ? L10n.text("Add account") : L10n.text("Save changes")) }
-                    .buttonStyle(PrimaryButtonStyle(compact: true)).keyboardShortcut(.defaultAction)
-                    .disabled(!valid).opacity(valid ? 1 : 0.5).accessibilityIdentifier("saveAccount")
-            }
-        }
-        .textFieldStyle(.roundedBorder).foregroundColor(palette.ink)
-        .padding(30).frame(width: 500).background(appearanceTheme.isPlayfulRetro ? palette.canvas : palette.surface)
-        .appAppearance(model.preferences)
 
-        .onAppear { nameFocused = true }
+        }
     }
 
     private func field<Content: View>(_ title: String, detail: String, @ViewBuilder content: () -> Content) -> some View {
@@ -168,8 +215,11 @@ struct AccountEditorView: View {
         account.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         account.emailHint = email.trimmingCharacters(in: .whitespacesAndNewlines)
         account.color = color
-        account.launchMode = launchMode
-        account.sharesLocalWorkspace = sharesLocalWorkspace
+        account.launchMode = selectedMode
+        account.agent = agent
+        account.sharesLocalWorkspace = agent == .chatgpt && sharesLocalWorkspace
+        account.defaultAction = agent == .chatgpt ? defaultAction : .openDesktop
+        account.connectOnStartup = agent == .chatgpt && connectOnStartup
         guard model.saveAccount(account) else { return }
         dismiss()
         if isNew && openAfterSave { model.open(account) }

@@ -52,18 +52,26 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var launchMode: LaunchMode?
     public var desktopCodexConnection: CodexConnection?
     public var sharesLocalWorkspace: Bool?
+    public var defaultAction: AccountAction?
+    public var connectOnStartup: Bool?
+    public var agent: AIAgent?
 
-    public var effectiveLaunchMode: LaunchMode { launchMode ?? .desktop }
-    public var usesSharedLocalWorkspace: Bool { sharesLocalWorkspace == true }
+    public var effectiveAgent: AIAgent { agent ?? .chatgpt }
+    public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent.isSharedApplication ? .desktop : .browser }
+    public var usesCodexDesktop: Bool { effectiveAgent.supportsCodexQuota && effectiveLaunchMode == .desktop }
+    public var usesSharedLocalWorkspace: Bool { usesCodexDesktop && sharesLocalWorkspace == true }
+    public var effectiveDefaultAction: AccountAction { usesCodexDesktop ? defaultAction ?? .openDesktop : .openDesktop }
+    public var automaticallyConnects: Bool { usesCodexDesktop && connectOnStartup == true }
     public var displayedCodexConnection: CodexConnection? {
-        effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection
+        effectiveAgent.supportsCodexQuota ? (effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection) : nil
     }
 
     public init(id: UUID = UUID(), name: String, emailHint: String = "", browser: BrowserKind = .chrome,
                 color: AccountColor = .mint, isFavorite: Bool = false, createdAt: Date = Date(),
                 lastOpenedAt: Date? = nil, codexConnection: CodexConnection? = nil,
                 launchMode: LaunchMode? = nil, desktopCodexConnection: CodexConnection? = nil,
-                sharesLocalWorkspace: Bool? = nil) {
+                sharesLocalWorkspace: Bool? = nil, defaultAction: AccountAction? = nil, connectOnStartup: Bool? = nil,
+                agent: AIAgent? = nil) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.emailHint = emailHint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -76,6 +84,9 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
         self.launchMode = launchMode
         self.desktopCodexConnection = desktopCodexConnection
         self.sharesLocalWorkspace = sharesLocalWorkspace
+        self.defaultAction = defaultAction
+        self.connectOnStartup = connectOnStartup
+        self.agent = agent
     }
 
     public var initials: String {
@@ -124,7 +135,7 @@ public enum ProfileError: LocalizedError {
         case .duplicateID: return L10n.text("Two profiles have the same ID. The data file has been preserved for recovery.")
         case .invalidSelection: return L10n.text("The selected account is no longer in the list.")
         case .browserUnavailable(let name): return L10n.format("%@ was not found. Install this browser and try again.", String(describing: name))
-        case .browserLaunchFailed: return L10n.text("Could not open the ChatGPT window. Try again or check the browser.")
+        case .browserLaunchFailed: return L10n.text("Could not open the AI agent window. Try again or check the browser.")
         case .profileRunning: return L10n.text("This profile is still running. Close its browser session from the ⋯ menu before deleting it.")
         }
     }

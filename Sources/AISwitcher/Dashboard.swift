@@ -16,7 +16,7 @@ struct Dashboard: View {
                 Rectangle().fill(palette.line).frame(height: appearanceTheme.dividerWidth)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 27) {
-                        hero
+                        if model.preferences.workspaceLayout == .cards { hero }
                         if model.loadFailed { recoveryBanner }
                         accountSection
                         if model.accounts.isEmpty { setupSteps }
@@ -33,6 +33,8 @@ struct Dashboard: View {
         .sheet(item: $model.editor) { editor in AccountEditorView(model: model, editor: editor) }
         .sheet(isPresented: $model.showPreferences) { PreferencesView(model: model) }
         .sheet(isPresented: $model.showGuide) { GuideView().appAppearance(model.preferences) }
+        .sheet(isPresented: $model.showDiagnostics) { SessionDiagnosticsView(model: model).appAppearance(model.preferences) }
+        .sessionRestartConfirmation(model: model, enabled: !model.showDiagnostics)
         .sheet(isPresented: Binding(get: { model.quotaAccountID != nil }, set: { if !$0 { model.quotaAccountID = nil } })) {
             if let id = model.quotaAccountID { QuotaDetailView(model: model, accountID: id).appAppearance(model.preferences) }
         }
@@ -62,6 +64,14 @@ struct Dashboard: View {
     }
 
     private var sidebar: some View {
+        GeometryReader { geometry in
+            ScrollView {
+                sidebarContent.frame(minHeight: geometry.size.height, alignment: .top)
+            }
+        }
+    }
+
+    private var sidebarContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.triangle.swap")
@@ -76,8 +86,8 @@ struct Dashboard: View {
                     Text(L10n.text("One click to your account")).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                 }
             }
-            .padding(.top, 32)
-            .padding(.bottom, 38)
+            .padding(.top, 26)
+            .padding(.bottom, 24)
 
             Text(L10n.text("YOUR WORKSPACE"))
                 .font(appearanceTheme.font(size: 9, weight: .semibold)).tracking(1.4)
@@ -107,16 +117,24 @@ struct Dashboard: View {
                 .padding(.bottom, 4)
             }
 
+            VStack(alignment: .leading, spacing: 5) {
+                Text(L10n.text("AI AGENTS"))
+                    .font(appearanceTheme.font(size: 9, weight: .semibold)).tracking(1.4)
+                    .foregroundColor(palette.secondary).padding(.leading, 10).padding(.bottom, 5)
+                agentFilterRow(nil)
+                ForEach(AIAgent.allCases) { agent in agentFilterRow(agent) }
+            }.padding(.top, 20)
+
             if let account = model.lastOpened {
                 VStack(alignment: .leading, spacing: 13) {
                     Text(L10n.text("OPEN AGAIN")).font(appearanceTheme.font(size: 9, weight: .semibold)).tracking(1.2)
                         .foregroundColor(palette.secondary)
-                    Button { model.open(account) } label: {
+                    Button { model.performDefaultAction(account) } label: {
                         HStack(spacing: 10) {
                             AccountAvatar(account: account, size: 32)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(account.name).font(appearanceTheme.font(size: 12, weight: .medium)).lineLimit(1)
-                                Text(L10n.text("Open ChatGPT ↗")).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                                Text(model.defaultActionTitle(for: account)).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                             }
                             Spacer(minLength: 0)
                         }
@@ -133,13 +151,16 @@ struct Dashboard: View {
                 Button { model.showGuide = true } label: {
                     Label(L10n.text("How it works"), systemImage: "questionmark.circle").font(appearanceTheme.font(size: 12))
                 }.buttonStyle(ThemedPlainButtonStyle())
+                Button { model.showDiagnostics = true } label: {
+                    Label(L10n.text("Session diagnostics"), systemImage: "stethoscope").font(appearanceTheme.font(size: 12))
+                }.buttonStyle(ThemedPlainButtonStyle()).accessibilityIdentifier("openDiagnostics")
                 Button { model.revealData() } label: {
                     Label(L10n.text("Local data"), systemImage: "externaldrive").font(appearanceTheme.font(size: 12))
                 }.buttonStyle(ThemedPlainButtonStyle())
                 Rectangle().fill(palette.line).frame(height: appearanceTheme.dividerWidth)
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lock.shield").font(appearanceTheme.font(size: 13)).foregroundColor(palette.accent)
-                    Text(L10n.text("Each account has its own\nChatGPT Desktop session."))
+                    Text(L10n.text("Choose an agent to view its accounts and supported features."))
                         .font(appearanceTheme.font(size: 10)).lineSpacing(4).foregroundColor(palette.secondary)
                 }
             }
@@ -147,7 +168,26 @@ struct Dashboard: View {
             .padding(.horizontal, 10).padding(.bottom, 24)
         }
         .padding(.horizontal, 16)
-        .frame(maxHeight: .infinity)
+    }
+
+    private func agentFilterRow(_ agent: AIAgent?) -> some View {
+        let selected = model.preferences.agentFilter == agent
+        return Button { model.setAgentFilter(agent) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: agent?.symbol ?? "square.grid.2x2").frame(width: 18)
+                Text(agent?.name ?? L10n.text("All agents")).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(String(model.agentCount(agent))).monospacedDigit().font(appearanceTheme.font(size: 10))
+            }
+            .font(appearanceTheme.font(size: 12, weight: selected ? .semibold : .regular))
+            .padding(.horizontal, 11).padding(.vertical, 9)
+            .foregroundColor(selected || appearanceTheme.isPlayfulRetro ? palette.ink : palette.secondary)
+            .background(selected ? (appearanceTheme.isPlayfulRetro ? palette.blue : palette.accent.opacity(0.10)) : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(8)))
+            .retroOutline(radius: appearanceTheme.radius(8), shadow: false, enabled: selected)
+        }.buttonStyle(ThemedPlainButtonStyle())
+            .accessibilityIdentifier("agent-filter-\(agent?.rawValue ?? "all")")
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var toolbar: some View {
@@ -159,7 +199,7 @@ struct Dashboard: View {
                     Label("accounts.workspace", systemImage: "chevron.left.forwardslash.chevron.right").foregroundColor(palette.secondary)
                 } else { Text(L10n.text("Workspace")).foregroundColor(palette.secondary) }
                 Image(systemName: "chevron.right").font(appearanceTheme.font(size: 8, weight: .semibold)).foregroundColor(palette.secondary.opacity(0.6))
-                Text("ChatGPT").fontWeight(.medium)
+                Text(model.preferences.agentFilter?.name ?? L10n.text("All agents")).fontWeight(.medium)
             }.font(appearanceTheme.font(size: 11))
             Spacer()
             HStack(spacing: 7) {
@@ -229,7 +269,7 @@ struct Dashboard: View {
                             .padding(.horizontal, 7).padding(.vertical, 3).background(appearanceTheme.isPlayfulRetro ? palette.pink : palette.line.opacity(0.5))
                             .clipShape(Capsule()).retroOutline(radius: 100, shadow: false)
                     }
-                    Text(L10n.text("A separate login session for each account."))
+                    Text(L10n.text("Profiles grouped by your AI agents."))
                         .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
                 }
                 Spacer()
@@ -237,8 +277,20 @@ struct Dashboard: View {
                     .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.loadFailed)
                     .accessibilityIdentifier("addAccount")
             }
+            HStack(spacing: 14) {
+                Picker(L10n.text("Workspace view"), selection: Binding(get: { model.preferences.workspaceLayout }, set: { model.setWorkspaceLayout($0) })) {
+                    ForEach(WorkspaceLayout.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 290)
+                    .accessibilityIdentifier("workspaceLayout")
+                Spacer(minLength: 0)
+                Toggle(L10n.text("Quota-only mode"), isOn: Binding(get: { model.preferences.quotaOnlyMode }, set: { model.setQuotaOnlyMode($0) }))
+                    .toggleStyle(.switch).font(appearanceTheme.font(size: 11))
+                    .accessibilityIdentifier("quotaOnlyMode")
+            }
             if model.visibleAccounts.isEmpty {
                 emptyState
+            } else if model.preferences.workspaceLayout == .quotaTable {
+                QuotaOverviewView(model: model)
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 245), spacing: appearanceTheme.isPlayfulRetro ? 20 : 16, alignment: .top)], spacing: appearanceTheme.isPlayfulRetro ? 20 : 16) {
                     ForEach(model.visibleAccounts) { account in AccountCard(model: model, account: account) }
@@ -261,7 +313,7 @@ struct Dashboard: View {
                 Button { model.addAccount() } label: { Label(L10n.text("Get started"), systemImage: "plus") }
                     .buttonStyle(PrimaryButtonStyle(compact: true)).padding(.top, 3).disabled(model.loadFailed)
             } else {
-                Button(L10n.text("View all")) { model.search = ""; model.filter = .all }
+                Button(L10n.text("View all")) { model.search = ""; model.filter = .all; model.setAgentFilter(nil) }
                     .buttonStyle(ThemedPlainButtonStyle()).font(appearanceTheme.font(size: 12, weight: .medium)).foregroundColor(palette.accent)
             }
         }
@@ -277,7 +329,7 @@ struct Dashboard: View {
             Spacer()
             Image(systemName: "chevron.right").font(appearanceTheme.font(size: 10)).foregroundColor(palette.line)
             Spacer()
-            step("2", L10n.text("Sign in once"), L10n.text("Directly in ChatGPT"))
+            step("2", L10n.text("Sign in once"), L10n.text("Directly with your agent"))
             Spacer()
             Image(systemName: "chevron.right").font(appearanceTheme.font(size: 10)).foregroundColor(palette.line)
             Spacer()
@@ -335,8 +387,8 @@ private struct AccountCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
-                Button { model.open(account) } label: { AccountAvatar(account: account) }
-                    .buttonStyle(ThemedPlainButtonStyle()).help(L10n.format("Open %@", String(describing: account.name))).disabled(busy)
+                Button { model.performDefaultAction(account) } label: { AccountAvatar(account: account) }
+                    .buttonStyle(ThemedPlainButtonStyle()).help(model.defaultActionTitle(for: account)).disabled(busy)
                 Spacer()
                 Button { model.toggleFavorite(account) } label: {
                     Image(systemName: account.isFavorite ? "star.fill" : "star")
@@ -346,44 +398,53 @@ private struct AccountCard: View {
                 .buttonStyle(ThemedPlainButtonStyle()).help(account.isFavorite ? L10n.text("Remove from favorites") : L10n.text("Add to favorites"))
                 Menu {
                     Button(L10n.text("Edit profile…")) { model.editor = AccountEditor(account: account) }
-                    Button(L10n.text("Codex quota…")) { model.quotaAccountID = account.id }
+                    if account.effectiveAgent.supportsCodexQuota {
+                        Button(L10n.text("Codex quota…")) { model.quotaAccountID = account.id }
+                    }
                     if account.effectiveLaunchMode == .browser {
-                        Button(L10n.text("Open a new ChatGPT window")) { model.open(account, newWindow: true) }
+                        Button(L10n.format("Open a new %@ window", account.effectiveAgent.name)) { model.open(account, newWindow: true) }
                     }
                     Divider()
-                    if account.effectiveLaunchMode == .desktop {
+                    if account.usesCodexDesktop {
+                        Button(L10n.text("Open ChatGPT Desktop")) { model.open(account) }
                         Button(L10n.text("Connect account session")) { model.connectSession(account) }
                             .disabled(model.quotaBusyIDs.contains(account.id))
                     }
-                    Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled(!running || model.quotaBusyIDs.contains(account.id))
+                    Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled(account.effectiveAgent.isSharedApplication || !running || model.quotaBusyIDs.contains(account.id))
                     Button(L10n.text("Delete local profile…"), role: .destructive) { model.accountToDelete = account }
                         .disabled(model.quotaBusyIDs.contains(account.id) || model.pendingConnections[account.id] != nil)
                 } label: { Image(systemName: "ellipsis").font(appearanceTheme.font(size: 13, weight: .medium)).frame(width: 18, height: 24) }
                     .menuStyle(.borderlessButton).fixedSize().help(L10n.text("Profile options")).disabled(busy)
             }
 
-            Button { model.open(account) } label: {
+            Button { model.performDefaultAction(account) } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(account.name).font(appearanceTheme.font(size: 16, weight: .semibold)).foregroundColor(palette.ink).lineLimit(1)
-                    Text(account.emailHint.isEmpty ? L10n.text("Separate ChatGPT profile") : account.emailHint)
+                    Text(account.emailHint.isEmpty ? account.effectiveAgent.name : account.emailHint)
                         .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary).lineLimit(1)
                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.buttonStyle(ThemedPlainButtonStyle()).disabled(busy)
 
-            HStack(spacing: 5) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 5) {
                 Image(systemName: account.effectiveLaunchMode == .desktop ? "macwindow" : "globe").font(appearanceTheme.font(size: 10))
-                Text(account.effectiveLaunchMode == .desktop ? "ChatGPT Desktop" : account.browser.name).lineLimit(1).minimumScaleFactor(0.85)
-                Spacer()
-                Circle().fill(running ? palette.accent : palette.secondary.opacity(0.35)).frame(width: 4, height: 4)
-                Text(running ? L10n.text("Running") : account.lastOpenedAt == nil ? L10n.text("Not opened yet") : L10n.text("Profile saved")).lineLimit(1).minimumScaleFactor(0.85)
+                Text(account.effectiveAgent.name + " · " + (account.effectiveLaunchMode == .desktop ? L10n.text("Desktop") : account.browser.name)).lineLimit(1).minimumScaleFactor(0.85)
+                }
+                SessionStatusBadge(status: model.sessionStatus(for: account))
             }.font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
 
-            QuotaSummaryView(model: model, account: account)
+            if account.effectiveAgent.supportsCodexQuota {
+                QuotaSummaryView(model: model, account: account)
+            } else {
+                Text(account.effectiveAgent.supportDetail)
+                    .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            Button { model.open(account) } label: {
+            Button { model.performDefaultAction(account) } label: {
                 HStack(spacing: 7) {
                     if busy { ProgressView().controlSize(.mini).scaleEffect(0.8) }
-                    Text(busy ? (model.connectingSessionIDs.contains(account.id) ? L10n.text("Connecting session…") : L10n.text("Opening…")) : L10n.text("Open ChatGPT"))
+                    Text(model.defaultActionTitle(for: account)).lineLimit(1).minimumScaleFactor(0.8)
                     Spacer()
                     Image(systemName: "arrow.up.right").font(appearanceTheme.font(size: 10, weight: .semibold))
                 }
@@ -392,8 +453,8 @@ private struct AccountCard: View {
                 .background(appearanceTheme.isPlayfulRetro ? palette.surface : account.color.pale(for: appearanceTheme)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.isPlayfulRetro ? appearanceTheme.buttonRadius : appearanceTheme.radius(7)))
                 .retroOutline(radius: appearanceTheme.buttonRadius)
                 .contentShape(Rectangle())
-            }.buttonStyle(ThemedPlainButtonStyle()).disabled(busy)
-                .accessibilityLabel(L10n.format("Open ChatGPT with profile %@", String(describing: account.name)))
+            }.buttonStyle(ThemedPlainButtonStyle()).disabled(busy || (model.defaultAction(for: account) == .connectSession && model.quotaBusyIDs.contains(account.id)))
+                .accessibilityLabel(model.defaultActionTitle(for: account) + " · " + account.name)
         }
         .padding(20).background(appearanceTheme.isPlayfulRetro ? account.color.pale(for: appearanceTheme) : palette.surface).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)))
         .overlay(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)).stroke(hovering ? account.color.tint(for: appearanceTheme).opacity(0.4) : palette.line))

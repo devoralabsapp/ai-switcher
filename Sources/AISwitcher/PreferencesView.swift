@@ -8,6 +8,22 @@ struct PreferencesView: View {
     private var palette: ThemePalette { ThemePalette(theme: appearanceTheme) }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ScrollView {
+                settingsContent.padding(.trailing, 4).padding(.bottom, 4)
+            }
+            HStack {
+                Text(L10n.text("Changes apply immediately and are saved for next time."))
+                    .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
+                Spacer()
+                Button(L10n.text("Done")) { dismiss() }.buttonStyle(PrimaryButtonStyle(compact: true)).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(28).frame(width: 580, height: 720).foregroundColor(palette.ink).background(palette.surface)
+        .appAppearance(model.preferences)
+    }
+
+    private var settingsContent: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
@@ -24,6 +40,17 @@ struct PreferencesView: View {
                     ForEach(AppLanguage.allCases) { Text($0.name).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("languagePicker")
             }
+            VStack(alignment: .leading, spacing: 9) {
+                Toggle(L10n.text("Quota-only mode"), isOn: Binding(get: { model.preferences.quotaOnlyMode }, set: { model.setQuotaOnlyMode($0) }))
+                    .toggleStyle(.switch).font(appearanceTheme.font(size: 13, weight: .semibold))
+                Text(L10n.text("Quota-only mode applies to ChatGPT Desktop profiles. Other agents keep their normal open action."))
+                    .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
+                Text(L10n.text("Choose startup connections and the default action for each account in Edit profile."))
+                    .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
+            }
+            .padding(14).background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(10)))
+            .retroOutline(radius: appearanceTheme.radius(10), shadow: false)
+            QuotaNotificationSettingsView(model: model)
             VStack(alignment: .leading, spacing: 12) {
                 Label(L10n.text("Theme"), systemImage: "paintpalette").font(appearanceTheme.font(size: 13, weight: .semibold))
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
@@ -35,15 +62,7 @@ struct PreferencesView: View {
                     }
                 }
             }
-            HStack {
-                Text(L10n.text("Changes apply immediately and are saved for next time."))
-                    .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
-                Spacer()
-                Button(L10n.text("Done")) { dismiss() }.buttonStyle(PrimaryButtonStyle(compact: true)).keyboardShortcut(.defaultAction)
-            }
         }
-        .padding(28).frame(width: 580).foregroundColor(palette.ink).background(palette.surface)
-        .appAppearance(model.preferences)
     }
 
     private func themeCard(_ theme: AppTheme) -> some View {

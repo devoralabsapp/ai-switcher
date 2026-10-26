@@ -11,12 +11,18 @@ struct DesktopInstallation {
 @MainActor
 protocol DesktopQuotaSource {
     func connectSession(_ account: Account) async throws
+    func closeSession(_ account: Account) async throws
+    func installationVersion() throws -> String
+    func hasDesktopWindow(_ account: Account) -> Bool
     func hasBackend(_ id: UUID) -> Bool
     func quotaClient(_ id: UUID) throws -> CodexRPCClient
     func persistedSessionQuotaClient(_ id: UUID) throws -> CodexRPCClient?
 }
 
 extension DesktopQuotaSource {
+    func closeSession(_ account: Account) async throws { throw DesktopProfileError.backendFailed }
+    func installationVersion() throws -> String { throw DesktopProfileError.appMissing }
+    func hasDesktopWindow(_ account: Account) -> Bool { false }
     func persistedSessionQuotaClient(_ id: UUID) throws -> CodexRPCClient? { nil }
 }
 
@@ -27,6 +33,8 @@ final class DesktopService: DesktopQuotaSource {
     private var cachedArchiveDate: Date?
 
     init(repository: ProfileRepository) { self.repository = repository }
+    func installationVersion() throws -> String { try installation().version }
+    func closeSession(_ account: Account) async throws { try await close(account) }
 
     func installation() throws -> DesktopInstallation {
         let candidates = [URL(fileURLWithPath: "/Applications/ChatGPT.app"),
@@ -62,6 +70,10 @@ final class DesktopService: DesktopQuotaSource {
         // The CLI publishes a symlink to its short runtime socket.
         let socket = repository.desktopHomeURL(for: id).appendingPathComponent(DesktopLaunch.socketRelativePath).resolvingSymlinksInPath()
         return (try? FileManager.default.attributesOfItem(atPath: socket.path)[.type] as? FileAttributeType) == .typeSocket
+    }
+
+    func hasDesktopWindow(_ account: Account) -> Bool {
+        runningApplication(for: account).map { ManagedApplications.windowCount($0) > 0 } ?? false
     }
 
     @discardableResult

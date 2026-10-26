@@ -7,7 +7,7 @@ struct QuotaSummaryView: View {
     @ObservedObject var model: AppModel
     let account: Account
     private var needsDesktopSession: Bool {
-        account.effectiveLaunchMode == .desktop && !model.runningIDs.contains(account.id)
+        account.effectiveLaunchMode == .desktop && !model.backendIDs.contains(account.id)
     }
     private var emptyActionTitle: String {
         if needsDesktopSession { return L10n.text("Connect") }
@@ -20,7 +20,7 @@ struct QuotaSummaryView: View {
         }
         if model.connectingSessionIDs.contains(account.id) { return L10n.text("Connecting session…") }
         if model.quotaBusyIDs.contains(account.id) { return L10n.text("Reading Desktop quota…") }
-        if !model.runningIDs.contains(account.id) { return L10n.text("Connect session to read quota") }
+        if !model.backendIDs.contains(account.id) { return L10n.text("Connect session to read quota") }
         if let error = model.quotaErrors[account.id] {
             return (error as? CodexQuotaError) == .notSignedIn
                 ? L10n.text("Waiting for Desktop sign-in…")
@@ -37,7 +37,7 @@ struct QuotaSummaryView: View {
                     Spacer()
                     if model.quotaBusyIDs.contains(account.id) || model.connectingSessionIDs.contains(account.id) {
                         ProgressView().controlSize(.mini)
-                    } else if account.displayedCodexConnection != nil || (account.effectiveLaunchMode == .desktop && model.runningIDs.contains(account.id)) {
+                    } else if account.displayedCodexConnection != nil || (account.effectiveLaunchMode == .desktop && model.backendIDs.contains(account.id)) {
                         Button { model.refreshQuota(account) } label: { Image(systemName: "arrow.clockwise").font(appearanceTheme.font(size: 11)) }
                             .buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("Refresh Codex quota"))
                     }
@@ -162,6 +162,10 @@ struct QuotaDetailView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if let pending = model.pendingConnections[accountID] {
                         confirmation(pending)
+                    } else if let account, !account.effectiveAgent.supportsCodexQuota {
+                        Text(account.effectiveAgent.supportDetail).font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
+                        Button(account.effectiveAgent.openTitle) { model.open(account) }
+                            .buttonStyle(PrimaryButtonStyle(compact: true))
                     } else if let account, let connection = account.displayedCodexConnection {
                         connected(account, connection)
                     } else if let account {
@@ -183,7 +187,7 @@ struct QuotaDetailView: View {
         .padding(28).frame(width: 530, height: 600).background(appearanceTheme.isPlayfulRetro ? palette.canvas : palette.surface).foregroundColor(palette.ink)
 
         .onAppear {
-            if let account, account.effectiveLaunchMode == .desktop, model.runningIDs.contains(accountID) {
+            if let account, account.effectiveLaunchMode == .desktop, model.backendIDs.contains(accountID) {
                 model.refreshQuota(account)
             }
         }

@@ -5,22 +5,229 @@ import AISwitcherCore
 @MainActor
 final class DesktopQuotaDiscoveryTests: XCTestCase {
     private var root: URL!
+    private var defaultsSuite: String!
 
     override func setUpWithError() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("Desktop Quota \(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defaultsSuite = "ai-switcher-session-tests.\(UUID())"
     }
 
-    override func tearDownWithError() throws { try FileManager.default.removeItem(at: root) }
+    override func tearDownWithError() throws {
+        UserDefaults(suiteName: defaultsSuite)?.removePersistentDomain(forName: defaultsSuite)
+        try FileManager.default.removeItem(at: root)
+    }
 
-    private func setup(_ mode: String, launchMode: LaunchMode = .desktop) throws -> (AppModel, Account, FixtureDesktopQuotaSource) {
+    private func setup(_ mode: String, launchMode: LaunchMode = .desktop, notifications: (any QuotaNotificationSending)? = nil) throws -> (AppModel, Account, FixtureDesktopQuotaSource) {
         let account = Account(name: "Fixture", launchMode: launchMode)
         let data = root.appendingPathComponent("metadata")
         try ProfileRepository(root: data).save(AccountSnapshot(accounts: [account]))
         let home = root.appendingPathComponent(mode)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let source = FixtureDesktopQuotaSource(home: home)
-        return (AppModel(root: data, monitoring: false, desktopQuotaSource: source), account, source)
+        return (AppModel(root: data, monitoring: false, desktopQuotaSource: source,
+                         preferencesStore: AppPreferencesStore(defaults: UserDefaults(suiteName: defaultsSuite)!), notifications: notifications), account, source)
+    }
+
+    func testQuotaNotificationsRequestPermissionAndDeliverOnlyFreshTransitions() async throws {
+        let notifications = FixtureNotifications()
+        let (model, account, source) = try setup("quota-alerts", notifications: notifications)
+        model.setQuotaAlertThreshold(80)
+        await model.setQuotaNotifications(true)
+        XCTAssertEqual(notifications.requests, 1)
+        XCTAssertTrue(model.preferences.quotaAlerts.enabled)
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(notifications.events.map(\.kind), [.low])
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(notifications.events.count, 1, "Repeated low readings must not spam")
+        try Data("5".utf8).write(to: source.home.appendingPathComponent("used-percent"))
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(notifications.events.map(\.kind), [.low, .recovered])
+        await model.setQuotaNotifications(false)
+        XCTAssertEqual(notifications.clears, 1)
+        try Data("99".utf8).write(to: source.home.appendingPathComponent("used-percent"))
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(notifications.events.count, 2)
+        await model.shutdownQuota()
+    }
+
+    func testDeniedNotificationsDoNotEnableOrSend() async throws {
+        let notifications = FixtureNotifications()
+        notifications.value = .denied
+        let (model, account, _) = try setup("alerts-denied", notifications: notifications)
+        await model.setQuotaNotifications(true)
+        XCTAssertFalse(model.preferences.quotaAlerts.enabled)
+        XCTAssertEqual(model.notificationPermission, .denied)
+        XCTAssertEqual(notifications.requests, 0)
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertTrue(notifications.events.isEmpty)
+        await model.shutdownQuota()
+    }
+
+    func testRestartOnlyStopsAndConnectsSelectedAccountWithoutChangingRecents() async throws {
+        let (model, account, source) = try setup("restart-session")
+        let other = Account(name: "Other", launchMode: .desktop)
+        XCTAssertTrue(model.saveAccount(other))
+        model.restartSession(account)
+        model.restartSession(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.closedIDs, [account.id])
+        XCTAssertEqual(source.connectedIDs, [account.id])
+        XCTAssertEqual(source.reads, 1)
+        XCTAssertNotNil(model.accounts.first(where: { $0.id == account.id })?.desktopCodexConnection?.quota)
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        XCTAssertTrue(model.closingSessionIDs.isEmpty)
+        XCTAssertTrue(model.connectingSessionIDs.isEmpty)
+        XCTAssertEqual(model.sessionStatus(for: account), .background)
+        await model.shutdownQuota()
+    }
+
+    func testRestartRefusalKeepsDataAndDoesNotStartAnotherBackend() async throws {
+        let (model, account, source) = try setup("restart-refused")
+        source.closeError = DesktopProfileError.profileRunning
+        let before = model.snapshot
+        model.restartSession(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.closedIDs, [account.id])
+        XCTAssertTrue(source.connectedIDs.isEmpty)
+        XCTAssertEqual(model.snapshot, before)
+        XCTAssertNotNil(model.quotaErrors[account.id])
+        await model.shutdownQuota()
+    }
+
+    func testDiagnosticsAreReadOnlyAndReportCompatibility() async throws {
+        let (model, _, source) = try setup("diagnostics")
+        let before = model.snapshot
+        model.refreshDiagnostics()
+        XCTAssertEqual(model.desktopCompatibility, .available("fixture"))
+        XCTAssertEqual(source.reads, 0)
+        XCTAssertEqual(source.connects, 0)
+        XCTAssertEqual(model.snapshot, before)
+        source.compatibilityError = DesktopProfileError.unsupportedApp
+        model.refreshDiagnostics()
+        guard case .unavailable? = model.desktopCompatibility else { return XCTFail("Should report incompatible Desktop") }
+        XCTAssertEqual(model.snapshot, before)
+        await model.shutdownQuota()
+    }
+
+    func testMenuBarHasQuotaAndTargetedQuickActions() async throws {
+        let (model, account, _) = try setup("quick-menu")
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        let menu = AccountQuickMenu.make(account: model.accounts[0], model: model, target: AppDelegate())
+        let selectors = menu.items.compactMap { $0.action.map(NSStringFromSelector) }
+        XCTAssertTrue(selectors.contains("openDesktopAccount:"))
+        XCTAssertTrue(selectors.contains("connectAccount:"))
+        XCTAssertTrue(selectors.contains("closeAccount:"))
+        XCTAssertTrue(selectors.contains("showAccountQuota:"))
+        XCTAssertTrue(menu.items.contains { $0.title.contains("77") && $0.action == nil })
+        for item in menu.items where item.action != nil { XCTAssertEqual(item.representedObject as? UUID, account.id) }
+        await model.shutdownQuota()
+    }
+
+    func testQuotaOnlyModeChangesDefaultActionWithoutOpeningDesktopAndPersistsView() async throws {
+        let (model, account, source) = try setup("quota-only")
+        source.running = false
+        XCTAssertEqual(model.defaultAction(for: account), .openDesktop)
+        model.setQuotaOnlyMode(true)
+        XCTAssertEqual(model.preferences.workspaceLayout, .quotaTable)
+        XCTAssertEqual(model.defaultAction(for: account), .connectSession)
+        model.performDefaultAction(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.connects, 1)
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        let stored = AppPreferencesStore(defaults: UserDefaults(suiteName: defaultsSuite)!).load()
+        XCTAssertTrue(stored.quotaOnlyMode)
+        XCTAssertEqual(stored.workspaceLayout, .quotaTable)
+        model.setQuotaOnlyMode(false)
+        XCTAssertEqual(model.defaultAction(for: account), .openDesktop)
+        var edited = model.accounts[0]
+        edited.defaultAction = .connectSession
+        XCTAssertTrue(model.saveAccount(edited))
+        XCTAssertEqual(model.defaultAction(for: model.accounts[0]), .connectSession)
+        let browser = Account(name: "Browser", launchMode: .browser, defaultAction: .connectSession)
+        model.setQuotaOnlyMode(true)
+        XCTAssertEqual(model.defaultAction(for: browser), .openDesktop)
+        await model.shutdownQuota()
+    }
+
+    func testStartupOnlyConnectsOptedInDesktopProfilesOnceAndKeepsRecents() async throws {
+        let (model, original, source) = try setup("startup-selected")
+        source.running = false
+        var selected = original
+        selected.connectOnStartup = true
+        let unselected = Account(name: "Not selected", launchMode: .desktop)
+        let browser = Account(name: "Browser", launchMode: .browser, connectOnStartup: true)
+        XCTAssertTrue(model.saveAccount(selected))
+        XCTAssertTrue(model.saveAccount(unselected))
+        XCTAssertTrue(model.saveAccount(browser))
+        await model.connectStartupAccounts()
+        await model.connectStartupAccounts()
+        XCTAssertEqual(source.connectedIDs, [selected.id])
+        XCTAssertEqual(source.reads, 1)
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        XCTAssertNil(model.accounts.first(where: { $0.id == unselected.id })?.desktopCodexConnection)
+        XCTAssertNil(model.accounts.first(where: { $0.id == browser.id })?.codexConnection)
+        await model.shutdownQuota()
+    }
+
+    func testStartupFailureIsVisibleInStatusWithoutAnAlertOrDesktopLaunch() async throws {
+        let (model, account, source) = try setup("startup-error")
+        source.running = false
+        source.connectError = DesktopProfileError.backendFailed
+        var edited = account
+        edited.connectOnStartup = true
+        XCTAssertTrue(model.saveAccount(edited))
+        await model.connectStartupAccounts()
+        XCTAssertEqual(model.sessionStatus(for: edited), .connectionFailed)
+        XCTAssertNotNil(model.quotaErrors[account.id])
+        XCTAssertNil(model.notice)
+        XCTAssertNil(model.snapshot.lastOpenedID)
+        await model.shutdownQuota()
+    }
+
+    func testSessionStatusSeparatesBackgroundWindowsDisconnectedAndSignedOut() async throws {
+        let (model, account, source) = try setup("session-status")
+        source.running = false
+        model.refreshRunning()
+        XCTAssertEqual(model.sessionStatus(for: account), .disconnected)
+        source.running = true
+        model.refreshRunning()
+        XCTAssertEqual(model.sessionStatus(for: account), .background)
+        source.windowOpen = true
+        model.refreshRunning()
+        XCTAssertEqual(model.sessionStatus(for: account), .desktopOpen)
+        source.windowOpen = false
+        source.daemonSignedOut = true
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(model.sessionStatus(for: account), .needsSignIn)
+        source.daemonSignedOut = false
+        model.refreshQuota(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(model.sessionStatus(for: account), .background)
+        await model.shutdownQuota()
+    }
+
+    func testQuotaSortSelectionAndDirectionPersist() async throws {
+        let (model, _, _) = try setup("sort-preferences")
+        model.setQuotaSort(.nextReset)
+        XCTAssertTrue(model.preferences.quotaSortAscending)
+        model.setQuotaSort(.nextReset)
+        XCTAssertFalse(model.preferences.quotaSortAscending)
+        model.setQuotaSort(.lastUpdated)
+        XCTAssertFalse(model.preferences.quotaSortAscending)
+        model.setWorkspaceLayout(.quotaTable)
+        let saved = AppPreferencesStore(defaults: UserDefaults(suiteName: defaultsSuite)!).load()
+        XCTAssertEqual(saved.quotaSortKey, .lastUpdated)
+        XCTAssertFalse(saved.quotaSortAscending)
+        XCTAssertEqual(saved.workspaceLayout, .quotaTable)
+        await model.shutdownQuota()
     }
 
     private func waitForQuota(_ model: AppModel, account: Account) async throws {
@@ -232,7 +439,12 @@ private final class FixtureDesktopQuotaSource: DesktopQuotaSource {
     var daemonSignedOut = false
     var persistedSessionEnabled = false
     var connectError: Error?
+    var closeError: Error?
+    var compatibilityError: Error?
+    private(set) var closedIDs: [UUID] = []
     var connectDelay: UInt64 = 0
+    var windowOpen = false
+    private(set) var connectedIDs: [UUID] = []
     private(set) var connects = 0
     private(set) var reads = 0
     private(set) var persistedReads = 0
@@ -241,12 +453,24 @@ private final class FixtureDesktopQuotaSource: DesktopQuotaSource {
 
     func connectSession(_ account: Account) async throws {
         connects += 1
+        connectedIDs.append(account.id)
         if connectDelay > 0 { try await Task.sleep(nanoseconds: connectDelay) }
         if let connectError { throw connectError }
         running = true
     }
 
     func hasBackend(_ id: UUID) -> Bool { running }
+    func hasDesktopWindow(_ account: Account) -> Bool { windowOpen }
+    func installationVersion() throws -> String {
+        if let compatibilityError { throw compatibilityError }
+        return "fixture"
+    }
+    func closeSession(_ account: Account) async throws {
+        closedIDs.append(account.id)
+        if let closeError { throw closeError }
+        running = false
+        windowOpen = false
+    }
 
     func quotaClient(_ id: UUID) throws -> CodexRPCClient {
         reads += 1
@@ -264,4 +488,16 @@ private final class FixtureDesktopQuotaSource: DesktopQuotaSource {
         return CodexRPCClient(executable: URL(fileURLWithPath: "/usr/bin/python3"), home: home,
                               arguments: ["-u", fixture.path] + (signedOut ? ["--signed-out"] : []), timeout: 2)
     }
+}
+
+@MainActor
+private final class FixtureNotifications: QuotaNotificationSending {
+    var value: QuotaNotificationPermission = .notRequested
+    var requests = 0
+    var clears = 0
+    var events: [QuotaAlertEvent] = []
+    func permission() async -> QuotaNotificationPermission { value }
+    func requestPermission() async throws -> Bool { requests += 1; value = .allowed; return true }
+    func send(_ events: [QuotaAlertEvent], accountName: String, sound: Bool) async throws { self.events += events }
+    func clearPending() { clears += 1 }
 }

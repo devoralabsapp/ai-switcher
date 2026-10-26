@@ -273,3 +273,199 @@
 "Connect this account session to read quota in the background without opening ChatGPT Desktop. Your saved sign-in is reused." = "Connect this account session to read quota in the background without opening ChatGPT Desktop. Your saved sign-in is reused.";
 
 "For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window." = "For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window.";
+
+"Account cards" = "Account cards";
+
+"Actions" = "Actions";
+
+"Ascending" = "Ascending";
+
+"Browser running" = "Browser running";
+
+"Choose startup connections and the default action for each account in Edit profile." = "Choose startup connections and the default action for each account in Edit profile.";
+
+"Closing session…" = "Closing session…";
+
+"Connect in background" = "Connect in background";
+
+"Connect in background when AI Switcher starts" = "Connect in background when AI Switcher starts";
+
+"Connection failed" = "Connection failed";
+
+"Default account action" = "Default account action";
+
+"Default account actions connect in the background. Open ChatGPT remains available in each account's menu." = "Default account actions connect in the background. Open ChatGPT remains available in each account's menu.";
+
+"Descending" = "Descending";
+
+"Desktop window open" = "Desktop window open";
+
+"Disconnected" = "Disconnected";
+
+"Each row shows one limit group. Open Details to see every group and reset time." = "Each row shows one limit group. Open Details to see every group and reset time.";
+
+"Last updated" = "Last updated";
+
+"Long window" = "Long window";
+
+"Next reset" = "Next reset";
+
+"Not sorted" = "Not sorted";
+
+"Quota overview" = "Quota overview";
+
+"Quota-only mode" = "Quota-only mode";
+
+"Quota-only mode currently overrides this action to Connect in background." = "Quota-only mode currently overrides this action to Connect in background.";
+
+"Running in background" = "Running in background";
+
+"Select a column heading to sort. Missing or outdated values appear last." = "Select a column heading to sort. Missing or outdated values appear last.";
+
+"Short window" = "Short window";
+
+"Sign-in required" = "Sign-in required";
+
+"Uses the saved sign-in without opening Desktop. Sign in once first using Open ChatGPT." = "Uses the saved sign-in without opening Desktop. Sign in once first using Open ChatGPT.";
+
+"Workspace view" = "Workspace view";
+
+"A quota notification could not be delivered. Check macOS notification settings." = "A quota notification could not be delivered. Check macOS notification settings.";
+
+"ChatGPT Desktop compatibility" = "ChatGPT Desktop compatibility";
+
+"Check again" = "Check again";
+
+"Check notification permission" = "Check notification permission";
+
+"Checking…" = "Checking…";
+
+"Checks use session status, app compatibility, and the last quota result. Passwords, tokens, and conversation contents are not inspected." = "Checks use session status, app compatibility, and the last quota result. Passwords, tokens, and conversation contents are not inspected.";
+
+"Could not enable notifications. Try again from the packaged app." = "Could not enable notifications. Try again from the packaged app.";
+
+"Desktop %@ · required session features found" = "Desktop %@ · required session features found";
+
+"Install %@ to use this browser profile." = "Install %@ to use this browser profile.";
+
+"Install or update the compatible ChatGPT Desktop app, then choose Check again. Browser profiles remain available." = "Install or update the compatible ChatGPT Desktop app, then choose Check again. Browser profiles remain available.";
+
+"Last check: %@" = "Last check: %@";
+
+"Low quota: %@%% remaining" = "Low quota: %@%% remaining";
+
+"No session error reported. Use Retry to read current quota." = "No session error reported. Use Retry to read current quota.";
+
+"Notification permission has not been requested." = "Notification permission has not been requested.";
+
+"Notifications are allowed by macOS." = "Notifications are allowed by macOS.";
+
+"Notifications are blocked. Enable AI Switcher in macOS System Settings → Notifications." = "Notifications are blocked. Enable AI Switcher in macOS System Settings → Notifications.";
+
+"Notify at or below %@%% remaining" = "Notify at or below %@%% remaining";
+
+"Notify when quota recovers above the threshold" = "Notify when quota recovers above the threshold";
+
+"Only fresh quota reads trigger alerts. Reset times alone never trigger recovery notifications. AI Switcher must be running." = "Only fresh quota reads trigger alerts. Reset times alone never trigger recovery notifications. AI Switcher must be running.";
+
+"Open the packaged AI Switcher app to use notifications." = "Open the packaged AI Switcher app to use notifications.";
+
+"Profile storage could not be verified. Reconnect and restart are disabled to preserve its data." = "Profile storage could not be verified. Reconnect and restart are disabled to preserve its data.";
+
+"Quota notifications" = "Quota notifications";
+
+"Quota recovered: %@%% remaining" = "Quota recovered: %@%% remaining";
+
+"Quota update · %@" = "Quota update · %@";
+
+"Reset: %@" = "Reset: %@";
+
+"Restart in background" = "Restart in background";
+
+"Restart session…" = "Restart session…";
+
+"Restart this account session?" = "Restart this account session?";
+
+"Restarted background session %@. Your login is kept." = "Restarted background session %@. Your login is kept.";
+
+"Session diagnostics" = "Session diagnostics";
+
+"The session is stopped. Retry connects in the background using the saved sign-in." = "The session is stopped. Retry connects in the background using the saved sign-in.";
+
+"Windows for “%@” will close. Send or copy drafts first. Only this profile restarts in the background; your saved sign-in is kept." = "Windows for “%@” will close. Send or copy drafts first. Only this profile restarts in the background; your saved sign-in is kept.";
+
+"Default: %@" = "Default: %@";
+
+"%@ is not installed. Install the app, then try again." = "%@ is not installed. Install the app, then try again.";
+
+"AI AGENTS" = "AI AGENTS";
+
+"AI agent" = "AI agent";
+
+"All agents" = "All agents";
+
+"An Antigravity entry already exists. Edit it from the agent filter." = "An Antigravity entry already exists. Edit it from the agent filter.";
+
+"Antigravity uses one shared application sign-in. Edit the existing Antigravity entry instead." = "Antigravity uses one shared application sign-in. Edit the existing Antigravity entry instead.";
+
+"Choose an AI agent and give its account a recognizable name." = "Choose an AI agent and give its account a recognizable name.";
+
+"Choose an agent to view its accounts and supported features." = "Choose an agent to view its accounts and supported features.";
+
+"Desktop" = "Desktop";
+
+"Desktop sessions, browser profiles, and Codex quota" = "Desktop sessions, browser profiles, and Codex quota";
+
+"Directly with your agent" = "Directly with your agent";
+
+"Not available" = "Not available";
+
+"Open %@ after adding" = "Open %@ after adding";
+
+"Open a new %@ window" = "Open a new %@ window";
+
+"Open agent" = "Open agent";
+
+"Opens the installed app with its own shared sign-in. Separate account switching and quota are not available." = "Opens the installed app with its own shared sign-in. Separate account switching and quota are not available.";
+
+"Quota is not available for this agent." = "Quota is not available for this agent.";
+
+"Separate browser sign-in for each profile. Quota and background connections are not available for this agent." = "Separate browser sign-in for each profile. Quota and background connections are not available for this agent.";
+
+"Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations." = "Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations.";
+
+"The agent is fixed for existing profiles. Create another profile to use a different agent." = "The agent is fixed for existing profiles. Create another profile to use a different agent.";
+
+"The agent of an existing profile cannot change. Create a new profile instead." = "The agent of an existing profile cannot change. Create a new profile instead.";
+
+"Shared application sign-in" = "Shared application sign-in";
+
+"Separate browser profile" = "Separate browser profile";
+
+"Could not open the AI agent window. Try again or check the browser." = "Could not open the AI agent window. Try again or check the browser.";
+
+"Quota alerts currently apply to ChatGPT/Codex accounts only." = "Quota alerts currently apply to ChatGPT/Codex accounts only.";
+
+"Quota-only mode applies to ChatGPT Desktop profiles. Other agents keep their normal open action." = "Quota-only mode applies to ChatGPT Desktop profiles. Other agents keep their normal open action.";
+
+"Application running" = "Application running";
+
+"Your AI accounts.\nOne workspace." = "Your AI accounts.\nOne workspace.";
+
+"Choose an AI agent" = "Choose an AI agent";
+
+"Choose an agent when adding a profile. Claude, Gemini, Perplexity, and DeepSeek use separate browser profiles; sign in directly on their websites." = "Choose an agent when adding a profile. Claude, Gemini, Perplexity, and DeepSeek use separate browser profiles; sign in directly on their websites.";
+
+"Check agent capabilities" = "Check agent capabilities";
+
+"ChatGPT supports Desktop sessions and Codex quota. Antigravity opens its installed app with a shared sign-in; it does not switch separate accounts. Other agents currently have no quota or background connection." = "ChatGPT supports Desktop sessions and Codex quota. Antigravity opens its installed app with a shared sign-in; it does not switch separate accounts. Other agents currently have no quota or background connection.";
+
+"Filter and return" = "Filter and return";
+
+"Use the AI AGENTS section in the left sidebar. Agent filters combine with Favorites, Recent, and search. Open a profile from its card or the menu bar." = "Use the AI AGENTS section in the left sidebar. Agent filters combine with Favorites, Recent, and search. Open a profile from its card or the menu bar.";
+
+"ChatGPT Desktop notes" = "ChatGPT Desktop notes";
+
+"Profiles grouped by your AI agents." = "Profiles grouped by your AI agents.";
+
+"AI Switcher — your AI accounts" = "AI Switcher — your AI accounts";

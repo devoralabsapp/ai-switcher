@@ -39,9 +39,16 @@ final class LocalWebSocketTests: XCTestCase {
         server.standardError = FileHandle.standardError
         try server.run()
         defer { if server.isRunning { server.terminate() } }
-        for _ in 0..<100 {
+        // Python startup can exceed two seconds on a busy macOS host. Wait for
+        // the socket explicitly rather than launching the bridge before bind.
+        let readinessDeadline = Date().addingTimeInterval(10)
+        while Date() < readinessDeadline && server.isRunning {
             if FileManager.default.fileExists(atPath: socket.path) { break }
             try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        guard FileManager.default.fileExists(atPath: socket.path) else {
+            XCTFail("WebSocket fixture did not create its socket before the deadline")
+            return
         }
         let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let binary = project.appendingPathComponent(".build/debug/AISwitcher")

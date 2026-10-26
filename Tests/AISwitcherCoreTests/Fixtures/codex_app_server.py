@@ -42,7 +42,8 @@ for line in sys.stdin:
         if mode == 'error':
             emit({'id': message['id'], 'error': {'code': -32001, 'message': 'private-detail-do-not-display'}})
             continue
-        result = {'accountId': mode, 'rateLimits': {'limitId': 'codex', 'primary': {'usedPercent': 23, 'windowDurationMins': 300, 'resetsAt': 2000000000}}}
+        used = float((home / 'used-percent').read_text()) if (home / 'used-percent').exists() else 23
+        result = {'accountId': mode, 'rateLimits': {'limitId': 'codex', 'primary': {'usedPercent': used, 'windowDurationMins': 300, 'resetsAt': 2000000000}}}
     elif method == 'account/login/start':
         # Deliberately deliver the completion before its request response.
         emit({'method': 'account/login/completed', 'params': {'loginId': 'fixture-login', 'success': True}})

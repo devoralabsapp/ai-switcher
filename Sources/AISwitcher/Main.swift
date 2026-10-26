@@ -60,7 +60,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 Darwin.exit(0)
             } catch { fputs("Preview render failed: \(error.localizedDescription)\n", stderr); Darwin.exit(1) }
         }
-        model = AppModel(root: root)
+        let notifications = QuotaNotificationService()
+        notifications.onSelectAccount = { [weak self] id in
+            guard let self, self.model.accounts.contains(where: { $0.id == id }) else { return }
+            self.showDashboard()
+            self.model.quotaAccountID = id
+        }
+        model = AppModel(root: root, notifications: notifications)
         NSApp.appearance = model.preferences.theme.nsAppearance
         buildMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -68,10 +74,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let icon = NSImage(systemSymbolName: "arrow.triangle.swap", accessibilityDescription: "AI Switcher")
             icon?.isTemplate = true
             button.image = icon
-            button.toolTip = L10n.text("AI Switcher — switch ChatGPT accounts")
+            button.toolTip = L10n.text("AI Switcher — your AI accounts")
         }
         rebuildStatusMenu()
-        subscription = model.$snapshot.combineLatest(model.$runningIDs, model.$launchingIDs, model.$quotaErrors)
+        subscription = model.objectWillChange
             .receive(on: RunLoop.main).sink { [weak self] _ in self?.rebuildStatusMenu() }
         noticeSubscription = model.$notice.compactMap { $0 }.receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.showDashboard() }
@@ -139,14 +145,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NotificationCenter.default.post(name: .focusAccountSearch, object: nil)
     }
 
-    @objc private func openAccount(_ sender: NSMenuItem) {
+    @objc func openAccount(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID,
               let account = model.accounts.first(where: { $0.id == id }) else { return }
-        model.open(account)
+        model.performDefaultAction(account)
+    }
+
+    private func account(from sender: NSMenuItem) -> Account? {
+        guard let id = sender.representedObject as? UUID else { return nil }
+        return model.accounts.first(where: { $0.id == id })
+    }
+    @objc func openDesktopAccount(_ sender: NSMenuItem) {
+        if let account = account(from: sender) { model.open(account) }
+    }
+    @objc func connectAccount(_ sender: NSMenuItem) {
+        if let account = account(from: sender) { model.connectSession(account) }
+    }
+    @objc func refreshAccountQuota(_ sender: NSMenuItem) {
+        if let account = account(from: sender) { model.refreshQuota(account) }
+    }
+    @objc func showAccountQuota(_ sender: NSMenuItem) {
+        guard let account = account(from: sender), account.effectiveAgent.supportsCodexQuota else { return }
+        showDashboard()
+        model.quotaAccountID = account.id
+    }
+    @objc func closeAccount(_ sender: NSMenuItem) {
+        guard let account = account(from: sender) else { return }
+        let alert = NSAlert()
+        alert.messageText = L10n.text("Close this account session?")
+        alert.informativeText = L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", account.name)
+        alert.addButton(withTitle: L10n.text("Cancel"))
+        alert.addButton(withTitle: L10n.text("Close session"))
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertSecondButtonReturn { model.closeSession(account) }
+    }
+    @objc func showSessionDiagnostics(_ sender: NSMenuItem) {
+        showDashboard()
+        model.showDiagnostics = true
     }
 
     @objc private func openLastAccount() {
-        if let account = model.lastOpened { model.open(account) }
+        if let account = model.lastOpened { model.performDefaultAction(account) }
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
@@ -154,8 +193,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         model.refreshRunning()
         for item in menu.items {
-            if let id = item.representedObject as? UUID, let account = model.accounts.first(where: { $0.id == id }) {
+            if item.submenu != nil, let id = item.representedObject as? UUID, let account = model.accounts.first(where: { $0.id == id }) {
                 item.title = statusTitle(account)
+                item.submenu = AccountQuickMenu.make(account: account, model: model, target: self)
             }
         }
     }
@@ -173,26 +213,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(empty)
         }
         for account in model.menuAccounts {
-            let busy = model.launchingIDs.contains(account.id)
             let item = NSMenuItem(title: statusTitle(account),
-                                  action: #selector(openAccount(_:)), keyEquivalent: "")
+                                  action: nil, keyEquivalent: "")
             item.target = self
             item.representedObject = account.id
-            item.isEnabled = !busy
+            item.isEnabled = true
+            item.submenu = AccountQuickMenu.make(account: account, model: model, target: self)
             item.state = model.snapshot.lastOpenedID == account.id ? .on : .off
             item.image = NSImage(systemSymbolName: account.isFavorite ? "star.fill" : "person.crop.circle", accessibilityDescription: nil)
-            item.toolTip = L10n.format("Open profile %@ with %@", String(describing: account.name), String(describing: account.effectiveLaunchMode == .desktop ? "ChatGPT Desktop" : account.browser.name))
+            item.toolTip = model.defaultActionTitle(for: account) + " · " + account.name
             menu.addItem(item)
         }
         menu.addItem(.separator())
         addItem(L10n.text("Add account…"), action: #selector(addAccount), to: menu)
         addItem(L10n.text("Manage accounts…"), action: #selector(showDashboard), to: menu)
+        addItem(L10n.text("Session diagnostics"), action: #selector(showSessionDiagnostics(_:)), to: menu)
         addItem(L10n.text("Appearance & Language…"), action: #selector(showPreferences), to: menu)
         menu.addItem(.separator())
         addItem(L10n.text("Quit AI Switcher"), action: #selector(quit), to: menu)
         statusItem?.menu = menu
         statusItem?.button?.toolTip = model.lastOpened.map { L10n.format("AI Switcher — last used: %@", String(describing: $0.name)) }
-            ?? L10n.text("AI Switcher — switch ChatGPT accounts")
+            ?? L10n.text("AI Switcher — your AI accounts")
         rebuildAccountMenu()
     }
 
@@ -210,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if !windows.isEmpty { quotaLabel = L10n.format("  ·  %@ remaining: ", String(describing: name)) + windows.joined(separator: " / ") }
             }
         }
-        return account.name + suffix + quotaLabel + (model.launchingIDs.contains(account.id) ? L10n.text("  (opening…)") : "")
+        return account.effectiveAgent.name + " · " + account.name + suffix + "  ·  " + model.sessionStatus(for: account).title + quotaLabel
     }
 
     private var accountMenu: NSMenu?
@@ -225,6 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addItem(L10n.text("Appearance & Language…"), action: #selector(showPreferences), key: ",", to: appMenu)
         appMenu.addItem(.separator())
         addItem(L10n.text("Manage accounts"), action: #selector(showDashboard), key: "0", to: appMenu)
+        addItem(L10n.text("Session diagnostics"), action: #selector(showSessionDiagnostics(_:)), to: appMenu)
         addItem(L10n.text("Add account…"), action: #selector(addAccount), key: "n", to: appMenu)
         appMenu.addItem(.separator())
         let hide = NSMenuItem(title: L10n.text("Hide AI Switcher"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
@@ -313,6 +355,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             } catch { await client.stop(); throw error }
             print("PASS: repeated session connection starts only the backend; no Desktop process or window is opened")
             print("PASS: quota handshake works with an isolated, signed-out session; existing accounts are untouched")
+            try await service.closeSession(account)
+            try await service.connectSession(account)
+            let restarted = Set(NSRunningApplication.runningApplications(withBundleIdentifier: DesktopLaunch.bundleIdentifier).map(\.processIdentifier))
+            guard service.hasBackend(account.id), service.runningApplication(for: account) == nil, restarted == existing else {
+                throw DesktopProfileError.launchFailed
+            }
+            print("PASS: the selected backend restarts in the background without opening Desktop")
         } catch { failure = error }
         do {
             try await service.close(account)
