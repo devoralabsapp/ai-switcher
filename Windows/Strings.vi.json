@@ -43,5 +43,9 @@
   "Shared Work artifacts folder (optional)": "Thư mục artifact Work dùng chung (tùy chọn)",
   "The shared workspace database could not be updated. Its data was preserved.": "Không cập nhật được chỉ mục dữ liệu dùng chung. Dữ liệu đã được giữ nguyên.",
   "Run AI Switcher without administrator privileges to connect background sessions.": "Hãy mở AI Switcher bằng quyền người dùng thường để kết nối phiên nền.",
-  "Close running sessions before changing their application executable.": "Hãy đóng các phiên đang chạy trước khi đổi đường dẫn ứng dụng."
+  "Close running sessions before changing their application executable.": "Hãy đóng các phiên đang chạy trước khi đổi đường dẫn ứng dụng.",
+  "The selected Codex executable is not a runnable CLI. Reset its path in Settings, open ChatGPT from Start once, then try again.": "File Codex đã chọn không phải CLI chạy được. Hãy đặt lại đường dẫn trong cài đặt, mở ChatGPT từ Start một lần rồi thử lại.",
+  "A runnable Codex CLI was not found. Open ChatGPT from the Windows Start menu once, then try again. You can also choose an installed Codex CLI in Settings.": "Chưa tìm thấy Codex CLI chạy được. Hãy mở ChatGPT từ menu Start của Windows một lần rồi thử lại. Bạn cũng có thể chọn Codex CLI đã cài trong cài đặt.",
+  "Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.": "Windows không khởi chạy được ứng dụng (mã lỗi %@). Hãy kiểm tra chẩn đoán phiên và đường dẫn ứng dụng trong cài đặt.",
+  "Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions.": "Windows từ chối truy cập ứng dụng hoặc thư mục hồ sơ. Hãy mở ChatGPT từ Start một lần rồi thử lại. Không cần đổi quyền thư mục WindowsApps."
 }

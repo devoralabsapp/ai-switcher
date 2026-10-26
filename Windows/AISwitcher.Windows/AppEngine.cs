@@ -43,7 +43,7 @@ internal sealed class AppEngine {
             Platform.InvalidateDiscovery();Repository.SavePreferences(Preferences);Notify();return true;
         }catch(Exception error){Error?.Invoke(Message(error));return false;}
     }
-    public string Message(Exception error)=>L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
+    public string Message(Exception error)=>error is System.ComponentModel.Win32Exception native?L.Format("Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.",native.NativeErrorCode):error is UnauthorizedAccessException?L["Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions."]:L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
     public bool Running(Account a)=>a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a)||Backend.HasSocket(a);
     public bool CanConnect(Account a)=>a.UsesCodexDesktop&&!ReadOnly&&!Busy.Contains(a.Id)&&!Running(a);
     public string Status(Account a)=>Busy.Contains(a.Id)?L["Working…"]:Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]?L["Sign-in required"]:a.Agent.IsShared()?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Backend.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
@@ -72,12 +72,14 @@ internal sealed class AppEngine {
     Account Current(Account a)=>Snapshot.Accounts.First(x=>x.Id==a.Id);
     async Task Run(Account a,Func<Task> action,bool report=true){
         if(ReadOnly||lifetime.IsCancellationRequested||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!Busy.Add(a.Id))return;Notify();
-        try{await action();Errors.Remove(a.Id);}catch(OperationCanceledException){}catch(Exception error){Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
+        try{Errors.Remove(a.Id);await action();}catch(OperationCanceledException){}catch(Exception error){Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
         finally{Busy.Remove(a.Id);try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}Notify();}
     }
     public Task OpenAsync(Account a)=>Run(a,async()=>{
-        if(a.UsesCodexDesktop)await Backend.StartAsync(a);
-        await Platform.OpenAsync(a);var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
+        string? backgroundError=null;
+        if(a.UsesCodexDesktop){Repository.PrepareQuota(a);Repository.PrepareProfile(a);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);try{await Backend.StartAsync(a);}catch(Exception error)when(error is AppError or System.ComponentModel.Win32Exception){backgroundError=Message(error);}}
+        await Platform.OpenAsync(a,useLocalDaemon:Backend.IsActive(a));var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
+        if(backgroundError!=null)Errors[a.Id]=backgroundError;
     });
     public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;return Run(a,async()=>{await Backend.StartAsync(a);await ReadAsync(a);},report);}
     public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,()=>ReadAsync(a),report);}

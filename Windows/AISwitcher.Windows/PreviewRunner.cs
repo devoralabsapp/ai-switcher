@@ -44,6 +44,12 @@ internal static class PreviewRunner {
     static async Task BackendFixtureAsync(string root,string output,string executable,bool stdio=false){
         var account=new Account{Name="Native backend smoke"};var repo=new Repository(root);repo.Save(new(){Accounts=[account]});var engine=new AppEngine(root);engine.Preferences.Executables["codex"]=executable;engine.Backend.FixtureDiagnostic=text=>File.AppendAllText(Path.Combine(output,"backend-smoke-error.txt"),text+"\n");
         if(stdio){try{
+            Require(!WindowsExecutable.IsConsole(Environment.ProcessPath!),"The Windows GUI must not be accepted as a console CLI");
+            var local=Path.Combine(root,"fake-local");var relocated=Path.Combine(local,"OpenAI","Codex","bin","fixture-hash","codex.exe");Directory.CreateDirectory(Path.GetDirectoryName(relocated)!);File.Copy(executable,relocated);
+            var protectedCli=Path.Combine(root,"WindowsApps","OpenAI.Codex_fixture","app","Codex.exe");Directory.CreateDirectory(Path.GetDirectoryName(protectedCli)!);File.Copy(executable,protectedCli);
+            var candidates=new[]{Environment.ProcessPath!,protectedCli}.Concat(CodexLocator.UserCandidates(local,Path.Combine(root,"fake-roaming")));
+            Require(await CodexLocator.ResolveAsync(candidates)==relocated,"Store/GUI candidates hid the runnable relocated CLI");
+            engine.Preferences.Executables["codex"]=relocated;
             if(NativePlatform.IsElevated()){try{await engine.Backend.StartAsync(account);throw new InvalidOperationException("Elevated daemon startup was accepted");}catch(AppError error)when(error.Key=="Run AI Switcher without administrator privileges to connect background sessions."){}}
             await using var client=await engine.Backend.StdioClientAsync(account);
             try{await client.ReadIdentityAsync();throw new InvalidOperationException("Fresh native Codex returned an existing identity");}catch(AppError error)when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}

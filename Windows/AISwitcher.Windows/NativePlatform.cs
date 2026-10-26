@@ -52,8 +52,9 @@ internal sealed class NativePlatform {
     public static bool SamePath(string a,string b)=>string.Equals(Path.GetFullPath(a),Path.GetFullPath(b),StringComparison.OrdinalIgnoreCase);
     public static string ExecutableKey(Account account)=>account.EffectiveMode==LaunchMode.Browser?account.Browser.ToString().ToLowerInvariant():account.Agent.Name().ToLowerInvariant();
     public async Task<string?> FindExecutableAsync(string key){
+        if(key=="codex")return await FindCodexAsync();
         if(preferences.Executables.TryGetValue(key,out var configured)&&!string.IsNullOrWhiteSpace(configured))return File.Exists(configured)&&Path.GetExtension(configured).Equals(".exe",StringComparison.OrdinalIgnoreCase)?Path.GetFullPath(configured):null;
-        if(discovered.TryGetValue(key,out var cached))return cached;
+        if(discovered.TryGetValue(key,out var cached)&&cached!=null&&File.Exists(cached))return cached;
         var local=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);var pf=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);var pf86=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
         List<string> candidates=key switch{
             "chrome"=>[Path.Combine(pf,"Google/Chrome/Application/chrome.exe"),Path.Combine(pf86,"Google/Chrome/Application/chrome.exe"),Path.Combine(local,"Google/Chrome/Application/chrome.exe")],
@@ -71,11 +72,19 @@ internal sealed class NativePlatform {
                 var baseDir=Path.Combine(local,"AnthropicClaude");if(Directory.Exists(baseDir))foreach(var version in Directory.EnumerateDirectories(baseDir,"app-*").OrderByDescending(x=>x))candidates.Add(Path.Combine(version,"Claude.exe"));
             }
         }
-        if(key=="codex"){
-            var desktop=await FindExecutableAsync("chatgpt");if(desktop!=null){var folder=Path.GetDirectoryName(desktop)!;foreach(var relative in new[]{"resources/codex.exe","resources/codex-cli/codex.exe","resources/codex-cli/bin/codex.exe"})candidates.Add(Path.Combine(folder,relative));}
-            foreach(var folder in (Environment.GetEnvironmentVariable("PATH")??"").Split(Path.PathSeparator))if(!string.IsNullOrWhiteSpace(folder))candidates.Add(Path.Combine(folder,"codex.exe"));
-        }
         return discovered[key]=candidates.FirstOrDefault(File.Exists);
+    }
+    async Task<string?> FindCodexAsync(){
+        if(preferences.Executables.TryGetValue("codex",out var configured)&&!string.IsNullOrWhiteSpace(configured)){
+            if(await CodexLocator.VerifyAsync(configured))return Path.GetFullPath(configured);
+            return null;
+        }
+        if(discovered.TryGetValue("codex",out var cached)&&cached!=null&&File.Exists(cached))return cached;
+        var local=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);var roaming=Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var candidates=CodexLocator.UserCandidates(local,roaming).ToList();
+        var desktop=await FindExecutableAsync("chatgpt");if(desktop!=null&&!WindowsExecutable.IsStorePath(desktop)){var folder=Path.GetDirectoryName(desktop)!;foreach(var relative in new[]{"resources/codex.exe","resources/codex-cli/codex.exe","resources/codex-cli/bin/codex.exe"})candidates.Add(Path.Combine(folder,relative));}
+        foreach(var folder in (Environment.GetEnvironmentVariable("PATH")??"").Split(Path.PathSeparator))if(!string.IsNullOrWhiteSpace(folder))candidates.Add(Path.Combine(folder.Trim('"'),"codex.exe"));
+        return discovered["codex"]=await CodexLocator.ResolveAsync(candidates);
     }
     static async Task<IReadOnlyList<string>> PackageLocationsAsync(string package){
         var info=new ProcessStartInfo("powershell.exe"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
@@ -92,7 +101,7 @@ internal sealed class NativePlatform {
         var bytes=File.ReadAllBytes(archive);var terms=agent==Agent.Chatgpt?new[]{"CODEX_ELECTRON_USER_DATA_PATH","CODEX_APP_SERVER_USE_LOCAL_DAEMON"}:new[]{"user-data-dir","requestSingleInstanceLock"};
         if(terms.Any(term=>bytes.AsSpan().IndexOf(Encoding.ASCII.GetBytes(term))<0))throw new AppError("The installed Desktop app does not expose the required profile isolation mechanisms.");
     }
-    public async Task OpenAsync(Account account,Uri? url=null){
+    public async Task OpenAsync(Account account,Uri? url=null,bool useLocalDaemon=true){
         var exe=await FindExecutableAsync(ExecutableKey(account))??throw new AppError("The required app or browser was not found. Choose its executable in Settings.");
         if(account.Agent.IsShared()) { Process.Start(new ProcessStartInfo(exe){UseShellExecute=true});return; }
         await RefreshProcessesAsync();var owned=Owned(account);
@@ -100,7 +109,8 @@ internal sealed class NativePlatform {
         if(account.EffectiveMode==LaunchMode.Desktop)VerifyIsolation(exe,account.Agent);
         repository.PrepareProfile(account);ProtectDirectory(repository.ProfilePath(account));
         var env=ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
-        if(account.UsesCodexDesktop){env["CODEX_ELECTRON_USER_DATA_PATH"]=repository.DataPath(account);env["CODEX_APP_SERVER_USE_LOCAL_DAEMON"]="1";if(account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.Database(preferences);}
+        if(account.UsesCodexDesktop){env["CODEX_ELECTRON_USER_DATA_PATH"]=repository.DataPath(account);if(useLocalDaemon)env["CODEX_APP_SERVER_USE_LOCAL_DAEMON"]="1";if(account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.Database(preferences);}
+        if(account.UsesCodexDesktop){try{var cli=await FindExecutableAsync("codex");if(cli!=null)env["CODEX_CLI_PATH"]=cli;}catch(AppError){/* The Desktop app can use its own packaged CLI while the selected external CLI is unavailable. */}}
         if(account.Agent==Agent.Claude&&account.EffectiveMode==LaunchMode.Desktop)env["CLAUDE_CONFIG_DIR"]=repository.CodeConfig(account);
         var arguments=new List<string>{"--user-data-dir="+repository.DataPath(account)};
         if(account.EffectiveMode==LaunchMode.Browser)arguments.AddRange(["--no-first-run","--no-default-browser-check","--disable-background-mode","--app="+(url??account.Agent.Url()).AbsoluteUri]);

@@ -38,7 +38,7 @@ internal sealed class BackendService {
     }
     public async Task<RpcClient> StdioClientAsync(Account account,CancellationToken ct=default){
         repository.PrepareQuota(account);NativePlatform.ProtectDirectory(repository.QuotaHome(account));
-        var cli=await platform.FindExecutableAsync("codex")??throw new AppError("Codex CLI was not found. Install it or choose an existing codex executable.");
+        var cli=await platform.FindExecutableAsync("codex")??throw new AppError("A runnable Codex CLI was not found. Open ChatGPT from the Windows Start menu once, then try again. You can also choose an installed Codex CLI in Settings.");
         var env=EnvironmentFor(account);
         var info=ChildEnvironment.StartInfo(cli,new[]{"app-server","--listen","stdio://","-c","cli_auth_credentials_store=\"file\"","-c","analytics.enabled=false"},env,repository.QuotaHome(account));
         var client=new RpcClient(new StdioTransport(info));try{await client.StartAsync(ct);return client;}catch{await client.DisposeAsync();throw;}
@@ -46,16 +46,16 @@ internal sealed class BackendService {
     public async Task<Connection> ReadAsync(Account account,CancellationToken ct=default){
         if(!account.Agent.HasQuota())throw new AppError("Quota is not available for this agent.");
         if(account.UsesCodexDesktop){
-            if(!IsActive(account))await StartAsync(account);
-            try{await using var local=await SocketClientAsync(account);return await local.ReadQuotaAsync(ct);}
+            if(!IsActive(account)&&platform.Owned(account)==null)await StartAsync(account);
+            try{if(!IsActive(account))throw new AppError("The Codex session is signed out or expired. Reconnect the account.");await using var local=await SocketClientAsync(account);return await local.ReadQuotaAsync(ct);}
             catch(AppError error) when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
         }
         await using var fallback=await StdioClientAsync(account,ct);return await fallback.ReadQuotaAsync(ct);
     }
-    public async Task StopAsync(Account account){if(!account.UsesCodexDesktop)return;repository.ValidateOwned(repository.QuotaHome(account),account.Id);if(!Directory.Exists(repository.QuotaHome(account)))return;await CommandAsync(account,"stop");active.Remove(account.Id);SharedWorkspace.Archive(account,repository);}
+    public async Task StopAsync(Account account){if(!account.UsesCodexDesktop)return;repository.ValidateOwned(repository.QuotaHome(account),account.Id);if(!Directory.Exists(repository.QuotaHome(account)))return;if(!IsActive(account)&&!HasSocket(account)){SharedWorkspace.Archive(account,repository);return;}await CommandAsync(account,"stop");active.Remove(account.Id);SharedWorkspace.Archive(account,repository);}
     Dictionary<string,string> EnvironmentFor(Account account){var env=ChildEnvironment.Create(NativePlatform.EnvironmentValues(),repository.QuotaHome(account));if(account.UsesCodexDesktop&&account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.BoundDatabase(account,repository,preferences);return env;}
     async Task CommandAsync(Account account,string action){
-        var cli=await platform.FindExecutableAsync("codex")??throw new AppError("Codex CLI was not found. Install it or choose an existing codex executable.");
+        var cli=await platform.FindExecutableAsync("codex")??throw new AppError("A runnable Codex CLI was not found. Open ChatGPT from the Windows Start menu once, then try again. You can also choose an installed Codex CLI in Settings.");
         var info=ChildEnvironment.StartInfo(cli,new[]{"app-server","daemon",action,"-c","cli_auth_credentials_store=\"file\"","-c","analytics.enabled=false"},EnvironmentFor(account),repository.QuotaHome(account));
         info.RedirectStandardOutput=true;info.RedirectStandardError=true;using var child=Process.Start(info)??throw new AppError("Could not start the profile backend.");
         var output=child.StandardOutput.ReadToEndAsync();var error=child.StandardError.ReadToEndAsync();

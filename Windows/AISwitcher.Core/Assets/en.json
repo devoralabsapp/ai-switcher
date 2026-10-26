@@ -414,5 +414,9 @@
   "Shared Work artifacts folder (optional)": "Shared Work artifacts folder (optional)",
   "The shared workspace database could not be updated. Its data was preserved.": "The shared workspace database could not be updated. Its data was preserved.",
   "Run AI Switcher without administrator privileges to connect background sessions.": "Run AI Switcher without administrator privileges to connect background sessions.",
-  "Close running sessions before changing their application executable.": "Close running sessions before changing their application executable."
+  "Close running sessions before changing their application executable.": "Close running sessions before changing their application executable.",
+  "The selected Codex executable is not a runnable CLI. Reset its path in Settings, open ChatGPT from Start once, then try again.": "The selected Codex executable is not a runnable CLI. Reset its path in Settings, open ChatGPT from Start once, then try again.",
+  "A runnable Codex CLI was not found. Open ChatGPT from the Windows Start menu once, then try again. You can also choose an installed Codex CLI in Settings.": "A runnable Codex CLI was not found. Open ChatGPT from the Windows Start menu once, then try again. You can also choose an installed Codex CLI in Settings.",
+  "Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.": "Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.",
+  "Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions.": "Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions."
 }

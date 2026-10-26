@@ -34,6 +34,12 @@ ChatGPT Desktop requires the newer compatible Electron app with Codex, its bundl
 
 **Desktop integrations are experimental.** Windows runtime checks use process/UI fixtures and signed-out native Codex RPC; live Windows ChatGPT/Claude sign-in, Store update behavior, OAuth/deep links, live quota, Claude Code/Cowork, and multi-profile shared Work artifacts still need field testing on machines with those apps. Local transcript/database sharing, allowlisted metadata projection, retained sidebar archives and an optional explicitly selected Work artifact folder are implemented. Vendor-specific Work UI behavior still needs field validation. A refused close reports an error and does not force-kill an app. Some apps keep running in their own tray after the last window closes; use that app's Quit action when requested. There is no promise of full vendor compatibility from an offline test run.
 
+## Microsoft Store troubleshooting
+
+If diagnostics finds `WindowsApps\OpenAI.Codex_...\app\ChatGPT.exe` but opening fails, open the official ChatGPT app from Windows Start once. This can prepare its runnable CLI in `%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\codex.exe`. AI Switcher searches that location and validates `codex-cli --version`; it rejects Store-protected executables, execution aliases and GUI binaries for quota operations. In Settings, reset a previously selected `codex` path or choose an installed native Codex CLI. An explicit Desktop open can proceed with the app's own backend when headless quota setup is unavailable. Per-profile storage stays separate.
+
+Preview 2 fixes CLI discovery and preserves numeric Windows launch errors in diagnostics. Store updates can change behavior; live Store sign-in/profile isolation still needs field verification. AI Switcher does not change WindowsApps ACLs or launch the default shared account as a fallback.
+
 ## Data
 
 Metadata and preferences: `%LOCALAPPDATA%\AISwitcher` by default. `--data-dir` selects a separate manager root. The root uses a current-user-only DACL, and a file lease prevents simultaneous managers writing the same root. Profile storage carries a root/UUID ownership marker; reuse, close and deletion reject mismatched ownership/reparse points.

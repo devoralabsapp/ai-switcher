@@ -40,6 +40,12 @@ Với ChatGPT ở chế độ trình duyệt, kết nối quota là một lần 
 
 Dữ liệu Windows nằm trong `%LOCALAPPDATA%\AISwitcher`; backend riêng nằm trong `%USERPROFILE%\.aisw\win-<hash>`. Không đưa các thư mục tài khoản này lên GitHub.
 
+## Khi ChatGPT cài từ Microsoft Store không mở
+
+Với bản preview 2, mở ChatGPT chính thức từ menu **Start** một lần rồi thử lại trong AI Switcher. App sẽ tìm Codex CLI mà ChatGPT đã chuẩn bị trong `%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\codex.exe` và kiểm tra nó trước khi chạy. Trong cài đặt, đặt lại đường dẫn `codex` nếu trước đó đã chọn file ở WindowsApps, hoặc chọn một Codex CLI native đã cài.
+
+Lỗi quota nền không còn tự chặn nút mở Desktop; khi cần, ChatGPT tự khởi chạy backend riêng cho hồ sơ. Chẩn đoán phiên giữ mã lỗi Windows để xác định bước bị chặn. Không cần đổi quyền thư mục WindowsApps. Tích hợp đăng nhập/phiên riêng với Store vẫn cần thử thực tế sau cập nhật.
+
 ## Phạm vi kiểm tra
 
 Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện bảy theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. File EXE phát hành còn được thử kết nối RPC với Codex native Windows trong hồ sơ mới chưa đăng nhập. Vòng đời daemon nền chưa xác minh được trên runner: Codex từ chối quyền quản trị/giới hạn tiến trình của runner, còn Task Scheduler không chạy tác vụ người dùng thường (267011). Cần thử kết nối/khởi động lại/dừng daemon trên máy Windows thường trước khi xác nhận phần này tương đương macOS. Bản macOS tiếp tục có bộ kiểm tra riêng.
