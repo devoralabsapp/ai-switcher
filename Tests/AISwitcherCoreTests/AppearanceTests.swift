@@ -46,6 +46,7 @@ final class AppearanceTests: XCTestCase {
         XCTAssertTrue(AppTheme.allCases.contains(.playfulRetro))
         XCTAssertFalse(AppTheme.playfulRetro.isDark)
         XCTAssertFalse(AppTheme.playfulRetro.monospaced)
+        XCTAssertEqual(AppTheme.playfulRetro.colors.secondary, AppTheme.playfulRetro.colors.ink)
     }
 
     private func catalog(_ language: AppLanguage) throws -> [String: String] {

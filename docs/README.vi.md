@@ -71,7 +71,7 @@ Chọn **Kiểm tra phiên** ở thanh bên hoặc menu bar để xem phiên b�
 
 Bật **Chỉ xem quota** ở dashboard hoặc **Giao diện & Ngôn ngữ** để các thao tác mặc định trên hồ sơ Desktop kết nối nền. Muốn mở cửa sổ, chọn **⋯ → Mở ChatGPT Desktop**. Hồ sơ trình duyệt vẫn hoạt động như trước.
 
-Trong **Sửa hồ sơ**, chọn **Thao tác mặc định** cho từng hồ sơ và bật **Kết nối nền khi mở AI Switcher** nếu muốn. Tự kết nối mặc định tắt, chỉ áp dụng cho hồ sơ Desktop được chọn và không mở cửa sổ hay tự đăng nhập. Khi bật Chỉ xem quota, app ưu tiên Kết nối nền; khi tắt, lựa chọn riêng của hồ sơ được dùng lại và app trở về kiểu hiển thị trước khi bật, kể cả sau khi mở lại app. Với cài đặt cũ chưa lưu kiểu hiển thị trước đó, app trở về Thẻ tài khoản.
+Trong **Sửa hồ sơ**, chọn **Thao tác mặc định** cho từng hồ sơ và bật **Kết nối nền khi mở AI Switcher** nếu muốn. Tự kết nối mặc định tắt, chỉ áp dụng cho hồ sơ Desktop được chọn và không mở cửa sổ hay tự đăng nhập. Khi bật Chỉ xem quota, app ưu tiên Kết nối nền; khi tắt, lựa chọn thao tác riêng của hồ sơ được dùng lại và app luôn trở về Thẻ tài khoản. Khi nâng cấp, phiên cũ đã tắt chế độ này nhưng còn kẹt ở bảng quota được tự sửa một lần.
 
 Nút **Chỉ xem quota** nằm bên trái **Thêm tài khoản** trên dashboard. Đổi kiểu hiển thị ở **Giao diện & Ngôn ngữ → Kiểu hiển thị → Thẻ tài khoản / Tổng quan quota**. Chọn **Tổng quan quota** để xem hạn mức ngắn/dài hạn, thời lượng thực tế, reset tiếp theo, lần cập nhật cuối và trạng thái. Bấm tiêu đề cột để đổi thứ tự; quota thiếu, cũ, lỗi hoặc đã qua reset được xếp cuối khi sắp xếp hạn mức. Mỗi hàng hiển thị một nhóm hạn mức, ưu tiên `codex`; mở **Chi tiết** để xem mọi nhóm. Cửa sổ nhỏ có thể cuộn bảng ngang. Kiểu hiển thị và cách sắp xếp được lưu cho lần mở sau.
 
@@ -96,7 +96,7 @@ Dữ liệu công việc và các artifact của Work được dùng chung trên
 
 Thẻ hiển thị phần trăm **còn lại** và thời điểm reset của các cửa sổ do Codex trả về, thường là giờ/tuần. Bấm chi tiết để xem mọi nhóm hạn mức, email/gói và lần đọc gần nhất. Email trong mục quota do backend trả về, khác với nhãn bạn tự đặt.
 
-Chọn **⋯ → Kết nối phiên tài khoản** để chỉ chạy phiên nền và đọc quota, không mở hoặc kích hoạt cửa sổ ChatGPT Desktop. Nút **Kết nối** trên thẻ quota chưa hoạt động và thao tác làm mới quota cũng kết nối trong nền. App sử dụng lại đăng nhập đã lưu; hồ sơ mới hoặc đã đăng xuất cần bấm **Mở ChatGPT** để đăng nhập một lần trước. **Đóng phiên tài khoản…** dừng phiên nền và vẫn giữ đăng nhập. Kết nối nền không thay đổi danh sách hồ sơ mở gần đây.
+Chọn **⋯ → Kết nối phiên tài khoản** để chỉ chạy phiên nền và đọc quota, không mở hoặc kích hoạt cửa sổ ChatGPT Desktop. Nút **Kết nối** trên thẻ quota chưa hoạt động và thao tác làm mới quota cũng kết nối trong nền. App sử dụng lại đăng nhập đã lưu; hồ sơ mới hoặc đã đăng xuất cần bấm **Mở ChatGPT** để đăng nhập một lần trước. **Đóng phiên tài khoản…** dừng phiên nền và vẫn giữ đăng nhập. Kết nối nền không thay đổi danh sách hồ sơ mở gần đây. Nút Kết nối phiên tài khoản bị vô hiệu hóa khi phiên đó đang chạy; Làm mới quota vẫn dùng được.
 
 Quota tự cập nhật mỗi 5 phút khi backend của hồ sơ đang chạy. Không có dữ liệu thì hiển thị chưa biết; dữ liệu cũ hoặc lỗi đọc được đánh dấu rõ. Đến giờ reset không đồng nghĩa app tự suy ra quota đã đầy. Muốn đổi tài khoản trong một phiên, đăng xuất ở chính cửa sổ ChatGPT đó.
 

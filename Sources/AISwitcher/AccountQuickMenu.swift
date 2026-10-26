@@ -43,8 +43,10 @@ enum AccountQuickMenu {
         action(L10n.format("Default: %@", model.defaultActionTitle(for: account)), #selector(AppDelegate.openAccount(_:)), enabled: !busy && !quotaBusy)
         if account.usesCodexDesktop {
             action(L10n.text("Open ChatGPT Desktop"), #selector(AppDelegate.openDesktopAccount(_:)), enabled: !busy)
-            action(model.backendIDs.contains(account.id) ? L10n.text("Refresh quota") : L10n.text("Connect account session"),
-                   #selector(AppDelegate.connectAccount(_:)), enabled: !busy && !quotaBusy)
+            action(L10n.text("Connect account session"), #selector(AppDelegate.connectAccount(_:)), enabled: model.canConnectSession(account))
+            if model.hasRunningSession(account) {
+                action(L10n.text("Refresh quota"), #selector(AppDelegate.refreshAccountQuota(_:)), enabled: !busy && !quotaBusy)
+            }
         } else if account.effectiveAgent.supportsCodexQuota {
             action(L10n.text("Refresh quota"), #selector(AppDelegate.refreshAccountQuota(_:)), enabled: !busy && !quotaBusy && account.codexConnection != nil)
         }

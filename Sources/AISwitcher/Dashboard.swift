@@ -360,7 +360,7 @@ struct Dashboard: View {
             Circle().fill(palette.accent).frame(width: 4, height: 4)
             Text(model.lastAction ?? L10n.text("Ready when you are")).lineLimit(1)
             Spacer()
-            Text("AI Switcher " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3")).foregroundColor(palette.secondary.opacity(0.7))
+            Text("AI Switcher " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.3")).foregroundColor(palette.secondary.opacity(appearanceTheme.isPlayfulRetro ? 1 : 0.7))
         }
         .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
         .padding(.horizontal, 31).frame(height: 34)
@@ -403,7 +403,7 @@ private struct AccountCard: View {
                     if account.usesCodexDesktop {
                         Button(L10n.text("Open ChatGPT Desktop")) { model.open(account) }
                         Button(L10n.text("Connect account session")) { model.connectSession(account) }
-                            .disabled(model.quotaBusyIDs.contains(account.id))
+                            .disabled(!model.canConnectSession(account))
                     }
                     Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled(account.effectiveAgent.isSharedApplication || !running || model.quotaBusyIDs.contains(account.id))
                     Button(L10n.text("Delete local profile…"), role: .destructive) { model.accountToDelete = account }

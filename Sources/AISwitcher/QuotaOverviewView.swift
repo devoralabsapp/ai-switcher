@@ -151,7 +151,7 @@ struct QuotaOverviewView: View {
         HStack(spacing: 8) {
             Button(!account.effectiveAgent.supportsCodexQuota ? L10n.text("Open agent") : account.usesCodexDesktop ? (model.backendIDs.contains(account.id) ? L10n.text("Refresh") : L10n.text("Connect")) : L10n.text("Details")) {
                 if !account.effectiveAgent.supportsCodexQuota { model.open(account) }
-                else if account.usesCodexDesktop { model.connectSession(account) }
+                else if account.usesCodexDesktop { model.refreshQuota(account) }
                 else { model.quotaAccountID = account.id }
             }
             .font(theme.font(size: 10, weight: .semibold)).buttonStyle(ThemedPlainButtonStyle())

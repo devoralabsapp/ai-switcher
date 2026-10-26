@@ -47,7 +47,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var notificationError: String?
     @Published var showGuide = false
     @Published var showPreferences = false
-    @Published private(set) var preferences = AppPreferencesStore().load()
+    @Published private(set) var preferences = AppPreferences()
     @Published private(set) var launchingIDs: Set<UUID> = []
     @Published private(set) var connectingSessionIDs: Set<UUID> = []
     @Published private(set) var closingSessionIDs: Set<UUID> = []
@@ -130,18 +130,9 @@ final class AppModel: ObservableObject {
     }
 
     func setQuotaOnlyMode(_ enabled: Bool) {
-        guard enabled != preferences.quotaOnlyMode else { return }
         var updated = preferences
         updated.quotaOnlyMode = enabled
-        if enabled {
-            updated.workspaceLayoutBeforeQuotaOnly = preferences.workspaceLayout
-            updated.workspaceLayout = .quotaTable
-        } else {
-            // Older versions did not save the previous layout. Return those
-            // sessions to cards rather than leaving quota-only's table behind.
-            updated.workspaceLayout = preferences.workspaceLayoutBeforeQuotaOnly ?? .cards
-            updated.workspaceLayoutBeforeQuotaOnly = nil
-        }
+        updated.workspaceLayout = enabled ? .quotaTable : .cards
         savePreferences(updated)
     }
 
@@ -283,7 +274,10 @@ final class AppModel: ObservableObject {
     }
 
     func performDefaultAction(_ account: Account) {
-        if defaultAction(for: account) == .connectSession { connectSession(account) }
+        if defaultAction(for: account) == .connectSession {
+            if hasRunningSession(account) { refreshQuota(account) }
+            else { connectSession(account) }
+        }
         else { open(account) }
     }
 
@@ -293,7 +287,7 @@ final class AppModel: ObservableObject {
         if launchingIDs.contains(account.id) { return L10n.text("Opening…") }
         if defaultAction(for: account) == .connectSession {
             if quotaBusyIDs.contains(account.id) { return L10n.text("Reading Desktop quota…") }
-            return backendIDs.contains(account.id) ? L10n.text("Refresh quota") : L10n.text("Connect account session")
+            return hasRunningSession(account) ? L10n.text("Refresh quota") : L10n.text("Connect account session")
         }
         return account.effectiveAgent.openTitle
     }
@@ -429,10 +423,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func canConnectSession(_ account: Account) -> Bool {
+        !shuttingDown && !loadFailed && account.usesCodexDesktop
+            && accounts.contains(where: { $0.id == account.id })
+            && !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id)
+            && !hasRunningSession(account) && !desktopQuotaSource.hasDesktopWindow(account)
+    }
+
     func connectSession(_ account: Account, reportFailure: Bool = true) {
         guard !shuttingDown, !loadFailed, let current = accounts.first(where: { $0.id == account.id }),
-              current.usesCodexDesktop,
-              !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
+              canConnectSession(current) else { return }
         launchingIDs.insert(account.id)
         connectingSessionIDs.insert(account.id)
         sessionTasks[account.id] = Task {

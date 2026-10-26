@@ -36,8 +36,7 @@ final class QuotaOverviewTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = AppPreferencesStore(defaults: defaults)
         let preferences = AppPreferences(language: .english, theme: .playfulRetro, quotaOnlyMode: true,
-            workspaceLayout: .quotaTable, quotaSortKey: .secondaryRemaining, quotaSortAscending: false,
-            workspaceLayoutBeforeQuotaOnly: .cards)
+            workspaceLayout: .quotaTable, quotaSortKey: .secondaryRemaining, quotaSortAscending: false)
         store.save(preferences)
         XCTAssertEqual(AppPreferencesStore(defaults: UserDefaults(suiteName: suite)!).load(), preferences)
         defaults.set("unknown", forKey: "ui.workspaceLayout")
@@ -47,7 +46,30 @@ final class QuotaOverviewTests: XCTestCase {
         XCTAssertEqual(store.load().quotaSortKey, .name)
         XCTAssertTrue(store.load().quotaOnlyMode)
         XCTAssertFalse(store.load().quotaSortAscending)
-        XCTAssertNil(store.load().workspaceLayoutBeforeQuotaOnly)
+    }
+
+    func testLegacyDisabledQuotaTableIsRepairedOnceWithoutLosingOtherPreferences() {
+        let suite = "ai-switcher-layout-migration.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "ui.quotaOnlyMode")
+        defaults.set("quotaTable", forKey: "ui.workspaceLayout")
+        defaults.set("quotaTable", forKey: "ui.workspaceLayoutBeforeQuotaOnly")
+        defaults.set("en", forKey: "ui.language")
+        defaults.set("playfulRetro", forKey: "ui.theme")
+        defaults.set("claude", forKey: "ui.agentFilter")
+        let store = AppPreferencesStore(defaults: defaults)
+        var repaired = store.load()
+        XCTAssertEqual(repaired.workspaceLayout, .cards)
+        XCTAssertEqual(defaults.string(forKey: "ui.workspaceLayout"), "cards")
+        XCTAssertNil(defaults.object(forKey: "ui.workspaceLayoutBeforeQuotaOnly"))
+        XCTAssertEqual(repaired.language, .english)
+        XCTAssertEqual(repaired.theme, .playfulRetro)
+        XCTAssertEqual(repaired.agentFilter, .claude)
+        // An explicit layout choice made after repair remains available.
+        repaired.workspaceLayout = .quotaTable
+        store.save(repaired)
+        XCTAssertEqual(AppPreferencesStore(defaults: UserDefaults(suiteName: suite)!).load(), repaired)
     }
 
     func testSortingKeepsMissingStaleAndFailedValuesLastInBothDirections() throws {

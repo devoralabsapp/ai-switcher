@@ -158,7 +158,7 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
         await model.shutdownQuota()
     }
 
-    func testQuotaOnlyRestoresEitherPreviousLayoutAcrossRelaunchAndRepeatedToggles() async throws {
+    func testQuotaOnlyAlwaysReturnsToCardsAcrossRelaunchAndRepeatedToggles() async throws {
         let store = AppPreferencesStore(defaults: UserDefaults(suiteName: defaultsSuite)!)
         for layout in WorkspaceLayout.allCases {
             let (model, _, source) = try setup("restore-\(layout.rawValue)")
@@ -167,9 +167,8 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
             model.setQuotaOnlyMode(true)
             model.setQuotaOnlyMode(true)
             XCTAssertEqual(model.preferences.workspaceLayout, .quotaTable)
-            XCTAssertEqual(model.preferences.workspaceLayoutBeforeQuotaOnly, layout)
-            // Other preference edits and an active-mode layout choice must not
-            // replace the view that existed before quota-only mode was enabled.
+            // Changing other settings or the layout while active must not
+            // prevent disabling quota-only from returning to cards.
             model.setLanguage(.english)
             model.setTheme(.playfulRetro)
             model.setQuotaSort(.nextReset)
@@ -177,20 +176,18 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
             let reopened = AppModel(root: model.repository.root, monitoring: false,
                 desktopQuotaSource: source, preferencesStore: store)
             XCTAssertTrue(reopened.preferences.quotaOnlyMode)
-            XCTAssertEqual(reopened.preferences.workspaceLayoutBeforeQuotaOnly, layout)
             reopened.setQuotaOnlyMode(false)
             reopened.setQuotaOnlyMode(false)
-            XCTAssertEqual(reopened.preferences.workspaceLayout, layout)
-            XCTAssertEqual(store.load().workspaceLayout, layout)
-            XCTAssertNil(store.load().workspaceLayoutBeforeQuotaOnly)
+            XCTAssertEqual(reopened.preferences.workspaceLayout, .cards)
+            XCTAssertEqual(store.load().workspaceLayout, .cards)
             XCTAssertEqual(reopened.preferences.language, .english)
             XCTAssertEqual(reopened.preferences.theme, .playfulRetro)
             XCTAssertEqual(reopened.preferences.agentFilter, .claude)
             XCTAssertEqual(reopened.preferences.quotaSortKey, .nextReset)
-            // A second cycle must capture the restored view again.
+            // Repeated cycles must return to cards consistently.
             reopened.setQuotaOnlyMode(true)
             reopened.setQuotaOnlyMode(false)
-            XCTAssertEqual(reopened.preferences.workspaceLayout, layout)
+            XCTAssertEqual(reopened.preferences.workspaceLayout, .cards)
             await model.shutdownQuota()
             await reopened.shutdownQuota()
         }
@@ -201,12 +198,21 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
         defaults.set(true, forKey: "ui.quotaOnlyMode")
         defaults.set(WorkspaceLayout.quotaTable.rawValue, forKey: "ui.workspaceLayout")
         let (model, _, _) = try setup("legacy-quota-layout")
-        XCTAssertNil(model.preferences.workspaceLayoutBeforeQuotaOnly)
         model.setQuotaOnlyMode(true)
         model.setQuotaOnlyMode(false)
         XCTAssertEqual(model.preferences.workspaceLayout, .cards)
         XCTAssertFalse(AppPreferencesStore(defaults: defaults).load().quotaOnlyMode)
         XCTAssertNil(defaults.object(forKey: "ui.workspaceLayoutBeforeQuotaOnly"))
+        await model.shutdownQuota()
+    }
+
+    func testDisablingQuotaOnlyEvenWhenAlreadyOffReturnsToCards() async throws {
+        let (model, _, _) = try setup("already-disabled")
+        model.setWorkspaceLayout(.quotaTable)
+        XCTAssertFalse(model.preferences.quotaOnlyMode)
+        model.setQuotaOnlyMode(false)
+        XCTAssertEqual(model.preferences.workspaceLayout, .cards)
+        XCTAssertEqual(AppPreferencesStore(defaults: UserDefaults(suiteName: defaultsSuite)!).load().workspaceLayout, .cards)
         await model.shutdownQuota()
     }
 
@@ -291,6 +297,39 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
         }
         XCTAssertFalse(model.quotaBusyIDs.contains(account.id), "Quota operation should finish")
         XCTAssertFalse(model.launchingIDs.contains(account.id), "Session connection should finish")
+    }
+
+    func testRunningSessionDisablesConnectButStillAllowsQuotaRefresh() async throws {
+        let (model, account, source) = try setup("running-connect")
+        source.running = false
+        model.refreshRunning()
+        XCTAssertTrue(model.canConnectSession(account))
+        var menu = AccountQuickMenu.make(account: account, model: model, target: AppDelegate())
+        XCTAssertTrue(try XCTUnwrap(menu.items.first { $0.action == #selector(AppDelegate.connectAccount(_:)) }).isEnabled)
+        source.windowOpen = true
+        XCTAssertFalse(model.canConnectSession(account))
+        model.connectSession(account)
+        XCTAssertEqual(source.connects, 0)
+        source.windowOpen = false
+        source.running = true
+        model.refreshRunning()
+        XCTAssertFalse(model.canConnectSession(account))
+        model.connectSession(account)
+        XCTAssertEqual(source.connects, 0)
+        XCTAssertTrue(model.launchingIDs.isEmpty)
+        menu = AccountQuickMenu.make(account: account, model: model, target: AppDelegate())
+        XCTAssertFalse(try XCTUnwrap(menu.items.first { $0.action == #selector(AppDelegate.connectAccount(_:)) }).isEnabled)
+        XCTAssertTrue(try XCTUnwrap(menu.items.first { $0.action == #selector(AppDelegate.refreshAccountQuota(_:)) }).isEnabled)
+        model.setQuotaOnlyMode(true)
+        model.performDefaultAction(account)
+        try await waitForQuota(model, account: account)
+        XCTAssertEqual(source.connects, 0)
+        XCTAssertEqual(source.reads, 1)
+        XCTAssertNotNil(model.accounts[0].desktopCodexConnection?.quota)
+        source.running = false
+        model.refreshRunning()
+        XCTAssertTrue(model.canConnectSession(account))
+        await model.shutdownQuota()
     }
 
     func testHeadlessConnectStartsStoppedSessionReadsQuotaAndPreservesRecents() async throws {

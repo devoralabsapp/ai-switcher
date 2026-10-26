@@ -70,7 +70,8 @@ struct QuotaSummaryView: View {
                             if needsDesktopSession { model.connectSession(account) }
                             else { model.quotaAccountID = account.id }
                         }
-                            .disabled(model.launchingIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
+                            .disabled(model.launchingIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id)
+                                || (needsDesktopSession && !model.canConnectSession(account)))
                             .buttonStyle(ThemedPlainButtonStyle()).font(appearanceTheme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent)
                     }
                 }
@@ -210,7 +211,7 @@ struct QuotaDetailView: View {
                 Text(L10n.text("AI Switcher checks the Desktop session every few seconds until quota is available, then refreshes every 5 minutes. To change accounts, sign out inside that ChatGPT window."))
                     .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
                 Button { model.connectSession(account) } label: { Label(L10n.text("Connect account session"), systemImage: "link") }
-                    .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.launchingIDs.contains(accountID) || busy)
+                    .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(!model.canConnectSession(account))
                 Text(L10n.text("For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window."))
                     .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
                 Button { model.open(account) } label: { Label(L10n.text("Open ChatGPT Desktop"), systemImage: "macwindow") }
