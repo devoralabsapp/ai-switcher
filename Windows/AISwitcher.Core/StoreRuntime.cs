@@ -11,16 +11,18 @@ public static class StoreRuntime {
     static readonly ConcurrentDictionary<string,SemaphoreSlim> Gates=new(StringComparer.OrdinalIgnoreCase);
     sealed record Manifest(string Root,string Source,string Executable,Dictionary<string,string> Hashes);
     const string Marker="ai-switcher-runtime.json";
-    public static string DirectoryFor(string root,string source){var key=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(source).ToUpperInvariant()))).ToLowerInvariant()[..24];return Path.Combine(Path.GetFullPath(root),"Runtimes","chatgpt",key);}
+    static string ProviderFor(string source)=>Path.GetFileName(source).Equals("Claude.exe",StringComparison.OrdinalIgnoreCase)?"claude":"chatgpt";
+    static string ProviderFor(Agent agent)=>agent switch{Agent.Chatgpt=>"chatgpt",Agent.Claude=>"claude",_=>throw new ArgumentOutOfRangeException(nameof(agent))};
+    public static string DirectoryFor(string root,string source){var key=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(source).ToUpperInvariant()))).ToLowerInvariant()[..24];return Path.Combine(Path.GetFullPath(root),"Runtimes",ProviderFor(source),key);}
     public static string ExecutableFor(string root,string source)=>Path.Combine(DirectoryFor(root,source),Path.GetFileName(source));
     static void Ensure(string path){Repository.RejectLinks(path);Directory.CreateDirectory(path);Repository.RejectLinks(path);}
     static Manifest ReadMarker(string root,string directory){Repository.RejectLinks(directory);var path=Path.Combine(directory,Marker);Repository.RejectLinks(path);var value=JsonSerializer.Deserialize<Manifest>(File.ReadAllText(path),Json.Options)??throw new IOException("Invalid runtime marker");if(!string.Equals(value.Root,Path.GetFullPath(root),StringComparison.OrdinalIgnoreCase)||!string.Equals(DirectoryFor(root,value.Source),directory,StringComparison.OrdinalIgnoreCase)||Path.GetFileName(value.Executable)!=value.Executable)throw new IOException("Runtime ownership mismatch");return value;}
-    public static bool IsManagedExecutable(string root,string executable){try{var parent=Path.GetDirectoryName(Path.GetFullPath(executable))!;if(!parent.StartsWith(Path.Combine(Path.GetFullPath(root),"Runtimes","chatgpt")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))return false;var marker=ReadMarker(root,parent);return string.Equals(marker.Executable,Path.GetFileName(executable),StringComparison.OrdinalIgnoreCase);}catch(IOException){return false;}catch(UnauthorizedAccessException){return false;}catch(JsonException){return false;}}
+    public static bool IsManagedExecutable(string root,string executable,Agent agent=Agent.Chatgpt){try{var parent=Path.GetDirectoryName(Path.GetFullPath(executable))!;if(!parent.StartsWith(Path.Combine(Path.GetFullPath(root),"Runtimes",ProviderFor(agent))+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))return false;var marker=ReadMarker(root,parent);return ProviderFor(marker.Source)==ProviderFor(agent)&&string.Equals(marker.Executable,Path.GetFileName(executable),StringComparison.OrdinalIgnoreCase);}catch(IOException){return false;}catch(UnauthorizedAccessException){return false;}catch(JsonException){return false;}}
     public static async Task<string> PrepareAsync(string root,string source,CancellationToken ct=default){
         source=Path.GetFullPath(source);root=Path.GetFullPath(root);var destination=DirectoryFor(root,source);var gate=Gates.GetOrAdd(destination,_=>new(1,1));await gate.WaitAsync(ct);
         string? staging=null;
         try{
-            Repository.RejectLinks(root);Ensure(root);Ensure(Path.Combine(root,"Runtimes"));Ensure(Path.Combine(root,"Runtimes","chatgpt"));
+            Repository.RejectLinks(root);Ensure(root);Ensure(Path.Combine(root,"Runtimes"));Ensure(Path.Combine(root,"Runtimes",ProviderFor(source)));
             var program=Path.GetDirectoryName(source)!;Repository.RejectLinks(program);Repository.RejectLinks(source);
             if(!File.Exists(source)||!File.Exists(Path.Combine(program,"resources","app.asar")))throw new IOException("Missing installed program files");
             if(Directory.Exists(destination)){

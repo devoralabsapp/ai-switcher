@@ -64,7 +64,7 @@ internal sealed class Program:Application {
     public static string? Argument(string[] args,string key){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:null;}
     static void RunFixture(string[] args){var root=Argument(args,"--data-dir");var profile=args.FirstOrDefault(x=>x.StartsWith("--user-data-dir=",StringComparison.Ordinal));
         if(root==null||!Path.GetFileName(root).StartsWith("ai-switcher-smoke.",StringComparison.Ordinal)||profile==null||!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))return;
-        var app=new Application();var window=new Window{Title="AI Switcher disposable profile fixture",Width=400,Height=250,Content=new System.Windows.Controls.TextBlock{Text="Disposable Windows process fixture",Margin=new Thickness(25)}};app.Run(window);
+        var app=new Application{ShutdownMode=args.Contains("--hide-on-close-fixture")?ShutdownMode.OnExplicitShutdown:ShutdownMode.OnLastWindowClose};var window=new Window{Title="AI Switcher disposable profile fixture",Width=400,Height=250,Content=new System.Windows.Controls.TextBlock{Text="Disposable Windows process fixture",Margin=new Thickness(25)}};window.Closing+=(_,e)=>{if(args.Contains("--hide-on-close-fixture")){e.Cancel=true;window.Hide();}};app.Run(window);
     }
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern uint RegisterWindowMessage(string value);
     [DllImport("user32.dll")]static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr wParam,IntPtr lParam);

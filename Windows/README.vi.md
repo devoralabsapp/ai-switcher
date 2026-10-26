@@ -48,6 +48,12 @@ Lần mở đầu cần thêm dung lượng bằng khoảng thư mục chương 
 
 Trong chẩn đoán sẽ có cả đường dẫn ứng dụng Store và runtime thực tế. CLI cài bằng npm vẫn được hỗ trợ; cài thêm CLI đơn thuần không giải quyết việc Windows chặn chạy file GUI trong WindowsApps. Nếu từng chọn đường dẫn CLI thủ công bị lỗi, đặt lại `codex` trong cài đặt.
 
+## Claude Store và đóng phiên Desktop
+
+Preview 4 thêm runtime riêng cho Claude Store tại `Runtimes\claude\<version-key>`. Cache ChatGPT và các hồ sơ hiện có được giữ nguyên. Mỗi tài khoản Claude Desktop tiếp tục dùng thư mục user-data và cấu hình Code riêng.
+
+**Close account session** gửi yêu cầu thoát bình thường qua Windows cho đúng mã tiến trình và thời điểm tạo tiến trình của hồ sơ, kể cả khi cửa sổ đã ẩn xuống khay. App không dùng cờ ép tắt; nếu ứng dụng từ chối hoặc còn hộp xác nhận, hồ sơ vẫn chạy và thông báo hướng dẫn cách xử lý. Đăng nhập đã lưu được giữ nguyên.
+
 ## Phạm vi kiểm tra
 
 Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện bảy theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. File EXE phát hành còn được thử kết nối RPC với Codex native Windows trong hồ sơ mới chưa đăng nhập. Vòng đời daemon nền chưa xác minh được trên runner: Codex từ chối quyền quản trị/giới hạn tiến trình của runner, còn Task Scheduler không chạy tác vụ người dùng thường (267011). Cần thử kết nối/khởi động lại/dừng daemon trên máy Windows thường trước khi xác nhận phần này tương đương macOS. Bản macOS tiếp tục có bộ kiểm tra riêng.

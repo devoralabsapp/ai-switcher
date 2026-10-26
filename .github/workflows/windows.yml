@@ -85,6 +85,12 @@ jobs:
           $output=Join-Path $PWD 'artifacts/previews'
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
           ../scripts/test-windows-store-runtime.ps1 -App $app -Output $output
+      - name: Exercise real official Claude Store runtime and targeted graceful quit
+        if: matrix.runtime == 'win-x64'
+        run: |
+          $output=Join-Path $PWD 'artifacts/previews/claude'
+          $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
+          ../scripts/test-windows-claude-runtime.ps1 -App $app -Output $output
       - name: Save Windows builds and visual QA
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

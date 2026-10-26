@@ -422,5 +422,12 @@
   "The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.": "Không xác minh được bản ChatGPT Store đã cài. Hãy đặt lại đường dẫn trong cài đặt rồi thử lại.",
   "Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.": "Windows không chuẩn bị được runtime ChatGPT Store. Ứng dụng đã cài và dữ liệu tài khoản được giữ nguyên. Hãy kiểm tra dung lượng trống rồi thử lại.",
   "Preparing ChatGPT for the first launch…": "Đang chuẩn bị ChatGPT cho lần mở đầu…",
-  "ChatGPT runtime": "Runtime ChatGPT"
+  "ChatGPT runtime": "Runtime ChatGPT",
+  "Preparing Claude for the first launch…": "Đang chuẩn bị Claude cho lần mở đầu…",
+  "%@ runtime": "Runtime %@",
+  "The Claude Store installation could not be verified. Reset its path in Settings and try again.": "Không xác minh được bản Claude Store đã cài. Hãy đặt lại đường dẫn trong cài đặt rồi thử lại.",
+  "Windows could not prepare the Claude Store runtime. The installed app and account data were preserved. Check free disk space and try again.": "Windows không chuẩn bị được runtime Claude Store. Ứng dụng đã cài và dữ liệu tài khoản được giữ nguyên. Hãy kiểm tra dung lượng trống rồi thử lại.",
+  "Windows could not request this profile to quit. Quit it from its own tray menu, then retry.": "Windows chưa gửi được yêu cầu thoát hồ sơ này. Hãy chọn Thoát trong menu khay của chính ứng dụng rồi thử lại.",
+  "This profile did not agree to quit. Finish any confirmation in its window or use its own tray Quit action, then retry.": "Hồ sơ chưa chấp nhận thoát. Hãy xử lý hộp xác nhận trong cửa sổ hoặc chọn Thoát trong menu khay của ứng dụng rồi thử lại.",
+  "The session process changed. Check its status before closing again.": "Tiến trình của phiên đã thay đổi. Hãy kiểm tra trạng thái trước khi đóng lại."
 }

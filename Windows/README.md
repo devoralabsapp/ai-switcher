@@ -42,6 +42,12 @@ The first open requires additional disk space approximately equal to the app's p
 
 Codex CLI discovery validates console binaries and `codex-cli --version`, rejecting GUI binaries and protected Store aliases. Diagnostics shows both the installed ChatGPT path and the prepared runtime path. Reset a stale manually selected `codex` path in Settings if needed. There is no fallback to the default shared sign-in.
 
+## Claude Store and closing Desktop sessions
+
+Preview 4 adds a separate `Runtimes\claude\<version-key>` cache for the registered official Claude package (`Claude_pzs8sxrjxfjjc`). ChatGPT's existing cache and profiles are retained. Each Claude Desktop account has its own user-data and Code config directories; browser-mode Claude is unchanged.
+
+Close account session now requests a normal Windows application shutdown for exactly the profile PID and creation time through Restart Manager. This also reaches a Desktop app whose window is hidden in its tray. No force-shutdown flag is used. A refusing application stays running and the manager asks you to finish its confirmation or Quit from its own tray menu. Other profiles are not registered for shutdown. Cached sign-in data is retained.
+
 ## Data
 
 Metadata and preferences: `%LOCALAPPDATA%\AISwitcher` by default. `--data-dir` selects a separate manager root. The root uses a current-user-only DACL, and a file lease prevents simultaneous managers writing the same root. Profile storage carries a root/UUID ownership marker; reuse, close and deletion reject mismatched ownership/reparse points.
