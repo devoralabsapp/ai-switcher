@@ -1,0 +1,64 @@
+name: Windows
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [win-x64, win-arm64]
+    defaults:
+      run:
+        working-directory: Windows
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: Windows/global.json
+          dotnet-version: '10.0.x'
+      - name: Verify shared themes and translations
+        run: |
+          python ../scripts/sync-windows-assets.py
+          git diff --exit-code -- AISwitcher.Core/Assets AISwitcher.Windows/AppIcon.ico
+          if($LASTEXITCODE -ne 0){throw 'Shared Windows resources are out of date'}
+      - name: Test portable core and real RPC subprocess fixtures
+        run: |
+          dotnet run --project AISwitcher.Tests/AISwitcher.Tests.csproj -c Release
+          if($LASTEXITCODE -ne 0){throw 'Core tests failed'}
+      - name: Build standalone Windows app
+        run: ../scripts/build-windows.ps1 -Runtime '${{ matrix.runtime }}'
+      - name: Exercise native Windows UI and owned process lifecycle
+        if: matrix.runtime == 'win-x64'
+        run: |
+          $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
+          $output=Join-Path $PWD 'artifacts/previews'
+          $app=Join-Path $PWD 'artifacts/win-x64/AISwitcher.exe'
+          $p=Start-Process $app -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$output`"",'--ui-smoke-test') -PassThru
+          if(-not $p.WaitForExit(180000)){$p.Kill();throw 'UI smoke timed out'}
+          if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'ui-smoke-error.txt');throw 'UI smoke failed'}
+          Get-Content (Join-Path $output 'ui-smoke-result.txt')
+          Remove-Item -Recurse -Force $root
+      - name: Save Windows builds and visual QA
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: AI-Switcher-Windows-${{ matrix.runtime }}-${{ github.sha }}
+          path: |
+            Windows/artifacts/*.zip
+            Windows/artifacts/*.sha256
+            Windows/artifacts/previews/
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,12 +1,14 @@
 <p align="center"><img src="docs/assets/icon.png" width="88" alt="AI Switcher icon"></p>
 
-# AI Switcher for macOS
+# AI Switcher for macOS and Windows
 
 **Your AI accounts in one workspace. Separate browser profiles, ChatGPT and Claude Desktop sessions, and Codex quota.**
 
 AI Switcher is a native SwiftUI and AppKit utility. Manage ChatGPT, Claude, Gemini, Antigravity, Perplexity, and DeepSeek from the dashboard or macOS menu bar. ChatGPT Desktop profiles retain separate sessions and Codex quota; other agents have the capabilities listed below.
 
-**macOS 13+ · Intel and Apple Silicon · Swift · MIT license**
+**macOS 13+ · Windows preview (x64 / ARM64) · MIT license**
+
+The Windows companion uses native .NET/WPF with the same agents, seven themes and quota workspace. See the [Windows setup and compatibility notes](Windows/README.md) and [Windows build artifacts](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml). The guide below describes the macOS app.
 
 [![macOS build](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml/badge.svg)](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml)
 

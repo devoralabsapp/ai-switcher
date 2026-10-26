@@ -14,3 +14,6 @@ Codex/
 auth.json
 Desktop/
 .aisw/
+Windows/**/bin/
+Windows/**/obj/
+Windows/artifacts/

@@ -1,4 +1,6 @@
-# AI Switcher cho macOS
+# AI Switcher cho macOS và Windows
+
+Bản Windows preview dùng .NET/WPF, có gói x64 và ARM64. Xem [hướng dẫn Windows](../Windows/README.md) và [bản build Windows](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml). Phần dưới mô tả bản macOS.
 
 [English README](../README.md) · [Tải bản dùng thử](https://github.com/devoralabsapp/ai-switcher/releases)
 

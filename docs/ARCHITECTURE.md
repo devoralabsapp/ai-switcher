@@ -115,3 +115,7 @@ Quota-only activation selects the quota table; disabling always selects cards, e
 The optional `--claude` smoke check opens two disposable profiles, checks distinct PIDs/windows, focus reuse, close/reopen persistence with a harmless marker, and cleanup while pre-existing Claude processes survive. It does not inspect authentication stores or sign into real accounts. Real account authentication, OAuth/deep-link routing, Claude Code, and Cowork remain manual verification items.
 
 `terminalBlack` is an additional persisted dark theme with pure-black canvas/sidebar, near-black surfaces, bright monospace text and a green accent. Existing Terminal identifiers and palette are unchanged; the shared terminal typography/compact-corner behavior applies to both.
+
+## Windows companion
+
+`Windows/` contains a separate .NET 10 core and native WPF adapter. Shared palettes and localization are exported from the Swift sources by `scripts/sync-windows-assets.py`; the macOS implementation is unchanged. See [Windows architecture, storage, runtime checks and compatibility limits](../Windows/README.md). Windows builds run portable storage/quota/RPC tests and native WPF/process fixture checks before producing standalone x64/ARM64 packages. Vendor sign-in and live account behavior require field validation.
