@@ -145,6 +145,8 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
         XCTAssertTrue(stored.quotaOnlyMode)
         XCTAssertEqual(stored.workspaceLayout, .quotaTable)
         model.setQuotaOnlyMode(false)
+        XCTAssertEqual(model.preferences.workspaceLayout, .cards)
+        XCTAssertEqual(AppPreferencesStore(defaults: UserDefaults(suiteName: defaultsSuite)!).load().workspaceLayout, .cards)
         XCTAssertEqual(model.defaultAction(for: account), .openDesktop)
         var edited = model.accounts[0]
         edited.defaultAction = .connectSession
@@ -153,6 +155,58 @@ final class DesktopQuotaDiscoveryTests: XCTestCase {
         let browser = Account(name: "Browser", launchMode: .browser, defaultAction: .connectSession)
         model.setQuotaOnlyMode(true)
         XCTAssertEqual(model.defaultAction(for: browser), .openDesktop)
+        await model.shutdownQuota()
+    }
+
+    func testQuotaOnlyRestoresEitherPreviousLayoutAcrossRelaunchAndRepeatedToggles() async throws {
+        let store = AppPreferencesStore(defaults: UserDefaults(suiteName: defaultsSuite)!)
+        for layout in WorkspaceLayout.allCases {
+            let (model, _, source) = try setup("restore-\(layout.rawValue)")
+            model.setWorkspaceLayout(layout)
+            model.setAgentFilter(.claude)
+            model.setQuotaOnlyMode(true)
+            model.setQuotaOnlyMode(true)
+            XCTAssertEqual(model.preferences.workspaceLayout, .quotaTable)
+            XCTAssertEqual(model.preferences.workspaceLayoutBeforeQuotaOnly, layout)
+            // Other preference edits and an active-mode layout choice must not
+            // replace the view that existed before quota-only mode was enabled.
+            model.setLanguage(.english)
+            model.setTheme(.playfulRetro)
+            model.setQuotaSort(.nextReset)
+            model.setWorkspaceLayout(.cards)
+            let reopened = AppModel(root: model.repository.root, monitoring: false,
+                desktopQuotaSource: source, preferencesStore: store)
+            XCTAssertTrue(reopened.preferences.quotaOnlyMode)
+            XCTAssertEqual(reopened.preferences.workspaceLayoutBeforeQuotaOnly, layout)
+            reopened.setQuotaOnlyMode(false)
+            reopened.setQuotaOnlyMode(false)
+            XCTAssertEqual(reopened.preferences.workspaceLayout, layout)
+            XCTAssertEqual(store.load().workspaceLayout, layout)
+            XCTAssertNil(store.load().workspaceLayoutBeforeQuotaOnly)
+            XCTAssertEqual(reopened.preferences.language, .english)
+            XCTAssertEqual(reopened.preferences.theme, .playfulRetro)
+            XCTAssertEqual(reopened.preferences.agentFilter, .claude)
+            XCTAssertEqual(reopened.preferences.quotaSortKey, .nextReset)
+            // A second cycle must capture the restored view again.
+            reopened.setQuotaOnlyMode(true)
+            reopened.setQuotaOnlyMode(false)
+            XCTAssertEqual(reopened.preferences.workspaceLayout, layout)
+            await model.shutdownQuota()
+            await reopened.shutdownQuota()
+        }
+    }
+
+    func testLegacyQuotaOnlyModeReturnsToCardsWithoutAStoredPreviousLayout() async throws {
+        let defaults = UserDefaults(suiteName: defaultsSuite)!
+        defaults.set(true, forKey: "ui.quotaOnlyMode")
+        defaults.set(WorkspaceLayout.quotaTable.rawValue, forKey: "ui.workspaceLayout")
+        let (model, _, _) = try setup("legacy-quota-layout")
+        XCTAssertNil(model.preferences.workspaceLayoutBeforeQuotaOnly)
+        model.setQuotaOnlyMode(true)
+        model.setQuotaOnlyMode(false)
+        XCTAssertEqual(model.preferences.workspaceLayout, .cards)
+        XCTAssertFalse(AppPreferencesStore(defaults: defaults).load().quotaOnlyMode)
+        XCTAssertNil(defaults.object(forKey: "ui.workspaceLayoutBeforeQuotaOnly"))
         await model.shutdownQuota()
     }
 

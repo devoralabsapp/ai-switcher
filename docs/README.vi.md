@@ -71,7 +71,7 @@ Chọn **Kiểm tra phiên** ở thanh bên hoặc menu bar để xem phiên b�
 
 Bật **Chỉ xem quota** ở dashboard hoặc **Giao diện & Ngôn ngữ** để các thao tác mặc định trên hồ sơ Desktop kết nối nền. Muốn mở cửa sổ, chọn **⋯ → Mở ChatGPT Desktop**. Hồ sơ trình duyệt vẫn hoạt động như trước.
 
-Trong **Sửa hồ sơ**, chọn **Thao tác mặc định** cho từng hồ sơ và bật **Kết nối nền khi mở AI Switcher** nếu muốn. Tự kết nối mặc định tắt, chỉ áp dụng cho hồ sơ Desktop được chọn và không mở cửa sổ hay tự đăng nhập. Khi bật Chỉ xem quota, app ưu tiên Kết nối nền; khi tắt, lựa chọn riêng của hồ sơ được dùng lại.
+Trong **Sửa hồ sơ**, chọn **Thao tác mặc định** cho từng hồ sơ và bật **Kết nối nền khi mở AI Switcher** nếu muốn. Tự kết nối mặc định tắt, chỉ áp dụng cho hồ sơ Desktop được chọn và không mở cửa sổ hay tự đăng nhập. Khi bật Chỉ xem quota, app ưu tiên Kết nối nền; khi tắt, lựa chọn riêng của hồ sơ được dùng lại và app trở về kiểu hiển thị trước khi bật, kể cả sau khi mở lại app. Với cài đặt cũ chưa lưu kiểu hiển thị trước đó, app trở về Thẻ tài khoản.
 
 Nút **Chỉ xem quota** nằm bên trái **Thêm tài khoản** trên dashboard. Đổi kiểu hiển thị ở **Giao diện & Ngôn ngữ → Kiểu hiển thị → Thẻ tài khoản / Tổng quan quota**. Chọn **Tổng quan quota** để xem hạn mức ngắn/dài hạn, thời lượng thực tế, reset tiếp theo, lần cập nhật cuối và trạng thái. Bấm tiêu đề cột để đổi thứ tự; quota thiếu, cũ, lỗi hoặc đã qua reset được xếp cuối khi sắp xếp hạn mức. Mỗi hàng hiển thị một nhóm hạn mức, ưu tiên `codex`; mở **Chi tiết** để xem mọi nhóm. Cửa sổ nhỏ có thể cuộn bảng ngang. Kiểu hiển thị và cách sắp xếp được lưu cho lần mở sau.
 

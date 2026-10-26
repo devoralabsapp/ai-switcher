@@ -72,10 +72,12 @@ public struct AppPreferences: Equatable, Sendable {
     public var quotaSortAscending: Bool
     public var quotaAlerts: QuotaAlertSettings
     public var agentFilter: AIAgent?
+    public var workspaceLayoutBeforeQuotaOnly: WorkspaceLayout?
     public init(language: AppLanguage = .vietnamese, theme: AppTheme = .light,
                 quotaOnlyMode: Bool = false, workspaceLayout: WorkspaceLayout = .cards,
                 quotaSortKey: QuotaSortKey = .name, quotaSortAscending: Bool = true,
-                quotaAlerts: QuotaAlertSettings = .init(), agentFilter: AIAgent? = nil) {
+                quotaAlerts: QuotaAlertSettings = .init(), agentFilter: AIAgent? = nil,
+                workspaceLayoutBeforeQuotaOnly: WorkspaceLayout? = nil) {
         self.language = language
         self.theme = theme
         self.quotaOnlyMode = quotaOnlyMode
@@ -84,6 +86,7 @@ public struct AppPreferences: Equatable, Sendable {
         self.quotaSortAscending = quotaSortAscending
         self.quotaAlerts = quotaAlerts
         self.agentFilter = agentFilter
+        self.workspaceLayoutBeforeQuotaOnly = workspaceLayoutBeforeQuotaOnly
     }
 }
 
@@ -100,7 +103,8 @@ public struct AppPreferencesStore {
                        quotaAlerts: .init(enabled: defaults.bool(forKey: "quotaAlerts.enabled"),
                            threshold: defaults.object(forKey: "quotaAlerts.threshold") as? Int ?? 20,
                            notifyRecovery: defaults.object(forKey: "quotaAlerts.recovery") as? Bool ?? true),
-                       agentFilter: defaults.string(forKey: "ui.agentFilter").flatMap(AIAgent.init(rawValue:)))
+                       agentFilter: defaults.string(forKey: "ui.agentFilter").flatMap(AIAgent.init(rawValue:)),
+                       workspaceLayoutBeforeQuotaOnly: defaults.string(forKey: "ui.workspaceLayoutBeforeQuotaOnly").flatMap(WorkspaceLayout.init(rawValue:)))
     }
     public func save(_ value: AppPreferences) {
         defaults.set(value.language.rawValue, forKey: "ui.language")
@@ -113,6 +117,7 @@ public struct AppPreferencesStore {
         defaults.set(value.quotaAlerts.threshold, forKey: "quotaAlerts.threshold")
         defaults.set(value.quotaAlerts.notifyRecovery, forKey: "quotaAlerts.recovery")
         defaults.set(value.agentFilter?.rawValue, forKey: "ui.agentFilter")
+        defaults.set(value.workspaceLayoutBeforeQuotaOnly?.rawValue, forKey: "ui.workspaceLayoutBeforeQuotaOnly")
     }
 
     public func loadAlertTracker() -> QuotaAlertTracker {

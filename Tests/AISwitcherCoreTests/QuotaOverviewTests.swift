@@ -36,15 +36,18 @@ final class QuotaOverviewTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = AppPreferencesStore(defaults: defaults)
         let preferences = AppPreferences(language: .english, theme: .playfulRetro, quotaOnlyMode: true,
-            workspaceLayout: .quotaTable, quotaSortKey: .secondaryRemaining, quotaSortAscending: false)
+            workspaceLayout: .quotaTable, quotaSortKey: .secondaryRemaining, quotaSortAscending: false,
+            workspaceLayoutBeforeQuotaOnly: .cards)
         store.save(preferences)
         XCTAssertEqual(AppPreferencesStore(defaults: UserDefaults(suiteName: suite)!).load(), preferences)
         defaults.set("unknown", forKey: "ui.workspaceLayout")
         defaults.set("unknown", forKey: "ui.quotaSortKey")
+        defaults.set("unknown", forKey: "ui.workspaceLayoutBeforeQuotaOnly")
         XCTAssertEqual(store.load().workspaceLayout, .cards)
         XCTAssertEqual(store.load().quotaSortKey, .name)
         XCTAssertTrue(store.load().quotaOnlyMode)
         XCTAssertFalse(store.load().quotaSortAscending)
+        XCTAssertNil(store.load().workspaceLayoutBeforeQuotaOnly)
     }
 
     func testSortingKeepsMissingStaleAndFailedValuesLastInBothDirections() throws {

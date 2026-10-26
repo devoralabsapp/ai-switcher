@@ -103,3 +103,5 @@ Capabilities guard backend discovery, startup connection, quota reads, connect/r
 `AppPreferences.agentFilter` persists independently in UserDefaults. Unknown values fall back to all agents. Sidebar counts cover all saved entries per agent, while displayed accounts combine agent, workspace filter, and search. New-account editors inherit the active agent. The sidebar scrolls in shorter windows; provider filters are available in every existing theme.
 
 The dashboard account header groups quota-only mode immediately before Add account. Layout selection lives in Preferences (`Workspace view`) so cards and the quota overview retain their existing persisted behavior without a second dashboard toolbar row.
+
+Quota-only activation persists `workspaceLayoutBeforeQuotaOnly` before temporarily selecting the quota table. Disabling restores and clears that value; duplicate toggle requests do not overwrite it. The saved layout survives relaunch and unrelated preference changes. Legacy active sessions without the field return to cards on disable.

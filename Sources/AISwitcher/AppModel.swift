@@ -130,9 +130,18 @@ final class AppModel: ObservableObject {
     }
 
     func setQuotaOnlyMode(_ enabled: Bool) {
+        guard enabled != preferences.quotaOnlyMode else { return }
         var updated = preferences
         updated.quotaOnlyMode = enabled
-        if enabled { updated.workspaceLayout = .quotaTable }
+        if enabled {
+            updated.workspaceLayoutBeforeQuotaOnly = preferences.workspaceLayout
+            updated.workspaceLayout = .quotaTable
+        } else {
+            // Older versions did not save the previous layout. Return those
+            // sessions to cards rather than leaving quota-only's table behind.
+            updated.workspaceLayout = preferences.workspaceLayoutBeforeQuotaOnly ?? .cards
+            updated.workspaceLayoutBeforeQuotaOnly = nil
+        }
         savePreferences(updated)
     }
 
