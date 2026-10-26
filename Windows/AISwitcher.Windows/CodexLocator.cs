@@ -9,9 +9,11 @@ using AISwitcher.Core;
 namespace AISwitcher.Windows;
 internal static class CodexLocator {
     public static IEnumerable<string> UserCandidates(string local,string roaming){
-        yield return Path.Combine(local,"Programs","OpenAI","Codex","bin","codex.exe");
-        var cache=Path.Combine(local,"OpenAI","Codex","bin");yield return Path.Combine(cache,"codex.exe");
+        var cache=Path.Combine(local,"OpenAI","Codex","bin");
+        // Versioned Desktop copies come before older unversioned/standalone CLIs.
         foreach(var folder in CacheFolders(cache))yield return Path.Combine(folder,"codex.exe");
+        yield return Path.Combine(cache,"codex.exe");
+        yield return Path.Combine(local,"Programs","OpenAI","Codex","bin","codex.exe");
         foreach(var package in new[]{"codex-win32-x64","codex-win32-arm64"})foreach(var triple in new[]{"x86_64-pc-windows-msvc","aarch64-pc-windows-msvc"}){
             yield return Path.Combine(roaming,"npm","node_modules","@openai","codex","node_modules","@openai",package,"vendor",triple,"codex","codex.exe");
             yield return Path.Combine(roaming,"npm","node_modules","@openai","codex","node_modules","@openai",package,"vendor",triple,"bin","codex.exe");

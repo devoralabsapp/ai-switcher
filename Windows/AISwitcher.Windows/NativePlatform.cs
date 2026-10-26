@@ -54,7 +54,7 @@ internal sealed class NativePlatform {
     public async Task<string?> FindExecutableAsync(string key){
         if(key=="codex")return await FindCodexAsync();
         if(preferences.Executables.TryGetValue(key,out var configured)&&!string.IsNullOrWhiteSpace(configured))return File.Exists(configured)&&Path.GetExtension(configured).Equals(".exe",StringComparison.OrdinalIgnoreCase)?Path.GetFullPath(configured):null;
-        if(discovered.TryGetValue(key,out var cached)&&cached!=null&&File.Exists(cached))return cached;
+        if(discovered.TryGetValue(key,out var cached)&&cached!=null&&File.Exists(cached)&&!WindowsExecutable.IsStorePath(cached))return cached;
         var local=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);var pf=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);var pf86=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
         List<string> candidates=key switch{
             "chrome"=>[Path.Combine(pf,"Google/Chrome/Application/chrome.exe"),Path.Combine(pf86,"Google/Chrome/Application/chrome.exe"),Path.Combine(local,"Google/Chrome/Application/chrome.exe")],

@@ -47,6 +47,7 @@ internal static class PreviewRunner {
             Require(!WindowsExecutable.IsConsole(Environment.ProcessPath!),"The Windows GUI must not be accepted as a console CLI");
             var local=Path.Combine(root,"fake-local");var relocated=Path.Combine(local,"OpenAI","Codex","bin","fixture-hash","codex.exe");Directory.CreateDirectory(Path.GetDirectoryName(relocated)!);File.Copy(executable,relocated);
             var protectedCli=Path.Combine(root,"WindowsApps","OpenAI.Codex_fixture","app","Codex.exe");Directory.CreateDirectory(Path.GetDirectoryName(protectedCli)!);File.Copy(executable,protectedCli);
+            var unversioned=Path.Combine(local,"OpenAI","Codex","bin","codex.exe");File.Copy(executable,unversioned);
             var candidates=new[]{Environment.ProcessPath!,protectedCli}.Concat(CodexLocator.UserCandidates(local,Path.Combine(root,"fake-roaming")));
             Require(await CodexLocator.ResolveAsync(candidates)==relocated,"Store/GUI candidates hid the runnable relocated CLI");
             engine.Preferences.Executables["codex"]=relocated;
