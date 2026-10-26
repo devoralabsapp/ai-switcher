@@ -17,8 +17,10 @@ try {
     $version=$manifest.Package.Identity.Version
     $source=$null
     try {
-        Add-AppxPackage -Path $package -ErrorAction Stop
-        $installed=Get-AppxPackage -Name OpenAI.Codex | Where-Object {$_.PublisherId -eq '2p2nqsd0c76g0'} | Select-Object -First 1
+        $env:AISW_FIXTURE_PACKAGE=$package
+        $metadata=& powershell.exe -NoProfile -NonInteractive -Command '$ErrorActionPreference="Stop"; Add-AppxPackage -Path $env:AISW_FIXTURE_PACKAGE -ErrorAction Stop; Get-AppxPackage -Name OpenAI.Codex | Where-Object {$_.PublisherId -eq "2p2nqsd0c76g0"} | Select-Object -First 1 InstallLocation,PackageFullName | ConvertTo-Json -Compress'
+        if($LASTEXITCODE -ne 0){throw 'Windows declined package registration'}
+        $installed=$metadata | ConvertFrom-Json
         if($installed){$source=Join-Path $installed.InstallLocation 'app/ChatGPT.exe'}
     } catch {
         # Server runners can lack Store deployment support. Record this distinction.
@@ -39,6 +41,6 @@ try {
     Get-Content (Join-Path $Output 'store-package-mode.txt'),(Join-Path $Output 'store-runtime-result.txt')
     Remove-Item $root -Recurse -Force
 }finally{
-    if($installed){Remove-AppxPackage -Package $installed.PackageFullName -ErrorAction Continue}
+    if($installed){$env:AISW_FIXTURE_FULLNAME=$installed.PackageFullName;& powershell.exe -NoProfile -NonInteractive -Command 'Remove-AppxPackage -Package $env:AISW_FIXTURE_FULLNAME -ErrorAction Continue'}
     Remove-Item $scope -Recurse -Force
 }
