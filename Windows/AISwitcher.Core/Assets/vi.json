@@ -420,5 +420,7 @@
   "Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.": "Windows không khởi chạy được ứng dụng (mã lỗi %@). Hãy kiểm tra chẩn đoán phiên và đường dẫn ứng dụng trong cài đặt.",
   "Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions.": "Windows từ chối truy cập ứng dụng hoặc thư mục hồ sơ. Hãy mở ChatGPT từ Start một lần rồi thử lại. Không cần đổi quyền thư mục WindowsApps.",
   "The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.": "Không xác minh được bản ChatGPT Store đã cài. Hãy đặt lại đường dẫn trong cài đặt rồi thử lại.",
-  "Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.": "Windows không chuẩn bị được runtime ChatGPT Store. Ứng dụng đã cài và dữ liệu tài khoản được giữ nguyên. Hãy kiểm tra dung lượng trống rồi thử lại."
+  "Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.": "Windows không chuẩn bị được runtime ChatGPT Store. Ứng dụng đã cài và dữ liệu tài khoản được giữ nguyên. Hãy kiểm tra dung lượng trống rồi thử lại.",
+  "Preparing ChatGPT for the first launch…": "Đang chuẩn bị ChatGPT cho lần mở đầu…",
+  "ChatGPT runtime": "Runtime ChatGPT"
 }

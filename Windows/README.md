@@ -36,9 +36,11 @@ ChatGPT Desktop requires the newer compatible Electron app with Codex, its bundl
 
 ## Microsoft Store troubleshooting
 
-If diagnostics finds `WindowsApps\OpenAI.Codex_...\app\ChatGPT.exe` but opening fails, open the official ChatGPT app from Windows Start once. This can prepare its runnable CLI in `%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\codex.exe`. AI Switcher searches that location and validates `codex-cli --version`; it rejects Store-protected executables, execution aliases and GUI binaries for quota operations. In Settings, reset a previously selected `codex` path or choose an installed native Codex CLI. An explicit Desktop open can proceed with the app's own backend when headless quota setup is unavailable. Per-profile storage stays separate.
+Windows can refuse to execute the Store app's protected `WindowsApps` executable (error 5), even when the official app opens from Start and a native Codex CLI is installed. Preview 3 prepares a private program runtime from the registered official `OpenAI.Codex` installation before starting a Desktop profile. It streams the app's program files into `Runtimes\chatgpt\<version-key>` beneath the AI Switcher data root, preserving file contents without copying Store encryption/ACL attributes. The runtime is reused across profiles; each profile still has its own UI and Codex home. No sign-in data is copied from the original app.
 
-Preview 2 fixes CLI discovery and preserves numeric Windows launch errors in diagnostics. Store updates can change behavior; live Store sign-in/profile isolation still needs field verification. AI Switcher does not change WindowsApps ACLs or launch the default shared account as a fallback.
+The first open requires additional disk space approximately equal to the app's program directory and can take a few minutes. The UI shows preparation status. Source files and WindowsApps permissions stay unchanged. Store version changes get a new cache key; existing runtime versions are retained so already-running profiles are not removed. Critical executable/archive hashes are checked before reusing the cache. The runtime is an unmodified program copy; live Store-dependent features and vendor updates still need field testing.
+
+Codex CLI discovery validates console binaries and `codex-cli --version`, rejecting GUI binaries and protected Store aliases. Diagnostics shows both the installed ChatGPT path and the prepared runtime path. Reset a stale manually selected `codex` path in Settings if needed. There is no fallback to the default shared sign-in.
 
 ## Data
 

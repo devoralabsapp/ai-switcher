@@ -28,7 +28,7 @@ internal sealed class AppEngine {
     public AppEngine(string root){
         Repository=new(root);
         try{Preferences=Repository.LoadPreferences();Snapshot=Repository.Load();}catch(Exception error){ReadOnly=true;LoadError=Message(error);}
-        Platform=new(Repository,Preferences);Backend=new(Repository,Platform,Preferences);
+        Platform=new(Repository,Preferences);Platform.PreparationChanged+=Notify;Backend=new(Repository,Platform,Preferences);
     }
     public void Notify()=>Changed?.Invoke();
     public void SavePreferences(){if(ReadOnly){Notify();return;}try{Repository.SavePreferences(Preferences);Notify();}catch(Exception error){Error?.Invoke(Message(error));}}
@@ -46,7 +46,7 @@ internal sealed class AppEngine {
     public string Message(Exception error)=>error is System.ComponentModel.Win32Exception native?L.Format("Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.",native.NativeErrorCode):error is UnauthorizedAccessException?L["Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions."]:L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
     public bool Running(Account a)=>a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a)||Backend.HasSocket(a);
     public bool CanConnect(Account a)=>a.UsesCodexDesktop&&!ReadOnly&&!Busy.Contains(a.Id)&&!Running(a);
-    public string Status(Account a)=>Busy.Contains(a.Id)?L["Working…"]:Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]?L["Sign-in required"]:a.Agent.IsShared()?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Backend.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
+    public string Status(Account a)=>Busy.Contains(a.Id)?L[Platform.PreparingRuntime.Contains(a.Id)?"Preparing ChatGPT for the first launch…":"Working…"]:Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]?L["Sign-in required"]:a.Agent.IsShared()?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Backend.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
     public bool DefaultConnect(Account a)=>a.UsesCodexDesktop&&(Preferences.QuotaOnlyMode||a.DefaultAction==DefaultAction.ConnectSession);
     public string DefaultTitle(Account a)=>DefaultConnect(a)?Running(a)?L["Refresh quota"]:L["Connect account session"]:L.Format("Open %@",a.Agent.Name());
     public Task DefaultAsync(Account a)=>DefaultConnect(a)?Running(a)?RefreshAsync(a):ConnectAsync(a):OpenAsync(a);

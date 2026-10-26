@@ -420,5 +420,7 @@
   "Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.": "Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.",
   "Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions.": "Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions.",
   "The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.": "The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.",
-  "Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.": "Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again."
+  "Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.": "Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.",
+  "Preparing ChatGPT for the first launch…": "Preparing ChatGPT for the first launch…",
+  "ChatGPT runtime": "ChatGPT runtime"
 }

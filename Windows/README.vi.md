@@ -40,11 +40,13 @@ Với ChatGPT ở chế độ trình duyệt, kết nối quota là một lần 
 
 Dữ liệu Windows nằm trong `%LOCALAPPDATA%\AISwitcher`; backend riêng nằm trong `%USERPROFILE%\.aisw\win-<hash>`. Không đưa các thư mục tài khoản này lên GitHub.
 
-## Khi ChatGPT cài từ Microsoft Store không mở
+## Khi ChatGPT cài từ Microsoft Store bị lỗi 5
 
-Với bản preview 2, mở ChatGPT chính thức từ menu **Start** một lần rồi thử lại trong AI Switcher. App sẽ tìm Codex CLI mà ChatGPT đã chuẩn bị trong `%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\codex.exe` và kiểm tra nó trước khi chạy. Trong cài đặt, đặt lại đường dẫn `codex` nếu trước đó đã chọn file ở WindowsApps, hoặc chọn một Codex CLI native đã cài.
+Bản preview 3 chuẩn bị một runtime chương trình từ bản ChatGPT Store chính thức đã đăng ký, rồi mở hồ sơ qua runtime này. Runtime nằm trong `Runtimes\chatgpt\<version-key>` dưới thư mục dữ liệu AI Switcher, dùng chung các tệp chương trình cho các hồ sơ; dữ liệu đăng nhập và backend vẫn riêng cho từng tài khoản.
 
-Lỗi quota nền không còn tự chặn nút mở Desktop; khi cần, ChatGPT tự khởi chạy backend riêng cho hồ sơ. Chẩn đoán phiên giữ mã lỗi Windows để xác định bước bị chặn. Không cần đổi quyền thư mục WindowsApps. Tích hợp đăng nhập/phiên riêng với Store vẫn cần thử thực tế sau cập nhật.
+Lần mở đầu cần thêm dung lượng bằng khoảng thư mục chương trình ChatGPT và có thể mất vài phút. App hiển thị **Đang chuẩn bị ChatGPT cho lần mở đầu…**. Các tệp chương trình được giữ nguyên nội dung, còn thuộc tính bảo vệ thực thi của Store không được mang sang bản chạy. App giữ nguyên ứng dụng Store và quyền WindowsApps. Cập nhật Store tạo khóa runtime mới; bản runtime đang dùng được giữ lại.
+
+Trong chẩn đoán sẽ có cả đường dẫn ứng dụng Store và runtime thực tế. CLI cài bằng npm vẫn được hỗ trợ; cài thêm CLI đơn thuần không giải quyết việc Windows chặn chạy file GUI trong WindowsApps. Nếu từng chọn đường dẫn CLI thủ công bị lỗi, đặt lại `codex` trong cài đặt.
 
 ## Phạm vi kiểm tra
 

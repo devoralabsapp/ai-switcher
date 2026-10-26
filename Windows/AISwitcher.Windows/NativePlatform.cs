@@ -21,6 +21,8 @@ internal sealed class NativePlatform {
     List<OwnedProcess> processes=[];
     readonly Dictionary<string,string?> discovered=[];
     public IReadOnlyList<OwnedProcess> Processes=>processes;
+    public HashSet<Guid> PreparingRuntime { get; }=[];
+    public event Action? PreparationChanged;
     public NativePlatform(Repository repository,Preferences preferences){this.repository=repository;this.preferences=preferences;}
     public static Dictionary<string,string> EnvironmentValues()=>Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>().ToDictionary(x=>(string)x.Key,x=>(string)x.Value!,StringComparer.OrdinalIgnoreCase);
     public static bool IsElevated()=>new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
@@ -110,7 +112,8 @@ internal sealed class NativePlatform {
         if(account.UsesCodexDesktop&&WindowsExecutable.IsStorePath(exe)){
             var installed=await PackageLocationsAsync("OpenAI.Codex");
             if(!installed.Any(location=>SamePath(Path.GetDirectoryName(exe)!,Path.Combine(location,"app"))||SamePath(Path.GetDirectoryName(exe)!,location)))throw new AppError("The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.");
-            try{exe=await StoreRuntime.PrepareAsync(repository.Root,exe);}catch(Exception error)when(error is IOException or UnauthorizedAccessException){throw new AppError("Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.");}
+            PreparingRuntime.Add(account.Id);PreparationChanged?.Invoke();
+            try{var source=exe;exe=await Task.Run(()=>StoreRuntime.PrepareAsync(repository.Root,source));}catch(Exception error)when(error is IOException or UnauthorizedAccessException){throw new AppError("Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.");}finally{PreparingRuntime.Remove(account.Id);PreparationChanged?.Invoke();}
         }
         repository.PrepareProfile(account);ProtectDirectory(repository.ProfilePath(account));
         var env=ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
