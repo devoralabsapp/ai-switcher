@@ -70,6 +70,7 @@ jobs:
         with:
           name: AI-Switcher-Windows-${{ matrix.runtime }}-${{ github.sha }}
           path: |
+            Windows/artifacts/*.exe
             Windows/artifacts/*.zip
             Windows/artifacts/*.sha256
           if-no-files-found: warn

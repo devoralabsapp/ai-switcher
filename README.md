@@ -19,6 +19,12 @@ The Windows companion uses native .NET/WPF with the same agents, seven themes an
 
 *English interface with the Code theme. Account labels and quota are fictional demo data.*
 
+## Windows preview
+
+Download the standalone **Windows x64 EXE** (Intel/AMD) or **ARM64 EXE** from [Releases](https://github.com/devoralabsapp/ai-switcher/releases). Run it directly with ordinary user permissions; .NET is included. See the [Windows guide](Windows/README.md) for integration limits.
+
+![Windows with Playful Retro Neo-Brutalism](docs/assets/windows-playful-retro-en.png)
+
 ## What it does
 
 - Launch the installed, official ChatGPT app with a separate sign-in and backend for each profile; optionally share local projects and Work history.

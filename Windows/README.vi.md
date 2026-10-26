@@ -4,6 +4,10 @@ Bản Windows dùng giao diện native .NET/WPF, có cùng bộ agent, bảy the
 
 ## Cài và mở
 
+Có thể tải trực tiếp file **.exe** tại [Releases](https://github.com/devoralabsapp/ai-switcher/releases), rồi bấm mở để chạy. Không cần giải nén hay cài .NET. Chọn x64 cho Intel/AMD, ARM64 cho Windows trên ARM.
+
+Nếu dùng gói ZIP:
+
 1. Tải ZIP **win-x64** cho máy Intel/AMD, hoặc **win-arm64** cho Windows trên ARM, tại [Windows Builds](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml).
 2. Giải nén toàn bộ ZIP vào một thư mục có quyền ghi.
 3. Mở **AISwitcher.exe**. Không cần cài .NET hay chạy với quyền quản trị.

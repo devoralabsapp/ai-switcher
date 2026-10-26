@@ -6,7 +6,9 @@ A native .NET 10 / WPF companion to the macOS app. The two apps are maintained i
 
 ## Install
 
-Download the **win-x64** ZIP for Intel/AMD PCs, or **win-arm64** for Windows on ARM, from the Windows workflow artifacts. Extract the whole ZIP to a writable folder and run **AISwitcher.exe**. No .NET installation or administrator access is required. Preview builds are unsigned. SHA-256 files accompany each ZIP. Windows 11 is the primary validation target; vendor apps and Windows AF_UNIX support must also be available. ARM64 packages are cross-built; native ARM64 runtime testing is still required.
+Download the standalone **win-x64 EXE** (Intel/AMD) or **win-arm64 EXE** from [Releases](https://github.com/devoralabsapp/ai-switcher/releases) and run it directly. A ZIP with documentation is also available.
+
+For ZIP builds, download the **win-x64** ZIP for Intel/AMD PCs, or **win-arm64** for Windows on ARM, from the Windows workflow artifacts. Extract the whole ZIP to a writable folder and run **AISwitcher.exe**. No .NET installation or administrator access is required. Preview builds are unsigned. SHA-256 files accompany each ZIP. Windows 11 is the primary validation target; vendor apps and Windows AF_UNIX support must also be available. ARM64 packages are cross-built; native ARM64 runtime testing is still required.
 
 Do not run this app as Administrator and do not copy authentication directories between operating systems. Install the official apps/browsers normally. Settings lets you choose existing executable paths when automatic detection does not find a Store/MSIX/Squirrel installation.
 

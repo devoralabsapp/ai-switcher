@@ -10,6 +10,10 @@ Copy-Item (Join-Path $root 'Windows/README.md') (Join-Path $output 'README.txt')
 Copy-Item (Join-Path $root 'Windows/README.vi.md') $output
 $zip=Join-Path $root "Windows/artifacts/AI-Switcher-Windows-$Runtime.zip"
 Compress-Archive -Path (Join-Path $output '*') -DestinationPath $zip -Force
+$exe=Join-Path $root "Windows/artifacts/AI-Switcher-Windows-$Runtime.exe"
+Copy-Item (Join-Path $output 'AISwitcher.exe') $exe
+$exeHash=(Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+"$exeHash  $(Split-Path $exe -Leaf)" | Set-Content -Encoding ascii "$exe.sha256"
 $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $(Split-Path $zip -Leaf)" | Set-Content -Encoding ascii "$zip.sha256"
 Write-Host "Built $zip"

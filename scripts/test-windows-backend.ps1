@@ -57,7 +57,9 @@ exit 0
     $settings.RunOnlyIfIdle=$false
     $settings.RunOnlyIfNetworkAvailable=$false
     $trigger=New-ScheduledTaskTrigger -Once -At ((Get-Date).AddSeconds(5))
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -User $credential.UserName -Password $credential.GetNetworkCredential().Password -RunLevel Limited | Out-Null
+    $principal=New-ScheduledTaskPrincipal -UserId $credential.UserName -LogonType Password -RunLevel Limited
+    $definition=New-ScheduledTask -Action $action -Trigger $trigger -Settings $settings -Principal $principal
+    Register-ScheduledTask -TaskName $taskName -InputObject $definition -User $credential.UserName -Password $credential.GetNetworkCredential().Password | Out-Null
     $taskRegistered=$true
     Start-ScheduledTask -TaskName $taskName
     $started=(Get-Date).AddSeconds(-2)
