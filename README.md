@@ -10,6 +10,7 @@ AI Switcher is a native SwiftUI and AppKit utility. Manage ChatGPT, Claude, Gemi
 
 The Windows companion uses native .NET/WPF with the same agents, seven themes and quota workspace. See the [Windows setup and compatibility notes](Windows/README.md) and [Windows build artifacts](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml). The guide below describes the macOS app.
 
+[![Windows build](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml/badge.svg)](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml)
 [![macOS build](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml/badge.svg)](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml)
 
 [Download preview](https://github.com/devoralabsapp/ai-switcher/releases) · [Tiếng Việt](docs/README.vi.md) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Roadmap](docs/ROADMAP.md)

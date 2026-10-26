@@ -9,6 +9,8 @@ using AISwitcher.Core;
 
 namespace AISwitcher.Windows;
 internal sealed class BackendService {
+    // Used only by the explicitly disposable, signed-out Windows CI fixture.
+    internal Action<string>? FixtureDiagnostic { get; set; }
     readonly Repository repository;readonly NativePlatform platform;readonly Preferences preferences;
     readonly HashSet<Guid> active=[];
     public BackendService(Repository repository,NativePlatform platform,Preferences preferences){this.repository=repository;this.platform=platform;this.preferences=preferences;}
@@ -57,6 +59,6 @@ internal sealed class BackendService {
         info.RedirectStandardOutput=true;info.RedirectStandardError=true;using var child=Process.Start(info)??throw new AppError("Could not start the profile backend.");
         var output=child.StandardOutput.ReadToEndAsync();var error=child.StandardError.ReadToEndAsync();
         try{await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(90));}catch(TimeoutException){if(!child.HasExited)child.Kill(true);throw new AppError("The Desktop backend did not start within 90 seconds. Try again.");}
-        await output;await error;if(child.ExitCode!=0)throw new AppError("The Desktop backend command failed. Update the app or check its executable in Settings.");
+        var stdout=await output;var stderr=await error;if(child.ExitCode!=0){FixtureDiagnostic?.Invoke(action+" exited "+child.ExitCode+"\n"+stdout+"\n"+stderr);throw new AppError("The Desktop backend command failed. Update the app or check its executable in Settings.");}
     }
 }

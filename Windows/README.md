@@ -2,6 +2,8 @@
 
 A native .NET 10 / WPF companion to the macOS app. The two apps are maintained in the same repository; Windows has its own process, filesystem, window and notification adapters.
 
+[Tiếng Việt](README.vi.md)
+
 ## Install
 
 Download the **win-x64** ZIP for Intel/AMD PCs, or **win-arm64** for Windows on ARM, from the Windows workflow artifacts. Extract the whole ZIP to a writable folder and run **AISwitcher.exe**. No .NET installation or administrator access is required. Preview builds are unsigned. SHA-256 files accompany each ZIP. Windows 11 is the primary validation target; vendor apps and Windows AF_UNIX support must also be available. ARM64 packages are cross-built; native ARM64 runtime testing is still required.
