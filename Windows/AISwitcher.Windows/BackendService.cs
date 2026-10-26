@@ -20,6 +20,7 @@ internal sealed class BackendService {
     public async Task DiscoverAsync(Account account){if(!account.UsesCodexDesktop||!File.Exists(SocketPath(account)))return;repository.ValidateOwned(repository.QuotaHome(account),account.Id);try{await using var client=await SocketClientAsync(account);active.Add(account.Id);}catch{active.Remove(account.Id);}}
     public async Task StartAsync(Account account){
         if(!account.UsesCodexDesktop)throw new AppError("Quota is not available for this agent.");
+        if(NativePlatform.IsElevated())throw new AppError("Run AI Switcher without administrator privileges to connect background sessions.");
         repository.PrepareQuota(account);repository.PrepareProfile(account);NativePlatform.ProtectDirectory(repository.QuotaHome(account));NativePlatform.ProtectDirectory(repository.ProfilePath(account));
         if(Encoding.UTF8.GetByteCount(SocketPath(account))>=104)throw new AppError("The Desktop backend path is too long for a local socket. Use a shorter Windows user-profile path.");
         if(IsActive(account)){if(!SharedWorkspace.BindingMatches(account,repository,preferences))throw new AppError("Close this profile and disable workspace sharing before choosing another workspace.");return;}

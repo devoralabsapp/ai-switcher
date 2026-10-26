@@ -23,6 +23,7 @@ internal sealed class NativePlatform {
     public IReadOnlyList<OwnedProcess> Processes=>processes;
     public NativePlatform(Repository repository,Preferences preferences){this.repository=repository;this.preferences=preferences;}
     public static Dictionary<string,string> EnvironmentValues()=>Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>().ToDictionary(x=>(string)x.Key,x=>(string)x.Value!,StringComparer.OrdinalIgnoreCase);
+    public static bool IsElevated()=>new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
     public static void ProtectDirectory(string path){
         Repository.RejectLinks(path);Directory.CreateDirectory(path);
         var sid=WindowsIdentity.GetCurrent().User??throw new AppError("Profile storage could not be verified.");
