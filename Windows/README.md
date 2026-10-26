@@ -20,7 +20,7 @@ Do not run this app as Administrator and do not copy authentication directories 
 - Headless ChatGPT backend connect/close/restart, explicit Desktop launch, and disabled Connect while a profile is already running.
 - System-tray account menus, silent low/recovered quota notifications, persistent alert deduplication, and notification clicks opening account details. Alerts are opt-in and obey Windows notification settings.
 - Session diagnostics, executable selection and private storage checks. Closing the manager hides it; Quit from the tray exits the manager and leaves external Desktop windows/daemons running.
-- Optional shared local ChatGPT transcript storage and allowlisted project/sidebar metadata. Select the original local `.codex` workspace in Settings, then opt in on a stopped profile. Nonempty private history is preserved and blocks conversion. The source workspace is never deleted with a profile.
+- Optional shared local ChatGPT transcript storage and allowlisted project/sidebar metadata. Select the original local `.codex` workspace in Settings, then opt in on a stopped profile. Top-level `sqlite_home` is honored; Settings also offers an explicit database-folder override and an optional original Work artifact folder. Nonempty private history is preserved and blocks conversion. The source workspace is never deleted with a profile.
 
 ### Account setup
 
@@ -28,7 +28,7 @@ Add a profile, choose the agent, and sign in once in that profile's window. Exis
 
 ChatGPT Desktop requires the newer compatible Electron app with Codex, its bundled/installed native Windows `codex.exe`, and internal isolation switches. Classic ChatGPT is not supported. Claude uses the installed, unmodified app's `--user-data-dir` mechanism. No bundle patches, debug ports, credential extraction, API keys, WSL or browser automation permissions are used.
 
-**Desktop integrations are experimental.** Windows runtime checks use process/UI fixtures; live Windows ChatGPT/Claude sign-in, Store update behavior, OAuth/deep links, live quota, Claude Code/Cowork, and multi-profile shared Work artifacts still need field testing on machines with those apps. Local transcript/database sharing is implemented; macOS artifact-store links and all Work-specific UI metadata do not have validated Windows equivalents. A refused close reports an error and does not force-kill an app. Some apps keep running in their own tray after the last window closes; use that app's Quit action when requested. There is no promise of full vendor compatibility from an offline test run.
+**Desktop integrations are experimental.** Windows runtime checks use process/UI fixtures; live Windows ChatGPT/Claude sign-in, Store update behavior, OAuth/deep links, live quota, Claude Code/Cowork, and multi-profile shared Work artifacts still need field testing on machines with those apps. Local transcript/database sharing, allowlisted metadata projection, retained sidebar archives and an optional explicitly selected Work artifact folder are implemented. Vendor-specific Work UI behavior still needs field validation. A refused close reports an error and does not force-kill an app. Some apps keep running in their own tray after the last window closes; use that app's Quit action when requested. There is no promise of full vendor compatibility from an offline test run.
 
 ## Data
 
@@ -40,7 +40,7 @@ Metadata and preferences: `%LOCALAPPDATA%\AISwitcher` by default. `--data-dir` s
 - `Codex\<UUID>` — browser-mode Codex sign-in.
 - `%USERPROFILE%\.aisw\win-<hash>` — short, root-specific ChatGPT backend home.
 
-The backend CLI creates its private local control-socket directory itself. The manager does not pre-create it or weaken its ACL. Shared transcripts use targeted junctions on opted-in profiles only; authentication and cookies are never linked. Paths that exceed the Windows Unix-socket limit are rejected with an actionable error.
+The backend CLI creates its private local control-socket directory itself. The manager does not pre-create it or weaken its ACL. Shared transcripts and explicitly selected artifacts use targeted junctions on opted-in profiles only; authentication and cookies are never linked. Original private artifact caches are backed up and restored when sharing is disabled. SQLite rollout paths are canonicalized inside a transaction through Windows’ SQLite library before closing/deleting a shared profile; live databases/WAL files are never copied. Paths that exceed the Windows Unix-socket limit are rejected with an actionable error.
 
 Storage is private to the current Windows user, not an encrypted vault. Never upload account data. Deletion stages only owned profile directories; failed metadata saves roll them back. Last cached quota remains visibly stale after reset, six minutes, or an error; reset timers never fabricate refill or recovery alerts.
 

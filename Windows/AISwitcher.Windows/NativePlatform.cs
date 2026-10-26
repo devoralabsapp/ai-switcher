@@ -99,7 +99,7 @@ internal sealed class NativePlatform {
         if(account.EffectiveMode==LaunchMode.Desktop)VerifyIsolation(exe,account.Agent);
         repository.PrepareProfile(account);ProtectDirectory(repository.ProfilePath(account));
         var env=ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
-        if(account.UsesCodexDesktop){env["CODEX_ELECTRON_USER_DATA_PATH"]=repository.DataPath(account);env["CODEX_APP_SERVER_USE_LOCAL_DAEMON"]="1";if(account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.Source(preferences);}
+        if(account.UsesCodexDesktop){env["CODEX_ELECTRON_USER_DATA_PATH"]=repository.DataPath(account);env["CODEX_APP_SERVER_USE_LOCAL_DAEMON"]="1";if(account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.Database(preferences);}
         if(account.Agent==Agent.Claude&&account.EffectiveMode==LaunchMode.Desktop)env["CLAUDE_CONFIG_DIR"]=repository.CodeConfig(account);
         var arguments=new List<string>{"--user-data-dir="+repository.DataPath(account)};
         if(account.EffectiveMode==LaunchMode.Browser)arguments.AddRange(["--no-first-run","--no-default-browser-check","--disable-background-mode","--app="+(url??account.Agent.Url()).AbsoluteUri]);

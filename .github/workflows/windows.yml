@@ -51,6 +51,22 @@ jobs:
           if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'ui-smoke-error.txt');throw 'UI smoke failed'}
           Get-Content (Join-Path $output 'ui-smoke-result.txt')
           Remove-Item -Recurse -Force $root
+      - name: Exercise native Codex background sessions without an account
+        if: matrix.runtime == 'win-x64'
+        run: |
+          $tools=Join-Path $env:TEMP ('ai-switcher-codex.'+[Guid]::NewGuid().ToString('N'))
+          npm install --prefix $tools --no-audit --no-fund '@openai/codex@0.164.0'
+          if($LASTEXITCODE -ne 0){throw 'Official Codex fixture tool install failed'}
+          $cli=Get-ChildItem $tools -Recurse -Filter codex.exe | Where-Object {$_.FullName -match 'x86_64-pc-windows-msvc'} | Select-Object -First 1
+          if(-not $cli){throw 'Native Windows Codex executable was not found'}
+          $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
+          $output=Join-Path $PWD 'artifacts/previews'
+          $app=Join-Path $PWD 'artifacts/win-x64/AISwitcher.exe'
+          $p=Start-Process $app -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$output`"",'--backend-smoke-test','--codex-executable',"`"$($cli.FullName)`"") -PassThru
+          if(-not $p.WaitForExit(240000)){$p.Kill();throw 'Backend smoke timed out'}
+          if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'backend-smoke-error.txt');throw 'Backend smoke failed'}
+          Get-Content (Join-Path $output 'backend-smoke-result.txt')
+          Remove-Item -Recurse -Force $root,$tools
       - name: Save Windows builds and visual QA
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

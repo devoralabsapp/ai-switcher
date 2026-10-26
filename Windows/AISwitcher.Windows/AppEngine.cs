@@ -35,7 +35,7 @@ internal sealed class AppEngine {
     public void SetQuotaOnly(bool enabled){Preferences.SetQuotaOnly(enabled);SavePreferences();}
     public void SetAgent(Agent? agent){Preferences.AgentFilter=agent;SavePreferences();}
     public string Message(Exception error)=>L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
-    public bool Running(Account a)=>a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a);
+    public bool Running(Account a)=>a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a)||Backend.HasSocket(a);
     public bool CanConnect(Account a)=>a.UsesCodexDesktop&&!ReadOnly&&!Busy.Contains(a.Id)&&!Running(a);
     public string Status(Account a)=>Busy.Contains(a.Id)?L["Working…"]:Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]?L["Sign-in required"]:a.Agent.IsShared()?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Backend.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
     public bool DefaultConnect(Account a)=>a.UsesCodexDesktop&&(Preferences.QuotaOnlyMode||a.DefaultAction==DefaultAction.ConnectSession);
@@ -85,7 +85,7 @@ internal sealed class AppEngine {
     }
     public Task CloseAsync(Account a)=>Run(a,async()=>{if(a.Agent.IsShared())return;await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);});
     public Task RestartAsync(Account a){if(!a.UsesCodexDesktop)return Task.CompletedTask;return Run(a,async()=>{await Platform.CloseAsync(a);await Backend.StopAsync(a);await Backend.StartAsync(a);await ReadAsync(a);});}
-    public Task DeleteAsync(Account a)=>Run(a,async()=>{await Platform.RefreshProcessesAsync();if(Running(a)&&!a.Agent.IsShared())throw new AppError("Close this session before deleting its profile.");Snapshot=Repository.Remove(a,Snapshot);});
+    public Task DeleteAsync(Account a)=>Run(a,async()=>{await Platform.RefreshProcessesAsync();if(Running(a)&&!a.Agent.IsShared())throw new AppError("Close this session before deleting its profile.");if(a.UsesCodexDesktop)SharedWorkspace.Archive(a,Repository);Snapshot=Repository.Remove(a,Snapshot);});
     public Task BrowserLoginAsync(Account a,Func<Identity,Task<bool>> confirm,CancellationToken ct)=>Run(a,async()=>{
         if(!a.Agent.HasQuota()||a.EffectiveMode!=LaunchMode.Browser)return;
         await using var client=await Backend.StdioClientAsync(a,ct);var login=await client.StartLoginAsync(ct);bool confirmed=false;

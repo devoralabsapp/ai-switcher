@@ -11,7 +11,7 @@ using static AISwitcher.Windows.ThemeManager;
 
 namespace AISwitcher.Windows;
 internal sealed partial class MainWindow {
-    Window Dialog(string title,double width=560,double height=600)=>new(){Owner=this,Title=title,Width=width,Height=height,MinWidth=width,MinHeight=350,WindowStartupLocation=WindowStartupLocation.CenterOwner,ShowInTaskbar=false};
+    Window Dialog(string title,double width=560,double height=600){var window=new Window{Owner=this,Title=title,Width=width,Height=height,MinWidth=width,MinHeight=350,WindowStartupLocation=WindowStartupLocation.CenterOwner,ShowInTaskbar=false};window.SourceInitialized+=(_,_)=>ThemeManager.ApplyChrome(window,T);return window;}
     public void Notice(string title,string text){var dialog=Dialog(title,550,330);var close=Button(L["Got it"],()=>dialog.Close(),true,T);dialog.Content=new Border{Padding=new Thickness(24),Child=Stack(Text(title,22,true),Space(16),new ScrollViewer{Content=Text(text,13),MaxHeight=155},Space(18),close)};dialog.ShowDialog();}
     bool Ask(string title,string message,string confirm){var dialog=Dialog(title,560,350);var yes=Button(confirm,()=>dialog.DialogResult=true,true,T);var cancel=Button(L["Cancel"],()=>dialog.DialogResult=false);dialog.Content=new Border{Padding=new Thickness(24),Child=Stack(Text(title,21,true),Space(18),new ScrollViewer{Content=Text(message),MaxHeight=170},Space(22),Row(cancel,yes))};return dialog.ShowDialog()==true;}
     public void QuotaDetails(Account account){ShowManager();var dialog=Dialog(L["Codex quota"],590,680);void Build(){var a=engine.Snapshot.Accounts.FirstOrDefault(x=>x.Id==account.Id);if(a==null){dialog.Close();return;}
@@ -32,36 +32,36 @@ internal sealed partial class MainWindow {
     }
     public void EditAccount(Account? original=null){ShowManager();var dialog=Dialog(L[original==null?"Add account":"Edit profile"],550,760);
         var name=new TextBox{Text=original?.Name??"",MaxLength=48};var note=new TextBox{Text=original?.EmailHint??"",MaxLength=160};
-        var agent=new ComboBox{ItemsSource=Enum.GetValues<Agent>(),SelectedItem=original?.Agent??engine.Preferences.AgentFilter??Agent.Chatgpt,IsEnabled=original==null};
+        var agent=new ComboBox{ItemsSource=Enum.GetValues<Agent>().Select(x=>new KeyValuePair<Agent,string>(x,x.Name())).ToArray(),DisplayMemberPath="Value",SelectedValuePath="Key",SelectedValue=original?.Agent??engine.Preferences.AgentFilter??Agent.Chatgpt,IsEnabled=original==null};
         var browser=new ComboBox{ItemsSource=Enum.GetValues<Browser>(),SelectedItem=original?.Browser??Browser.Chrome,IsEnabled=original==null};
         var mode=new ComboBox{ItemsSource=Enum.GetValues<LaunchMode>(),SelectedItem=original?.EffectiveMode??LaunchMode.Desktop};
-        var color=new ComboBox{ItemsSource=ProfileColors.Names,SelectedItem=original?.Color??ProfileColors.Names[engine.Snapshot.Accounts.Count%ProfileColors.Names.Length]};
+        var color=new ComboBox{ItemsSource=ProfileColors.Names.Select(x=>L[char.ToUpperInvariant(x[0])+x[1..]]).ToArray(),SelectedIndex=original==null?engine.Snapshot.Accounts.Count%ProfileColors.Names.Length:Array.IndexOf(ProfileColors.Names,original.Color)};
         var defaultAction=new ComboBox{ItemsSource=new[]{L["Open ChatGPT"],L["Connect in background"]},SelectedIndex=original?.DefaultAction==DefaultAction.ConnectSession||original==null&&engine.Preferences.QuotaOnlyMode?1:0};
         var startup=new CheckBox{Content=L["Connect in background when AI Switcher starts"],IsChecked=original?.ConnectOnStartup??false};
         var shared=new CheckBox{Content=L["Share local projects and Work history"],IsChecked=original?.SharesLocalWorkspace??false};
         var openAfter=new CheckBox{Content=L["Open after adding"],IsChecked=!engine.Preferences.QuotaOnlyMode};
         var explanation=Text("",11,false,T.Secondary);var fields=new StackPanel();
-        void Field(string label,UIElement content){fields.Children.Add(Text(L[label],12,true));fields.Children.Add(Space(6));fields.Children.Add(content);fields.Children.Add(Space(16));}
-        Field("AI agent",agent);Field("Account name",name);Field("Email or note",note);Field("Profile color",color);Field("Mode",mode);fields.Children.Add(explanation);fields.Children.Add(Space(14));Field("Browser",browser);
+        StackPanel Field(string label,UIElement content){var group=Stack(Text(L[label],12,true),Space(6),content,Space(16));fields.Children.Add(group);return group;}
+        Field("AI agent",agent);Field("Account name",name);Field("Email or note",note);Field("Profile color",color);var modeField=Field("Mode",mode);fields.Children.Add(explanation);fields.Children.Add(Space(14));var browserField=Field("Browser",browser);
         var desktopOptions=Stack(Text(L["Default account action"],12,true),Space(6),defaultAction,startup,shared,Text(L["Sharing uses the workspace folder selected in Settings. Authentication stays private."],11,false,T.Secondary),Space(16));fields.Children.Add(desktopOptions);
         if(original==null)fields.Children.Add(openAfter);
         var support=Text(L["Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."],11,false,T.Secondary);support.Margin=new Thickness(0,16,0,20);fields.Children.Add(support);
-        void UpdateFields(){var selected=(Agent)agent.SelectedItem;var selectedMode=(LaunchMode)mode.SelectedItem;
+        void UpdateFields(){var selected=(Agent)agent.SelectedValue;var selectedMode=(LaunchMode)mode.SelectedItem;
             mode.IsEnabled=(selected is Agent.Chatgpt or Agent.Claude)&&(original==null||!engine.Running(original)&&!engine.Busy.Contains(original.Id));
             var effective=selected is Agent.Chatgpt or Agent.Claude?selectedMode:selected.IsShared()?LaunchMode.Desktop:LaunchMode.Browser;
-            browser.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
+            modeField.Visibility=selected is Agent.Claude or Agent.Chatgpt?Visibility.Visible:Visibility.Collapsed;browserField.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
             shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=Support(new Account{Agent=selected,LaunchMode=effective});
         }
         agent.SelectionChanged+=(_,_)=>UpdateFields();mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
-            var selected=(Agent)agent.SelectedItem;
-            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=(string)color.SelectedItem,LaunchMode=(LaunchMode)mode.SelectedItem,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true};
+            var selected=(Agent)agent.SelectedValue;
+            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedItem,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true};
             if(engine.SaveAccount(edited)){dialog.Close();if(original==null&&openAfter.IsChecked==true)_=engine.OpenAsync(edited);}
         },true,T);save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;name.TextChanged+=(_,_)=>save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;
         var body=new DockPanel{LastChildFill=true,Margin=new Thickness(25)};var footer=Row(Button(L["Cancel"],()=>dialog.Close()),save);footer.HorizontalAlignment=HorizontalAlignment.Right;DockPanel.SetDock(footer,Dock.Bottom);body.Children.Add(footer);body.Children.Add(new ScrollViewer{Content=Stack(Text(L[original==null?"Another account.\nKeep your flow.":"Edit profile"],24,true),Space(20),fields),VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new Thickness(0,0,0,14)});dialog.Content=body;dialog.ShowDialog();
     }
     public void Settings(){ShowManager();var dialog=Dialog(L["Appearance & Language"],650,760);
-        void Build(){dialog.Title=L["Appearance & Language"];var stack=Stack(Text(L["Appearance & Language"],24,true),Space(20));
+        void Build(){ThemeManager.ApplyChrome(dialog,T);dialog.Title=L["Appearance & Language"];var stack=Stack(Text(L["Appearance & Language"],24,true),Space(20));
             void Label(string label,UIElement control){stack.Children.Add(Text(L[label],13,true));stack.Children.Add(Space(8));stack.Children.Add(control);stack.Children.Add(Space(18));}
             var language=new ComboBox{ItemsSource=new[]{"Tiếng Việt","English"},SelectedIndex=engine.Preferences.Language=="en"?1:0};language.SelectionChanged+=(_,_)=>{engine.Preferences.Language=language.SelectedIndex==1?"en":"vi";engine.SavePreferences();Build();};Label("Language",language);
             var layout=new ComboBox{ItemsSource=new[]{L["Account cards"],L["Quota overview"]},SelectedIndex=engine.Preferences.WorkspaceLayout==WorkspaceLayout.Cards?0:1};layout.SelectionChanged+=(_,_)=>{engine.Preferences.WorkspaceLayout=layout.SelectedIndex==0?WorkspaceLayout.Cards:WorkspaceLayout.QuotaTable;engine.SavePreferences();};Label("Workspace view",layout);
@@ -73,6 +73,10 @@ internal sealed partial class MainWindow {
             stack.Children.Add(Text(L["Application executables"],17,true));stack.Children.Add(Text(L["Choose installed executables only when automatic detection cannot find an app. No apps or credentials are downloaded."],11,false,T.Secondary));stack.Children.Add(Space(10));
             foreach(var key in new[]{"chatgpt","claude","codex","chrome","edge","brave","antigravity"}){var path=Text(engine.Preferences.Executables.GetValueOrDefault(key)??L["Automatic detection"],10,false,T.Secondary);var choose=Button(L["Choose…"],()=>{var picker=new Microsoft.Win32.OpenFileDialog{Filter="Windows application (*.exe)|*.exe",CheckFileExists=true};if(picker.ShowDialog(dialog)==true){engine.Preferences.Executables[key]=picker.FileName;engine.Platform.InvalidateDiscovery();engine.SavePreferences();Build();}});var reset=Button(L["Reset"],()=>{engine.Preferences.Executables.Remove(key);engine.Platform.InvalidateDiscovery();engine.SavePreferences();Build();});stack.Children.Add(Text(key,12,true));stack.Children.Add(path);stack.Children.Add(Row(choose,reset));stack.Children.Add(Space(12));}
             stack.Children.Add(Text(L["Shared local workspace"],17,true));stack.Children.Add(Text(SharedWorkspace.Source(engine.Preferences),11,false,T.Secondary));stack.Children.Add(Button(L["Choose folder…"],()=>{using var picker=new System.Windows.Forms.FolderBrowserDialog();if(picker.ShowDialog()==System.Windows.Forms.DialogResult.OK){engine.Preferences.Executables["workspace"]=picker.SelectedPath;engine.SavePreferences();Build();}}));stack.Children.Add(Text(L["Enable sharing separately on stopped ChatGPT Desktop profiles. Private history is never overwritten."],11,false,T.Secondary));
+            foreach(var (key,label) in new[]{("database","Shared database folder (optional override)"),("artifacts","Shared Work artifacts folder (optional)")}){
+                stack.Children.Add(Space(14));stack.Children.Add(Text(L[label],12,true));stack.Children.Add(Text(engine.Preferences.Executables.GetValueOrDefault(key)??L["Automatic detection"],11,false,T.Secondary));
+                stack.Children.Add(Row(Button(L["Choose folder…"],()=>{using var picker=new System.Windows.Forms.FolderBrowserDialog();if(picker.ShowDialog()==System.Windows.Forms.DialogResult.OK){engine.Preferences.Executables[key]=picker.SelectedPath;engine.SavePreferences();Build();}}),Button(L["Reset"],()=>{engine.Preferences.Executables.Remove(key);engine.SavePreferences();Build();})));
+            }
             var outer=new DockPanel{Margin=new Thickness(26)};var done=Button(L["Done"],()=>dialog.Close(),true,T);done.HorizontalAlignment=HorizontalAlignment.Right;done.Margin=new Thickness(0,15,0,0);DockPanel.SetDock(done,Dock.Bottom);outer.Children.Add(done);outer.Children.Add(new ScrollViewer{Content=stack,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});dialog.Content=outer;
         }Build();dialog.ShowDialog();
     }

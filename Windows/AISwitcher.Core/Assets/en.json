@@ -409,5 +409,8 @@
   "Use this Codex account for this profile?": "Use this Codex account for this profile?",
   "Verify Codex account": "Verify Codex account",
   "The operation failed. Your existing data has been preserved.": "The operation failed. Your existing data has been preserved.",
-  "Windows quick start": "Choose an agent, add a profile, and sign in directly in its own window. ChatGPT and Claude support Desktop profiles; web agents use separate browser profiles. Antigravity uses shared application sign-in. Quota-only connects ChatGPT in the background; disabling returns to cards. Connect is disabled while a profile is running. Closing the manager keeps the system tray available. Right-click the tray icon to show the manager or quit. Ctrl+N adds, Ctrl+K searches, Ctrl+1–9 opens a profile. Settings contains seven themes, language and executable paths. Quota is available only for ChatGPT/Codex."
+  "Windows quick start": "Choose an agent, add a profile, and sign in directly in its own window. ChatGPT and Claude support Desktop profiles; web agents use separate browser profiles. Antigravity uses shared application sign-in. Quota-only connects ChatGPT in the background; disabling returns to cards. Connect is disabled while a profile is running. Closing the manager keeps the system tray available. Right-click the tray icon to show the manager or quit. Ctrl+N adds, Ctrl+K searches, Ctrl+1–9 opens a profile. Settings contains seven themes, language and executable paths. Quota is available only for ChatGPT/Codex.",
+  "Shared database folder (optional override)": "Shared database folder (optional override)",
+  "Shared Work artifacts folder (optional)": "Shared Work artifacts folder (optional)",
+  "The shared workspace database could not be updated. Its data was preserved.": "The shared workspace database could not be updated. Its data was preserved."
 }

@@ -21,7 +21,7 @@ internal sealed partial class MainWindow:Window {
     TextBox searchBox=null!;StackPanel sidebar=null!,workspace=null!;
     public bool Exiting { get; set; }
     public MainWindow(AppEngine engine){
-        this.engine=engine;Title="AI Switcher";Width=1160;Height=850;MinWidth=1000;MinHeight=700;
+        this.engine=engine;Style=(Style)Application.Current.FindResource(typeof(Window));SourceInitialized+=(_,_)=>ThemeManager.ApplyChrome(this,T);Title="AI Switcher";Width=1160;Height=850;MinWidth=1000;MinHeight=700;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
         engine.Changed+=Update;engine.Error+=message=>Notice(L["AI Switcher"],message);
         Closing+=(_,e)=>{if(!Exiting){e.Cancel=true;Hide();}};
@@ -45,7 +45,7 @@ internal sealed partial class MainWindow:Window {
         var next=System.Text.Json.JsonSerializer.Serialize(engine.Snapshot,Json.Options)+System.Text.Json.JsonSerializer.Serialize(engine.Preferences,Json.Options)+workspaceFilter+search+engine.LifecycleError+string.Join("|",engine.Snapshot.Accounts.Select(a=>engine.Status(a)))+string.Join("|",engine.Errors.Values);
         if(signature==next)return;signature=next;
         if(currentTheme!=engine.Preferences.Theme||currentLanguage!=engine.Preferences.Language){Render();return;}RenderSidebar();RenderWorkspace();}
-    void Render(){ThemeManager.Apply(T);currentTheme=engine.Preferences.Theme;currentLanguage=engine.Preferences.Language;
+    void Render(){ThemeManager.Apply(T);ThemeManager.ApplyChrome(this,T);currentTheme=engine.Preferences.Theme;currentLanguage=engine.Preferences.Language;
         var outer=new Grid();outer.ColumnDefinitions.Add(new(){Width=new GridLength(230)});outer.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
         sidebar=new StackPanel{Margin=new Thickness(18,26,18,18)};
         var sideScroll=new ScrollViewer{Content=sidebar,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Background=Brush(T.Sidebar)};
@@ -58,13 +58,14 @@ internal sealed partial class MainWindow:Window {
         var footer=Text("●  "+L["Ready when you are"]+"                                      AI Switcher 1.4 · Windows",10,false,T.Secondary);footer.Margin=new Thickness(28,10,20,10);Grid.SetRow(footer,2);right.Children.Add(footer);Content=outer;
         RenderSidebar();RenderWorkspace();
     }
+    void NavStyle(Button button,bool selected,string fill){button.Background=selected?Brush(fill):Brush("#00000000");button.BorderThickness=new Thickness(selected?(T.Retro?2.5:1):0);button.FontWeight=selected?FontWeights.SemiBold:FontWeights.Normal;}
     void RenderSidebar(){sidebar.Children.Clear();sidebar.Children.Add(Text("⇅  AI Switcher",21,true));sidebar.Children.Add(Text(L["One click to your account"],11,false,T.Secondary));sidebar.Children.Add(Space(28));sidebar.Children.Add(Text(L["YOUR WORKSPACE"],10,true,T.Secondary));sidebar.Children.Add(Space(10));
-        foreach(var (id,key) in new[]{("all","All accounts"),("favorites","Favorites"),("recent","Recent")}){var selected=workspaceFilter==id;var button=Button(L[key]+(id=="all"?"   "+engine.Snapshot.Accounts.Count:""),()=>{workspaceFilter=id;Update();});button.Margin=new Thickness(0,0,0,7);button.HorizontalContentAlignment=HorizontalAlignment.Left;if(selected)button.Background=Brush(T.Retro?"#B4EDC5":T.Surface);sidebar.Children.Add(button);}
+        foreach(var (id,key) in new[]{("all","All accounts"),("favorites","Favorites"),("recent","Recent")}){var selected=workspaceFilter==id;var button=Button(L[key]+(id=="all"?"   "+engine.Snapshot.Accounts.Count:""),()=>{workspaceFilter=id;Update();});button.Margin=new Thickness(0,0,0,7);button.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(button,selected,T.Retro?"#B4EDC5":T.Surface);sidebar.Children.Add(button);}
         sidebar.Children.Add(Space(22));sidebar.Children.Add(Text(L["AI AGENTS"],10,true,T.Secondary));sidebar.Children.Add(Space(10));
-        var all=Button(L["All agents"]+"   "+engine.Snapshot.Accounts.Count,()=>{engine.SetAgent(null);Render();});all.Margin=new Thickness(0,0,0,5);all.HorizontalContentAlignment=HorizontalAlignment.Left;if(engine.Preferences.AgentFilter==null)all.Background=Brush(T.Retro?"#A8D8F0":T.Surface);sidebar.Children.Add(all);
-        foreach(var agent in Enum.GetValues<Agent>()){var button=Button(agent.Name()+"   "+engine.Snapshot.Accounts.Count(x=>x.Agent==agent),()=>{engine.SetAgent(agent);Render();});button.Margin=new Thickness(0,0,0,5);button.HorizontalContentAlignment=HorizontalAlignment.Left;if(engine.Preferences.AgentFilter==agent)button.Background=Brush(T.Retro?"#A8D8F0":T.Surface);AutomationProperties.SetAutomationId(button,"agent-filter-"+agent.ToString().ToLowerInvariant());sidebar.Children.Add(button);}
+        var all=Button(L["All agents"]+"   "+engine.Snapshot.Accounts.Count,()=>{engine.SetAgent(null);Render();});all.Margin=new Thickness(0,0,0,5);all.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(all,engine.Preferences.AgentFilter==null,T.Retro?"#A8D8F0":T.Surface);sidebar.Children.Add(all);
+        foreach(var agent in Enum.GetValues<Agent>()){var button=Button(agent.Name()+"   "+engine.Snapshot.Accounts.Count(x=>x.Agent==agent),()=>{engine.SetAgent(agent);Render();});button.Margin=new Thickness(0,0,0,5);button.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(button,engine.Preferences.AgentFilter==agent,T.Retro?"#A8D8F0":T.Surface);AutomationProperties.SetAutomationId(button,"agent-filter-"+agent.ToString().ToLowerInvariant());sidebar.Children.Add(button);}
         if(engine.Snapshot.Accounts.FirstOrDefault(x=>x.Id==engine.Snapshot.LastOpenedId) is { } last){sidebar.Children.Add(Space(18));sidebar.Children.Add(Text(L["OPEN AGAIN"],10,true,T.Secondary));sidebar.Children.Add(Button(last.Name,()=>_=engine.DefaultAsync(last)));}
-        sidebar.Children.Add(Space(28));foreach(var (title,action) in new(string,Action)[]{("Appearance & Language",Settings),("How it works",Guide),("Session diagnostics",Diagnostics),("Local data",RevealData)}){var button=Button(L[title],action);button.Margin=new Thickness(0,0,0,8);button.HorizontalContentAlignment=HorizontalAlignment.Left;sidebar.Children.Add(button);}
+        sidebar.Children.Add(Space(28));foreach(var (title,action) in new(string,Action)[]{("Appearance & Language",Settings),("How it works",Guide),("Session diagnostics",Diagnostics),("Local data",RevealData)}){var button=Button(L[title],action);button.Margin=new Thickness(0,0,0,8);button.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(button,false,T.Surface);sidebar.Children.Add(button);}
         sidebar.Children.Add(Space(14));sidebar.Children.Add(Text(L["Choose an agent to view its accounts and supported features."],10,false,T.Secondary));
     }
     void RenderWorkspace(){workspace.Children.Clear();
