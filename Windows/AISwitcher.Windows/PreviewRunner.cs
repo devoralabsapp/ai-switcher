@@ -49,7 +49,7 @@ internal static class PreviewRunner {
             var protectedCli=Path.Combine(root,"WindowsApps","OpenAI.Codex_fixture","app","Codex.exe");Directory.CreateDirectory(Path.GetDirectoryName(protectedCli)!);File.Copy(executable,protectedCli);
             var unversioned=Path.Combine(local,"OpenAI","Codex","bin","codex.exe");File.Copy(executable,unversioned);
             var candidates=new[]{Environment.ProcessPath!,protectedCli}.Concat(CodexLocator.UserCandidates(local,Path.Combine(root,"fake-roaming")));
-            Require(await CodexLocator.ResolveAsync(candidates)==relocated,"Store/GUI candidates hid the runnable relocated CLI");
+            var resolved=await CodexLocator.ResolveAsync(candidates);Require(resolved!=null&&NativePlatform.SamePath(resolved,relocated),"Store/GUI candidates hid the runnable relocated CLI");
             engine.Preferences.Executables["codex"]=relocated;
             if(NativePlatform.IsElevated()){try{await engine.Backend.StartAsync(account);throw new InvalidOperationException("Elevated daemon startup was accepted");}catch(AppError error)when(error.Key=="Run AI Switcher without administrator privileges to connect background sessions."){}}
             await using var client=await engine.Backend.StdioClientAsync(account);
