@@ -84,7 +84,7 @@ internal static class PreviewRunner {
             foreach(var account in new[]{a,b}){repository.PrepareProfile(account);var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};foreach(var arg in new[]{"--process-fixture","--data-dir",root,"--user-data-dir="+repository.DataPath(account)})info.ArgumentList.Add(arg);children.Add(Process.Start(info)!);}
             for(var i=0;i<40;i++){await Task.Delay(250);await engine.Platform.RefreshProcessesAsync();if(engine.Platform.Owned(a)?.HasWindow==true&&engine.Platform.Owned(b)?.HasWindow==true)break;}
             Require(engine.Platform.Owned(a)?.Id==children[0].Id,"A was not routed to its exact PID");Require(engine.Platform.Owned(b)?.Id==children[1].Id,"B was not routed to its exact PID");
-            Require(!engine.CanConnect(a),"Claude must not expose a Codex connection");await engine.Platform.CloseAsync(a);Require(children[0].HasExited&&!children[1].HasExited,"Closing A affected B");await engine.Platform.CloseAsync(b);Require(children[1].HasExited,"B refused to close");
+            Require(!await engine.SetExecutableAsync("claude",null),"A running profile allowed its executable routing to change");Require(engine.Preferences.Executables["claude"]==Environment.ProcessPath,"Rejected routing change mutated preferences");Require(!engine.CanConnect(a),"Claude must not expose a Codex connection");await engine.Platform.CloseAsync(a);Require(children[0].HasExited&&!children[1].HasExited,"Closing A affected B");await engine.Platform.CloseAsync(b);Require(children[1].HasExited,"B refused to close");
         }finally{foreach(var child in children){if(!child.HasExited)child.Kill(true);child.Dispose();}Repository.DeleteTree(root);}
     }
 }

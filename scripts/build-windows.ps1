@@ -7,6 +7,7 @@ dotnet publish AISwitcher.Windows/AISwitcher.Windows.csproj -c Release -r $Runti
 if($LASTEXITCODE -ne 0){throw 'Windows publish failed'}
 Copy-Item (Join-Path $root 'LICENSE') $output
 Copy-Item (Join-Path $root 'Windows/README.md') (Join-Path $output 'README.txt')
+Copy-Item (Join-Path $root 'Windows/README.vi.md') $output
 $zip=Join-Path $root "Windows/artifacts/AI-Switcher-Windows-$Runtime.zip"
 Compress-Archive -Path (Join-Path $output '*') -DestinationPath $zip -Force
 $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()

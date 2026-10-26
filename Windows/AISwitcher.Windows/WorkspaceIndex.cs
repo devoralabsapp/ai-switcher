@@ -34,7 +34,7 @@ internal static class WorkspaceIndex {
             }finally{if(db!=IntPtr.Zero)Close(db);}
         }
     }
-    static bool HasRolloutColumn(IntPtr db){IntPtr statement=IntPtr.Zero;try{if(Prepare(db,"PRAGMA table_info(threads)",-1,out statement,IntPtr.Zero)!=0)return false;while(Step(statement)==100)if(Marshal.PtrToStringUTF8(ColumnText(statement,1))=="rollout_path")return true;return false;}finally{if(statement!=IntPtr.Zero)FinalizeStatement(statement);}}
+    static bool HasRolloutColumn(IntPtr db){IntPtr statement=IntPtr.Zero;try{if(Prepare(db,"PRAGMA table_info(threads)",-1,out statement,IntPtr.Zero)!=0)throw new AppError("The shared workspace database could not be updated. Its data was preserved.");int result;while((result=Step(statement))==100)if(Marshal.PtrToStringUTF8(ColumnText(statement,1))=="rollout_path")return true;if(result!=101)throw new AppError("The shared workspace database could not be updated. Its data was preserved.");return false;}finally{if(statement!=IntPtr.Zero)FinalizeStatement(statement);}}
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_open_v2",CallingConvention=CallingConvention.Cdecl)]static extern int Open([MarshalAs(UnmanagedType.LPUTF8Str)]string path,out IntPtr db,int flags,IntPtr vfs);
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_close",CallingConvention=CallingConvention.Cdecl)]static extern int Close(IntPtr db);
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_busy_timeout",CallingConvention=CallingConvention.Cdecl)]static extern int BusyTimeout(IntPtr db,int ms);

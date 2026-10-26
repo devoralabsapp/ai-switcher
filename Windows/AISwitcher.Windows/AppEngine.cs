@@ -34,6 +34,15 @@ internal sealed class AppEngine {
     public void SavePreferences(){try{Repository.SavePreferences(Preferences);Notify();}catch(Exception error){Error?.Invoke(Message(error));}}
     public void SetQuotaOnly(bool enabled){Preferences.SetQuotaOnly(enabled);SavePreferences();}
     public void SetAgent(Agent? agent){Preferences.AgentFilter=agent;SavePreferences();}
+    public async Task<bool> SetExecutableAsync(string key,string? path){
+        if(ReadOnly)return false;
+        try{
+            await Platform.RefreshProcessesAsync();
+            if(Snapshot.Accounts.Any(a=>(NativePlatform.ExecutableKey(a)==key||key=="codex"&&a.UsesCodexDesktop)&&(Busy.Contains(a.Id)||Running(a))))throw new AppError("Close running sessions before changing their application executable.");
+            if(path==null)Preferences.Executables.Remove(key);else Preferences.Executables[key]=path;
+            Platform.InvalidateDiscovery();Repository.SavePreferences(Preferences);Notify();return true;
+        }catch(Exception error){Error?.Invoke(Message(error));return false;}
+    }
     public string Message(Exception error)=>L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
     public bool Running(Account a)=>a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a)||Backend.HasSocket(a);
     public bool CanConnect(Account a)=>a.UsesCodexDesktop&&!ReadOnly&&!Busy.Contains(a.Id)&&!Running(a);

@@ -413,5 +413,6 @@
   "Shared database folder (optional override)": "Shared database folder (optional override)",
   "Shared Work artifacts folder (optional)": "Shared Work artifacts folder (optional)",
   "The shared workspace database could not be updated. Its data was preserved.": "The shared workspace database could not be updated. Its data was preserved.",
-  "Run AI Switcher without administrator privileges to connect background sessions.": "Run AI Switcher without administrator privileges to connect background sessions."
+  "Run AI Switcher without administrator privileges to connect background sessions.": "Run AI Switcher without administrator privileges to connect background sessions.",
+  "Close running sessions before changing their application executable.": "Close running sessions before changing their application executable."
 }

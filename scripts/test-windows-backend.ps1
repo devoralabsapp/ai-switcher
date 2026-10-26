@@ -9,6 +9,8 @@ $ErrorActionPreference='Stop'
 $name='aisw'+[Guid]::NewGuid().ToString('N').Substring(0,10)
 $scope=Join-Path $env:PUBLIC ('ai-switcher-backend.'+[Guid]::NewGuid().ToString('N'))
 $created=$false
+$taskRegistered=$false
+$taskName='AI-Switcher-Smoke-'+$name
 try {
     New-Item -ItemType Directory -Path $scope,$Output -Force | Out-Null
     $password=ConvertTo-SecureString ('Aa1!'+[Guid]::NewGuid().ToString('N')) -AsPlainText -Force
@@ -40,17 +42,31 @@ try {
     Remove-Item -Recurse -Force $root
 } catch {
     Add-Content (Join-Path $output 'backend-smoke-error.txt') $_.Exception.Message
+    Set-Content (Join-Path $scope 'exit-code.txt') '1'
     exit 1
 }
+Set-Content (Join-Path $scope 'exit-code.txt') '0'
 exit 0
 '@ | Set-Content $script -Encoding utf8
     $credential=[PSCredential]::new("$env:COMPUTERNAME\$name",$password)
-    $process=Start-Process 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Credential $credential -LoadUserProfile -WorkingDirectory $scope -ArgumentList @('-NoProfile','-NonInteractive','-File',"`"$script`"") -PassThru
-    if(-not $process.WaitForExit(270000)){$process.Kill();throw 'Ordinary-user Windows smoke timed out'}
+    # Task Scheduler starts outside the runner's restrictive job object, just
+    # as launching the installed app from Explorer does. No elevation is used.
+    $action=New-ScheduledTaskAction -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument "-NoProfile -NonInteractive -File `"$script`"" -WorkingDirectory $scope
+    $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+    Register-ScheduledTask -TaskName $taskName -Action $action -Settings $settings -User $credential.UserName -Password $credential.GetNetworkCredential().Password -RunLevel Limited | Out-Null
+    $taskRegistered=$true
+    Start-ScheduledTask -TaskName $taskName
+    $deadline=(Get-Date).AddSeconds(270)
+    while(-not (Test-Path (Join-Path $scope 'exit-code.txt'))){
+        if((Get-Date) -gt $deadline){Stop-ScheduledTask -TaskName $taskName;throw 'Ordinary-user Windows smoke timed out'}
+        Start-Sleep -Seconds 1
+    }
+    $exitCode=[int](Get-Content (Join-Path $scope 'exit-code.txt'))
     Copy-Item (Join-Path $scope 'results/*') $Output -Force
-    if($process.ExitCode -ne 0){Get-Content (Join-Path $Output 'backend-smoke-error.txt');throw 'Ordinary-user Windows backend smoke failed'}
+    if($exitCode -ne 0){Get-Content (Join-Path $Output 'backend-smoke-error.txt');throw 'Ordinary-user Windows backend smoke failed'}
     Get-Content (Join-Path $Output 'backend-smoke-result.txt')
 } finally {
+    if($taskRegistered){Stop-ScheduledTask -TaskName $taskName;Unregister-ScheduledTask -TaskName $taskName -Confirm:$false}
     if($created){Remove-LocalUser -Name $name}
     if(Test-Path $scope){Remove-Item $scope -Recurse -Force}
 }

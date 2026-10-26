@@ -42,5 +42,6 @@
   "Shared database folder (optional override)": "Thư mục cơ sở dữ liệu dùng chung (tùy chọn)",
   "Shared Work artifacts folder (optional)": "Thư mục artifact Work dùng chung (tùy chọn)",
   "The shared workspace database could not be updated. Its data was preserved.": "Không cập nhật được chỉ mục dữ liệu dùng chung. Dữ liệu đã được giữ nguyên.",
-  "Run AI Switcher without administrator privileges to connect background sessions.": "Hãy mở AI Switcher bằng quyền người dùng thường để kết nối phiên nền."
+  "Run AI Switcher without administrator privileges to connect background sessions.": "Hãy mở AI Switcher bằng quyền người dùng thường để kết nối phiên nền.",
+  "Close running sessions before changing their application executable.": "Hãy đóng các phiên đang chạy trước khi đổi đường dẫn ứng dụng."
 }
