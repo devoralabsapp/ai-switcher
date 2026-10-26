@@ -4,6 +4,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      daemon_probe:
+        description: Attempt the ordinary-user daemon probe (hosted runner may block Task Scheduler)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -52,7 +57,7 @@ jobs:
           if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'ui-smoke-error.txt');throw 'UI smoke failed'}
           Get-Content (Join-Path $output 'ui-smoke-result.txt')
           Remove-Item -Recurse -Force $root
-      - name: Exercise native Codex background sessions without an account
+      - name: Verify standalone EXE with real native Codex RPC (signed out)
         if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' }}
         run: |
           $tools=Join-Path $env:TEMP ('ai-switcher-codex.'+[Guid]::NewGuid().ToString('N'))
@@ -61,8 +66,14 @@ jobs:
           $cli=Get-ChildItem $tools -Recurse -Filter codex.exe | Where-Object {$_.FullName -match 'x86_64-pc-windows-msvc'} | Select-Object -First 1
           if(-not $cli){throw 'Native Windows Codex executable was not found'}
           $output=Join-Path $PWD 'artifacts/previews'
-          $app=Join-Path $PWD 'artifacts/win-x64/AISwitcher.exe'
-          ../scripts/test-windows-backend.ps1 -App $app -Tools $tools -Output $output
+          $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
+          $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
+          $p=Start-Process $app -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$output`"",'--stdio-smoke-test','--codex-executable',"`"$($cli.FullName)`"") -PassThru
+          if(-not $p.WaitForExit(90000)){$p.Kill();throw 'Native Codex RPC smoke timed out'}
+          if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'backend-smoke-error.txt');throw 'Native Codex RPC smoke failed'}
+          Get-Content (Join-Path $output 'backend-smoke-result.txt')
+          Remove-Item -Recurse -Force $root
+          if('${{ inputs.daemon_probe }}' -eq 'true'){../scripts/test-windows-backend.ps1 -App $app -Tools $tools -Output $output}
           Remove-Item -Recurse -Force $tools
       - name: Save Windows builds and visual QA
         if: always()

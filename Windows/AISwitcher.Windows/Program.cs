@@ -22,7 +22,7 @@ internal sealed class Program:Application {
     FileStream? lease;SilentTrayIcon? tray;DispatcherTimer? timer;AppEngine? engine;MainWindow? manager;Guid? notificationAccount;
     [STAThread]public static int Main(string[] args){
         if(args.Contains("--process-fixture")){RunFixture(args);return 0;}
-        if(args.Contains("--render-previews")||args.Contains("--ui-smoke-test")||args.Contains("--backend-smoke-test"))return PreviewRunner.Run(args);
+        if(args.Contains("--render-previews")||args.Contains("--ui-smoke-test")||args.Contains("--backend-smoke-test")||args.Contains("--stdio-smoke-test"))return PreviewRunner.Run(args);
         var app=new Program();app.Run();return 0;
     }
     protected override void OnStartup(StartupEventArgs e){base.OnStartup(e);ShutdownMode=ShutdownMode.OnExplicitShutdown;
