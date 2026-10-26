@@ -260,7 +260,7 @@ struct Dashboard: View {
 
     private var accountSection: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
+            HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 8) {
                         Text(model.filter.title).font(appearanceTheme.font(size: 17, weight: .semibold))
@@ -272,20 +272,15 @@ struct Dashboard: View {
                     Text(L10n.text("Profiles grouped by your AI agents."))
                         .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
                 }
-                Spacer()
-                Button { model.addAccount() } label: { Label(L10n.text("Add account"), systemImage: "plus") }
-                    .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.loadFailed)
-                    .accessibilityIdentifier("addAccount")
-            }
-            HStack(spacing: 14) {
-                Picker(L10n.text("Workspace view"), selection: Binding(get: { model.preferences.workspaceLayout }, set: { model.setWorkspaceLayout($0) })) {
-                    ForEach(WorkspaceLayout.allCases) { Text($0.title).tag($0) }
-                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 290)
-                    .accessibilityIdentifier("workspaceLayout")
                 Spacer(minLength: 0)
-                Toggle(L10n.text("Quota-only mode"), isOn: Binding(get: { model.preferences.quotaOnlyMode }, set: { model.setQuotaOnlyMode($0) }))
-                    .toggleStyle(.switch).font(appearanceTheme.font(size: 11))
-                    .accessibilityIdentifier("quotaOnlyMode")
+                HStack(spacing: 14) {
+                    Toggle(L10n.text("Quota-only mode"), isOn: Binding(get: { model.preferences.quotaOnlyMode }, set: { model.setQuotaOnlyMode($0) }))
+                        .toggleStyle(.switch).font(appearanceTheme.font(size: 11)).fixedSize()
+                        .accessibilityIdentifier("quotaOnlyMode")
+                    Button { model.addAccount() } label: { Label(L10n.text("Add account"), systemImage: "plus") }
+                        .buttonStyle(PrimaryButtonStyle(compact: true)).disabled(model.loadFailed).fixedSize()
+                        .accessibilityIdentifier("addAccount")
+                }
             }
             if model.visibleAccounts.isEmpty {
                 emptyState

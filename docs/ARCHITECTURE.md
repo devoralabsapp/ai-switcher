@@ -101,3 +101,5 @@ Per-profile optional `defaultAction` and `connectOnStartup` fields migrate witho
 Capabilities guard backend discovery, startup connection, quota reads, connect/restart actions, cached connection visibility, and notifications. Non-ChatGPT profiles cannot invoke Codex even if imported metadata contains old quota or startup fields. Menus and diagnostics expose the same capabilities. Provider routing and these guards have fixture tests.
 
 `AppPreferences.agentFilter` persists independently in UserDefaults. Unknown values fall back to all agents. Sidebar counts cover all saved entries per agent, while displayed accounts combine agent, workspace filter, and search. New-account editors inherit the active agent. The sidebar scrolls in shorter windows; provider filters are available in every existing theme.
+
+The dashboard account header groups quota-only mode immediately before Add account. Layout selection lives in Preferences (`Workspace view`) so cards and the quota overview retain their existing persisted behavior without a second dashboard toolbar row.

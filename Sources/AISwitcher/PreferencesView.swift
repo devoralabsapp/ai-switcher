@@ -41,6 +41,9 @@ struct PreferencesView: View {
                 }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("languagePicker")
             }
             VStack(alignment: .leading, spacing: 9) {
+                Picker(L10n.text("Workspace view"), selection: Binding(get: { model.preferences.workspaceLayout }, set: { model.setWorkspaceLayout($0) })) {
+                    ForEach(WorkspaceLayout.allCases) { Text($0.title).tag($0) }
+                }.accessibilityIdentifier("workspaceLayout")
                 Toggle(L10n.text("Quota-only mode"), isOn: Binding(get: { model.preferences.quotaOnlyMode }, set: { model.setQuotaOnlyMode($0) }))
                     .toggleStyle(.switch).font(appearanceTheme.font(size: 13, weight: .semibold))
                 Text(L10n.text("Quota-only mode applies to ChatGPT Desktop profiles. Other agents keep their normal open action."))

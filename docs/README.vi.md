@@ -73,7 +73,7 @@ Bật **Chỉ xem quota** ở dashboard hoặc **Giao diện & Ngôn ngữ** đ�
 
 Trong **Sửa hồ sơ**, chọn **Thao tác mặc định** cho từng hồ sơ và bật **Kết nối nền khi mở AI Switcher** nếu muốn. Tự kết nối mặc định tắt, chỉ áp dụng cho hồ sơ Desktop được chọn và không mở cửa sổ hay tự đăng nhập. Khi bật Chỉ xem quota, app ưu tiên Kết nối nền; khi tắt, lựa chọn riêng của hồ sơ được dùng lại.
 
-Chọn **Tổng quan quota** để xem hạn mức ngắn/dài hạn, thời lượng thực tế, reset tiếp theo, lần cập nhật cuối và trạng thái. Bấm tiêu đề cột để đổi thứ tự; quota thiếu, cũ, lỗi hoặc đã qua reset được xếp cuối khi sắp xếp hạn mức. Mỗi hàng hiển thị một nhóm hạn mức, ưu tiên `codex`; mở **Chi tiết** để xem mọi nhóm. Cửa sổ nhỏ có thể cuộn bảng ngang. Kiểu hiển thị và cách sắp xếp được lưu cho lần mở sau.
+Nút **Chỉ xem quota** nằm bên trái **Thêm tài khoản** trên dashboard. Đổi kiểu hiển thị ở **Giao diện & Ngôn ngữ → Kiểu hiển thị → Thẻ tài khoản / Tổng quan quota**. Chọn **Tổng quan quota** để xem hạn mức ngắn/dài hạn, thời lượng thực tế, reset tiếp theo, lần cập nhật cuối và trạng thái. Bấm tiêu đề cột để đổi thứ tự; quota thiếu, cũ, lỗi hoặc đã qua reset được xếp cuối khi sắp xếp hạn mức. Mỗi hàng hiển thị một nhóm hạn mức, ưu tiên `codex`; mở **Chi tiết** để xem mọi nhóm. Cửa sổ nhỏ có thể cuộn bảng ngang. Kiểu hiển thị và cách sắp xếp được lưu cho lần mở sau.
 
 Nhãn trạng thái phân biệt **Đã ngắt kết nối**, **Đang chạy nền**, **Desktop đang mở**, **Cần đăng nhập lại**, **Kết nối thất bại** và các thao tác đang xử lý. Kết nối nền không thay đổi danh sách tài khoản đã mở gần đây.
 
