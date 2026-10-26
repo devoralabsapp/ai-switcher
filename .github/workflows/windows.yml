@@ -39,6 +39,7 @@ jobs:
           dotnet run --project AISwitcher.Tests/AISwitcher.Tests.csproj -c Release
           if($LASTEXITCODE -ne 0){throw 'Core tests failed'}
       - name: Build standalone Windows app
+        id: publish
         run: ../scripts/build-windows.ps1 -Runtime '${{ matrix.runtime }}'
       - name: Exercise native Windows UI and owned process lifecycle
         if: matrix.runtime == 'win-x64'
@@ -52,7 +53,7 @@ jobs:
           Get-Content (Join-Path $output 'ui-smoke-result.txt')
           Remove-Item -Recurse -Force $root
       - name: Exercise native Codex background sessions without an account
-        if: matrix.runtime == 'win-x64'
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' }}
         run: |
           $tools=Join-Path $env:TEMP ('ai-switcher-codex.'+[Guid]::NewGuid().ToString('N'))
           npm install --prefix $tools --no-audit --no-fund '@openai/codex@0.164.0'
