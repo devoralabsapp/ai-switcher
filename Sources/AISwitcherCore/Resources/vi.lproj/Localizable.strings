@@ -469,3 +469,19 @@
 "Profiles grouped by your AI agents." = "Hồ sơ được nhóm theo AI agent của bạn.";
 
 "AI Switcher — your AI accounts" = "AI Switcher — các tài khoản AI của bạn";
+
+"Pure black with crisp monospace text" = "Nền đen thuần và chữ đơn cách rõ nét";
+
+"Separate Claude Desktop or browser sign-in for each profile. Quota and background connections are not available." = "Mỗi hồ sơ có đăng nhập Claude Desktop hoặc trình duyệt riêng. Chưa hỗ trợ quota và kết nối nền.";
+
+"Claude Desktop was not found. Install Claude in Applications, then try again." = "Không tìm thấy Claude Desktop. Cài Claude vào Applications rồi thử lại.";
+
+"This Claude version could not be verified for separate profiles. Update Claude Desktop and try again." = "Chưa xác minh được khả năng tách hồ sơ của phiên bản Claude này. Cập nhật Claude Desktop rồi thử lại.";
+
+"Could not open the separate Claude Desktop session. Try again or update Claude Desktop." = "Không mở được phiên Claude Desktop riêng. Thử lại hoặc cập nhật Claude Desktop.";
+
+"The Claude profile storage could not be verified. Its data has been preserved." = "Không xác minh được dữ liệu hồ sơ Claude. Dữ liệu đã được giữ nguyên.";
+
+"Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota is not available." = "Mỗi hồ sơ Claude Desktop có dữ liệu ứng dụng riêng. Đăng nhập một lần trong cửa sổ của hồ sơ; đăng nhập trình duyệt cũ vẫn ở trình duyệt. Chưa hỗ trợ quota.";
+
+"Separate Desktop profile" = "Hồ sơ Desktop riêng";

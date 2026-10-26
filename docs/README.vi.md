@@ -15,7 +15,8 @@ Khi thêm tài khoản, chọn **AI agent** rồi đặt tên hồ sơ. Agent kh
 | Agent | Cách mở và đăng nhập | Quota và kết nối nền |
 | --- | --- | --- |
 | ChatGPT | Phiên Desktop riêng hoặc hồ sơ trình duyệt riêng | Quota Codex; kết nối nền cho Desktop |
-| Claude, Gemini, Perplexity, DeepSeek | Hồ sơ Chrome/Edge/Brave riêng cho từng tài khoản | Chưa hỗ trợ |
+| Claude | Hồ sơ Desktop hoặc Chrome/Edge/Brave riêng cho từng tài khoản | Chưa hỗ trợ |
+| Gemini, Perplexity, DeepSeek | Hồ sơ Chrome/Edge/Brave riêng cho từng tài khoản | Chưa hỗ trợ |
 | Antigravity | Mở ứng dụng đã cài, dùng đăng nhập chung của ứng dụng | Chưa hỗ trợ |
 
 Chọn agent hoặc **Tất cả agent** ở thanh điều hướng bên trái. Bộ lọc kết hợp với tìm kiếm, Yêu thích và Gần đây; số đếm thể hiện tổng hồ sơ đã lưu của từng agent. App nhớ bộ lọc khi mở lại và tự chọn agent đó khi thêm hồ sơ.
@@ -23,6 +24,21 @@ Chọn agent hoặc **Tất cả agent** ở thanh điều hướng bên trái. 
 Với agent trình duyệt, cài Chrome, Edge hoặc Brave rồi đăng nhập trực tiếp trong cửa sổ của hồ sơ. Antigravity chỉ có một mục mở ứng dụng: app không tách/chuyển tài khoản, đóng ứng dụng dùng chung hoặc đọc quota của Antigravity. Thẻ tài khoản, bảng quota, menu bar và kiểm tra phiên hiển thị đúng khả năng từng agent. Chỉ xem quota, kết nối nền và thông báo quota áp dụng cho ChatGPT/Codex.
 
 ![Danh sách AI agent với theme Playful Retro và dữ liệu mẫu](assets/ai-agents-vi.png)
+
+## Claude Desktop riêng cho từng tài khoản
+
+Cài Claude chính thức vào Applications. Khi thêm hồ sơ Claude, chọn **Claude Desktop** rồi đăng nhập trực tiếp trong cửa sổ riêng của hồ sơ. Mở lại hồ sơ sẽ đưa đúng cửa sổ lên trước; **Đóng phiên tài khoản…** chỉ đóng hồ sơ đó và giữ dữ liệu.
+
+Với hồ sơ Claude đã tạo bằng trình duyệt: đóng phiên, chọn **Sửa hồ sơ → Claude Desktop**, rồi đăng nhập một lần trong cửa sổ Desktop mới. Đăng nhập trình duyệt cũ vẫn được giữ khi đổi lại Browser. Mỗi hồ sơ Desktop dùng thư mục dữ liệu riêng, không sao chép đăng nhập Claude mặc định. Chưa hỗ trợ quota, kết nối nền hoặc chia sẻ lịch sử Work cho Claude.
+
+Đã kiểm tra Claude 3.6556.2 với hai tiến trình/cửa sổ mới, dùng lại đúng cửa sổ, đóng/mở riêng và giữ dữ liệu từng hồ sơ. Đăng nhập hai tài khoản thật, OAuth/deep link, Claude Code và Cowork vẫn cần kiểm tra thủ công. Chế độ này thử nghiệm và có thể bị ảnh hưởng khi Claude cập nhật.
+
+<details>
+<summary>Thêm hồ sơ Claude Desktop với dữ liệu mẫu</summary>
+
+![Hồ sơ Claude Desktop](assets/claude-desktop-vi.png)
+
+</details>
 
 ## Cách dùng ChatGPT Desktop
 
@@ -39,14 +55,21 @@ Hồ sơ cũ mặc định chuyển sang Desktop và cần đăng nhập mới m
 
 ## Ngôn ngữ và theme
 
-Mở **Giao diện & Ngôn ngữ** ở thanh bên, menu macOS hoặc bấm **⌘,**. Chọn **Tiếng Việt / English** và theme **Sáng, Tối, Terminal, Code (lấy cảm hứng từ VS Code), Dracula, Playful Retro Neo-Brutalism**. Lựa chọn áp dụng ngay và được giữ khi mở lại app.
+Mở **Giao diện & Ngôn ngữ** ở thanh bên, menu macOS hoặc bấm **⌘,**. Chọn **Tiếng Việt / English** và theme **Sáng, Tối, Terminal, Code (lấy cảm hứng từ VS Code), Dracula, Playful Retro Neo-Brutalism, Terminal Black**. Lựa chọn áp dụng ngay và được giữ khi mở lại app.
 
-Terminal và Code dùng font đơn cách, góc gọn cùng bảng màu riêng. Playful Retro Neo-Brutalism dùng nền kem, thẻ màu pastel, chữ bo tròn, viền đậm và bóng đổ cứng, cùng hiệu ứng nút bấm có hỗ trợ Giảm chuyển động. Theme áp dụng cho giao diện AI Switcher, hộp thoại và quota. Bản dịch bao gồm menu, thông báo lỗi, hạn mức, số và ngày giờ. Tài khoản và phiên đăng nhập vẫn dùng dữ liệu hiện có.
+Terminal, Terminal Black và Code dùng font đơn cách, góc gọn cùng bảng màu riêng. Terminal Black có nền đen thuần, thẻ gần đen, chữ sáng và điểm nhấn xanh; theme Terminal cũ vẫn được giữ. Playful Retro Neo-Brutalism dùng nền kem, thẻ màu pastel, chữ bo tròn, viền đậm và bóng đổ cứng, cùng hiệu ứng nút bấm có hỗ trợ Giảm chuyển động. Theme áp dụng cho giao diện AI Switcher, hộp thoại và quota. Bản dịch bao gồm menu, thông báo lỗi, hạn mức, số và ngày giờ. Tài khoản và phiên đăng nhập vẫn dùng dữ liệu hiện có.
 
 <details>
 <summary>Xem theme Playful Retro Neo-Brutalism với dữ liệu mẫu</summary>
 
 ![Theme Playful Retro Neo-Brutalism](assets/playful-retro-vi.png)
+
+</details>
+
+<details>
+<summary>Theme Terminal Black với dữ liệu mẫu</summary>
+
+![Terminal Black](assets/terminal-black-vi.png)
 
 </details>
 

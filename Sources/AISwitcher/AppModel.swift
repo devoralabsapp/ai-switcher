@@ -64,6 +64,7 @@ final class AppModel: ObservableObject {
 
     let repository: ProfileRepository
     let browserService: BrowserService
+    let claudeDesktopService: ClaudeDesktopService
     let desktopService: DesktopService
     let quotaService: CodexQuotaService
     let agentApplications = AgentApplicationService()
@@ -94,6 +95,7 @@ final class AppModel: ObservableObject {
         repository = ProfileRepository(root: root)
         browserService = BrowserService(repository: repository)
         desktopService = DesktopService(repository: repository)
+        claudeDesktopService = ClaudeDesktopService(repository: repository)
         self.desktopQuotaSource = desktopQuotaSource ?? desktopService
         quotaService = CodexQuotaService(repository: repository)
         reload()
@@ -234,6 +236,10 @@ final class AppModel: ObservableObject {
         var failures: [UUID: String] = [:]
         for account in accounts where account.usesCodexDesktop {
             do { try repository.validateDesktopOwnership(for: account.id) }
+            catch { failures[account.id] = error.localizedDescription }
+        }
+        for account in accounts where account.usesClaudeDesktop {
+            do { try repository.validateClaudeOwnership(for: account.id) }
             catch { failures[account.id] = error.localizedDescription }
         }
         diagnosticStorageErrors = failures
@@ -408,6 +414,7 @@ final class AppModel: ObservableObject {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
                 if account.effectiveAgent.isSharedApplication { try await agentApplications.open(account.effectiveAgent) }
+                else if account.usesClaudeDesktop { try await claudeDesktopService.open(account) }
                 else if account.usesCodexDesktop { try await desktopService.open(account) }
                 else { try await browserService.open(account, forceNewWindow: newWindow) }
                 // Preserve label edits made while the application was launching.
@@ -463,6 +470,7 @@ final class AppModel: ObservableObject {
         Task {
             defer { launchingIDs.remove(account.id); closingSessionIDs.remove(account.id); refreshRunning() }
             do {
+                if account.effectiveAgent == .claude { try await claudeDesktopService.close(account) }
                 try await browserService.close(account)
                 if account.effectiveAgent.supportsCodexQuota { try await desktopQuotaSource.closeSession(account) }
                 quotaErrors[account.id] = nil
@@ -487,7 +495,7 @@ final class AppModel: ObservableObject {
     func refreshRunning() {
         let ids = Set(accounts.filter { hasRunningSession($0) }.map(\.id))
         if ids != runningIDs { runningIDs = ids }
-        let windows = Set(accounts.filter { $0.usesCodexDesktop && desktopQuotaSource.hasDesktopWindow($0) }.map(\.id))
+        let windows = Set(accounts.filter { ($0.usesCodexDesktop && desktopQuotaSource.hasDesktopWindow($0)) || ($0.usesClaudeDesktop && claudeDesktopService.hasWindow($0)) }.map(\.id))
         if windows != desktopWindowIDs { desktopWindowIDs = windows }
         let backends = Set(accounts.filter { $0.usesCodexDesktop && desktopQuotaSource.hasBackend($0.id) }.map(\.id))
         if backends != backendIDs { backendIDs = backends }
@@ -495,7 +503,8 @@ final class AppModel: ObservableObject {
 
     func hasRunningSession(_ account: Account) -> Bool {
         if account.effectiveAgent.isSharedApplication { return false }
-        return browserService.runningApplication(for: account) != nil
+        return (account.effectiveAgent == .claude && claudeDesktopService.runningApplication(for: account) != nil)
+            || browserService.runningApplication(for: account) != nil
             || (account.effectiveAgent.supportsCodexQuota && desktopService.runningApplication(for: account) != nil)
             || (account.usesCodexDesktop && desktopQuotaSource.hasBackend(account.id))
     }

@@ -43,6 +43,10 @@ final class AppearanceTests: XCTestCase {
             XCTAssertEqual(theme.outlineWidth, 0)
             XCTAssertEqual(theme.hardShadowOffset, 0)
         }
+        XCTAssertTrue(AppTheme.allCases.contains(.terminalBlack))
+        XCTAssertEqual(AppTheme.terminalBlack.colors.canvas, 0x000000)
+        XCTAssertTrue(AppTheme.terminalBlack.monospaced)
+        XCTAssertTrue(AppTheme.terminalBlack.isDark)
         XCTAssertTrue(AppTheme.allCases.contains(.playfulRetro))
         XCTAssertFalse(AppTheme.playfulRetro.isDark)
         XCTAssertFalse(AppTheme.playfulRetro.monospaced)

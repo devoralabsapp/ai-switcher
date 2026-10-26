@@ -35,7 +35,7 @@ enum AccountQuickMenu {
             info(L10n.format("Last read: %@", L10n.dateTime(quota.fetchedAt)))
         } else { info(account.effectiveAgent.supportsCodexQuota ? L10n.text("No data yet") : L10n.text("Quota is not available for this agent.")) }
         if !account.effectiveAgent.supportsCodexQuota {
-            info(account.effectiveAgent.isSharedApplication ? L10n.text("Shared application sign-in") : L10n.text("Separate browser profile"))
+            info(account.effectiveAgent.isSharedApplication ? L10n.text("Shared application sign-in") : account.usesClaudeDesktop ? L10n.text("Separate Desktop profile") : L10n.text("Separate browser profile"))
         }
         menu.addItem(.separator())
         let busy = model.launchingIDs.contains(account.id)

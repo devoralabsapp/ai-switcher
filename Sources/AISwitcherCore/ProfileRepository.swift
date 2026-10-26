@@ -17,6 +17,36 @@ public struct ProfileRepository: Sendable {
         self.desktopBackendBase = desktopBackendBase ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".aisw")
     }
 
+    public func claudeProfileURL(for id: UUID) -> URL { root.appendingPathComponent("Claude").appendingPathComponent(id.uuidString) }
+    public func claudeUserDataURL(for id: UUID) -> URL { claudeProfileURL(for: id).appendingPathComponent("UserData") }
+    public func claudeConfigURL(for id: UUID) -> URL { claudeProfileURL(for: id).appendingPathComponent("CodeConfig") }
+
+    public func validateClaudeOwnership(for id: UUID) throws {
+        let home = claudeProfileURL(for: id)
+        guard FileManager.default.fileExists(atPath: home.path) else { return }
+        for directory in [root, home.deletingLastPathComponent(), home, claudeUserDataURL(for: id), claudeConfigURL(for: id)] {
+            try validateOwnedDirectory(directory)
+        }
+        let marker = home.appendingPathComponent("ai-switcher-profile.json")
+        let attributes = try FileManager.default.attributesOfItem(atPath: marker.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let value = try? JSONDecoder().decode(DesktopOwner.self, from: Data(contentsOf: marker)),
+              value.root == root.path, value.id == id else { throw ClaudeProfileError.unsafeStorage }
+    }
+
+    public func prepareClaudeProfile(for id: UUID) throws {
+        let home = claudeProfileURL(for: id)
+        for directory in [root, home.deletingLastPathComponent()] {
+            if FileManager.default.fileExists(atPath: directory.path) { try validateOwnedDirectory(directory) }
+            try prepareDirectory(directory)
+        }
+        if FileManager.default.fileExists(atPath: home.path) { try validateClaudeOwnership(for: id); return }
+        for directory in [home, claudeUserDataURL(for: id), claudeConfigURL(for: id)] { try prepareDirectory(directory) }
+        let marker = home.appendingPathComponent("ai-switcher-profile.json")
+        try JSONEncoder().encode(DesktopOwner(root: root.path, id: id)).write(to: marker, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
+    }
+
     public func desktopProfileURL(for id: UUID) -> URL { desktopURL.appendingPathComponent(id.uuidString, isDirectory: true) }
     public func desktopUserDataURL(for id: UUID) -> URL { desktopProfileURL(for: id).appendingPathComponent("UserData", isDirectory: true) }
     public func desktopHomeURL(for id: UUID) -> URL {
@@ -113,10 +143,11 @@ public struct ProfileRepository: Sendable {
     public func remove(_ id: UUID, from snapshot: AccountSnapshot) throws -> AccountSnapshot {
         let fm = FileManager.default
         try validateDesktopOwnership(for: id)
+        try validateClaudeOwnership(for: id)
         try SharedDesktopWorkspace(repository: self).archiveMetadata(id)
         var moved: [(source: URL, staged: URL)] = []
         do {
-            for source in [profileURL(for: id), codexHomeURL(for: id), desktopProfileURL(for: id), desktopHomeURL(for: id)] where fm.fileExists(atPath: source.path) {
+            for source in [profileURL(for: id), codexHomeURL(for: id), desktopProfileURL(for: id), desktopHomeURL(for: id), claudeProfileURL(for: id)] where fm.fileExists(atPath: source.path) {
                 let staged = source.deletingLastPathComponent().appendingPathComponent(".removed-\(UUID().uuidString)")
                 try fm.moveItem(at: source, to: staged)
                 moved.append((source, staged))

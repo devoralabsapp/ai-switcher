@@ -57,7 +57,8 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var agent: AIAgent?
 
     public var effectiveAgent: AIAgent { agent ?? .chatgpt }
-    public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent.isSharedApplication ? .desktop : .browser }
+    public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent == .claude ? launchMode ?? .browser : effectiveAgent.isSharedApplication ? .desktop : .browser }
+    public var usesClaudeDesktop: Bool { effectiveAgent == .claude && effectiveLaunchMode == .desktop }
     public var usesCodexDesktop: Bool { effectiveAgent.supportsCodexQuota && effectiveLaunchMode == .desktop }
     public var usesSharedLocalWorkspace: Bool { usesCodexDesktop && sharesLocalWorkspace == true }
     public var effectiveDefaultAction: AccountAction { usesCodexDesktop ? defaultAction ?? .openDesktop : .openDesktop }

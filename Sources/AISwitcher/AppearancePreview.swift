@@ -50,10 +50,10 @@ enum AppearancePreview {
             try renderView(QuotaNotificationSettingsView(model: overview).padding(24).appAppearance(overview.preferences),
                            size: NSSize(width: 580, height: 360),
                            to: output.appendingPathComponent("notifications-\(theme.rawValue)-\(L10n.language.rawValue).png"))
-            if theme == .light || theme.isPlayfulRetro {
+            if theme == .light || theme.isPlayfulRetro || theme == .terminalBlack {
                 let agentData = data.appendingPathComponent("agents")
                 let agentAccounts = [accounts[0],
-                    Account(name: "Claude Work", emailHint: "work@example.test", color: .peach, isFavorite: true, agent: .claude),
+                    Account(name: "Claude Work", emailHint: "work@example.test", color: .peach, isFavorite: true, launchMode: .desktop, agent: .claude),
                     Account(name: "Claude Personal", emailHint: "personal@example.test", color: .rose, agent: .claude),
                     Account(name: "Gemini Study", color: .blue, agent: .gemini),
                     Account(name: "Antigravity", color: .violet, agent: .antigravity),

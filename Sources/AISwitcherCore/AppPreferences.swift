@@ -8,20 +8,22 @@ public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 }
 
 public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
-    case light, dark, terminal, code, dracula, playfulRetro
+    case light, dark, terminal, code, dracula, playfulRetro, terminalBlack
     public var id: String { rawValue }
     public var isDark: Bool { self != .light && self != .playfulRetro }
+    public var isTerminal: Bool { self == .terminal || self == .terminalBlack }
     public var isPlayfulRetro: Bool { self == .playfulRetro }
     /// Decoration tokens are zero for the original themes so their styling stays intact.
     public var outlineWidth: Double { isPlayfulRetro ? 2.5 : 0 }
     public var hardShadowOffset: Double { isPlayfulRetro ? 4 : 0 }
-    public var monospaced: Bool { self == .terminal || self == .code }
-    public var cornerRadius: Double { self == .terminal ? 3 : self == .code ? 6 : 13 }
+    public var monospaced: Bool { isTerminal || self == .code }
+    public var cornerRadius: Double { isTerminal ? 3 : self == .code ? 6 : 13 }
     public var name: String {
         switch self {
         case .light: return L10n.text("Light")
         case .dark: return L10n.text("Dark")
         case .terminal: return "Terminal"
+        case .terminalBlack: return "Terminal Black"
         case .code: return "Code"
         case .dracula: return "Dracula"
         case .playfulRetro: return "Playful Retro Neo-Brutalism"
@@ -32,6 +34,7 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .light: return L10n.text("Soft light with a mint accent")
         case .dark: return L10n.text("A clear, comfortable dark theme")
         case .terminal: return L10n.text("Monospace with terminal green")
+        case .terminalBlack: return L10n.text("Pure black with crisp monospace text")
         case .code: return L10n.text("Inspired by VS Code")
         case .dracula: return L10n.text("Deep purple with pink accents")
         case .playfulRetro: return L10n.text("Cream, candy colors, and bold outlines")
@@ -41,6 +44,7 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .light: return .init(canvas: 0xf5f8f8, surface: 0xffffff, sidebar: 0xffffff, ink: 0x19242b, secondary: 0x65737c, accent: 0x147864, onAccent: 0xffffff, line: 0xdce5e5)
         case .dark: return .init(canvas: 0x101419, surface: 0x1a2027, sidebar: 0x151a20, ink: 0xe8edf2, secondary: 0xa5b1bd, accent: 0x6cd4b4, onAccent: 0x10261f, line: 0x343e48)
+        case .terminalBlack: return .init(canvas: 0x000000, surface: 0x0b0b0b, sidebar: 0x000000, ink: 0xf5f5f5, secondary: 0xbdbdbd, accent: 0x83ef9a, onAccent: 0x001a07, line: 0x454545)
         case .terminal: return .init(canvas: 0x090e0b, surface: 0x101913, sidebar: 0x0b120d, ink: 0xc5f5ce, secondary: 0x8bb795, accent: 0x65ed85, onAccent: 0x0c2112, line: 0x2c4633)
         case .code: return .init(canvas: 0x1e1e1e, surface: 0x252526, sidebar: 0x181818, ink: 0xe0e0e0, secondary: 0xababab, accent: 0x75beff, onAccent: 0x09243d, line: 0x454545)
         case .dracula: return .init(canvas: 0x20212c, surface: 0x282a36, sidebar: 0x191a23, ink: 0xf8f8f2, secondary: 0xb3afd0, accent: 0xd2afff, onAccent: 0x2b1644, line: 0x4c4e65)

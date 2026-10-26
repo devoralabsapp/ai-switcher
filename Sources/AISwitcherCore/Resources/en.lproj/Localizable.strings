@@ -469,3 +469,19 @@
 "Profiles grouped by your AI agents." = "Profiles grouped by your AI agents.";
 
 "AI Switcher — your AI accounts" = "AI Switcher — your AI accounts";
+
+"Pure black with crisp monospace text" = "Pure black with crisp monospace text";
+
+"Separate Claude Desktop or browser sign-in for each profile. Quota and background connections are not available." = "Separate Claude Desktop or browser sign-in for each profile. Quota and background connections are not available.";
+
+"Claude Desktop was not found. Install Claude in Applications, then try again." = "Claude Desktop was not found. Install Claude in Applications, then try again.";
+
+"This Claude version could not be verified for separate profiles. Update Claude Desktop and try again." = "This Claude version could not be verified for separate profiles. Update Claude Desktop and try again.";
+
+"Could not open the separate Claude Desktop session. Try again or update Claude Desktop." = "Could not open the separate Claude Desktop session. Try again or update Claude Desktop.";
+
+"The Claude profile storage could not be verified. Its data has been preserved." = "The Claude profile storage could not be verified. Its data has been preserved.";
+
+"Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota is not available." = "Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota is not available.";
+
+"Separate Desktop profile" = "Separate Desktop profile";

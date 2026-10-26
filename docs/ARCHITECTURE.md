@@ -74,7 +74,7 @@ CI runs offline tests and universal compilation/packaging. Real account authenti
 
 `L10n` uses English source keys with matching `en.lproj` and `vi.lproj` resources. All interpolated arguments use string placeholders, with catalog parity and source-key coverage tests. Quota formatting uses the selected locale and supports singular English window units. Stored quota errors retain their error value so their description follows the selected language.
 
-Six palettes define foreground, secondary, accent, button foreground, borders, and surfaces. Terminal and Code also use monospace fonts and compact corners. Contrast tests check body/secondary text against every surface and primary button text against its accent. `AppearancePreview` renders app-owned offscreen views with fictional data; it captures no screen pixels or real profiles.
+Seven palettes define foreground, secondary, accent, button foreground, borders, and surfaces. Terminal and Code also use monospace fonts and compact corners. Contrast tests check body/secondary text against every surface and primary button text against its accent. `AppearancePreview` renders app-owned offscreen views with fictional data; it captures no screen pixels or real profiles.
 
 `appAppearance` applies the selected theme, native color scheme, and locale at the dashboard's presentation boundary and explicitly to sheets. The account editor also derives its palette from the observed preferences, so opening it after a theme change cannot mix a default Light palette with dark native text fields. Offscreen previews include empty Add account and populated Edit profile forms for every theme in either language.
 
@@ -94,7 +94,7 @@ Per-profile optional `defaultAction` and `connectOnStartup` fields migrate witho
 
 ## Multiple AI agents
 
-`AIAgent` defines stable identifiers, names, symbols, web destinations, and capabilities for ChatGPT, Claude, Gemini, Antigravity, Perplexity, and DeepSeek. `Account.agent` is optional: absent values preserve ChatGPT migration and existing launch behavior. Other web agents always use browser mode; Antigravity uses a shared native launcher. The editor fixes the agent after creation, and AppModel enforces that rule when saving.
+`AIAgent` defines stable identifiers, names, symbols, web destinations, and capabilities for ChatGPT, Claude, Gemini, Antigravity, Perplexity, and DeepSeek. `Account.agent` is optional: absent values preserve ChatGPT migration and existing launch behavior. Claude permits Desktop or browser mode and defaults missing stored modes to browser for compatibility; other web agents use browser mode. Antigravity uses a shared native launcher. The editor fixes the agent after creation, and AppModel enforces that rule when saving.
 
 `AgentApplicationService` locates the installed Antigravity app by bundle identifier and opens it with NSWorkspace, using its existing sign-in. It neither supplies profile flags nor changes authentication paths. Only one Antigravity entry is allowed; it is never treated as an owned running session for close/delete controls. Its running badge reports the shared application state.
 
@@ -107,3 +107,11 @@ The dashboard account header groups quota-only mode immediately before Add accou
 Quota-only activation selects the quota table; disabling always selects cards, even if already disabled. A one-time preferences migration repairs old disabled sessions left on the quota table, removes the obsolete previous-layout key, and preserves other preferences. Later explicit layout selections in Settings remain available.
 
 `canConnectSession` disables connection controls while a profile backend, Desktop window, or owned application is running, or an operation is busy. The model repeats this guard before starting a backend. Default actions and quota-table refreshes read the existing session instead; native menus keep Connect disabled and expose Refresh separately.
+
+## Claude Desktop isolation
+
+`ClaudeDesktopService` launches the installed signed app using `ClaudeLaunch.arguments` with an exact `--user-data-dir`. It never modifies the app, uses injection/debug ports, or relies on `CLAUDE_USER_DATA_DIR` (ignored by current signed builds). Each profile owns `Claude/<UUID>/UserData` and `CodeConfig`; inherited Claude/Anthropic authentication and Electron/Node overrides are excluded. A root/UUID ownership marker and directory checks guard reuse and deletion. Process ownership requires the Claude bundle ID plus the exact profile argument and excludes helpers. Opening reuses the matching process; close normally terminates only that process. Mode changes require stopped sessions and preserve both storage types. Claude has no Codex/background/shared-history capabilities.
+
+The optional `--claude` smoke check opens two disposable profiles, checks distinct PIDs/windows, focus reuse, close/reopen persistence with a harmless marker, and cleanup while pre-existing Claude processes survive. It does not inspect authentication stores or sign into real accounts. Real account authentication, OAuth/deep-link routing, Claude Code, and Cowork remain manual verification items.
+
+`terminalBlack` is an additional persisted dark theme with pure-black canvas/sidebar, near-black surfaces, bright monospace text and a green accent. Existing Terminal identifiers and palette are unchanged; the shared terminal typography/compact-corner behavior applies to both.

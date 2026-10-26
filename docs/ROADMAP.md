@@ -32,6 +32,9 @@ These are proposed next steps, not promised release dates or shipped features. C
 ## Multiple AI agents
 
 - [x] Add Claude, Gemini, Perplexity, and DeepSeek with separate browser profiles.
+- [x] Add separate Claude Desktop profiles with exact process routing and isolated storage.
+- [x] Add Terminal Black as an additional theme.
+- [ ] Verify two real Claude account sign-ins, OAuth callbacks, Claude Code, and Cowork across isolated windows.
 - [x] Add an Antigravity launcher with explicit shared application sign-in semantics.
 - [x] Add persistent sidebar agent filters combined with search and workspace filters.
 - [ ] Evaluate documented per-agent quota APIs and independent native session support before expanding capabilities.

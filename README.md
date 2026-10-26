@@ -2,7 +2,7 @@
 
 # AI Switcher for macOS
 
-**Your AI accounts in one workspace. Separate browser profiles, ChatGPT Desktop sessions, and Codex quota.**
+**Your AI accounts in one workspace. Separate browser profiles, ChatGPT and Claude Desktop sessions, and Codex quota.**
 
 AI Switcher is a native SwiftUI and AppKit utility. Manage ChatGPT, Claude, Gemini, Antigravity, Perplexity, and DeepSeek from the dashboard or macOS menu bar. ChatGPT Desktop profiles retain separate sessions and Codex quota; other agents have the capabilities listed below.
 
@@ -24,7 +24,8 @@ AI Switcher is a native SwiftUI and AppKit utility. Manage ChatGPT, Claude, Gemi
 - Refresh quota manually or every five minutes while the profile backend is running.
 - Name, color, favorite, search, and revisit profiles from a Vietnamese or English dashboard and menu bar.
 - Close a profile without deleting its login, or explicitly delete its local data after closing.
-- Open Claude, Gemini, Perplexity, and DeepSeek in separate Chrome/Edge/Brave browser profiles.
+- Open Claude with a separate Desktop profile or Chrome/Edge/Brave browser profile per account.
+- Open Gemini, Perplexity, and DeepSeek in separate Chrome/Edge/Brave browser profiles.
 - Open the installed Antigravity app using its shared application sign-in.
 - Filter agents from the sidebar, combined with search, favorites, and recents.
 - Run without an API key, a hosted service, or third-party Swift packages.
@@ -38,7 +39,8 @@ Choose **AI agent** when adding an account. The agent is fixed after creation to
 | Agent | Launch and sign-in | Quota and background connection |
 | --- | --- | --- |
 | ChatGPT | Separate Desktop session or browser profile | Codex quota; Desktop background connections |
-| Claude, Gemini, Perplexity, DeepSeek | Separate Chromium browser profile for each account | Unavailable |
+| Claude | Separate Desktop or Chromium browser profile for each account | Unavailable |
+| Gemini, Perplexity, DeepSeek | Separate Chromium browser profile for each account | Unavailable |
 | Antigravity | Installed app; its existing shared sign-in | Unavailable |
 
 Use **AI AGENTS** in the left sidebar to select an agent or **All agents**. Counts show saved entries, and the selected agent persists across relaunch. Favorites, recents, and search combine with the agent filter. Adding an account while filtered preselects that agent.
@@ -46,6 +48,21 @@ Use **AI AGENTS** in the left sidebar to select an agent or **All agents**. Coun
 For browser agents, install Chrome, Edge, or Brave, add a profile, then sign in directly on the service's website. Each profile keeps its own browser storage. Antigravity supports one launcher entry: AI Switcher does not isolate or switch its accounts, close the shared app, or read its quota. Agent capabilities are reflected consistently in cards, the quota overview, menu bar, and diagnostics. Quota-only mode and notifications apply to ChatGPT/Codex.
 
 ![AI agents with the Playful Retro theme and fictional profiles](docs/assets/ai-agents-en.png)
+
+## Claude Desktop profiles
+
+Install the official Claude app in `/Applications/Claude.app` or `~/Applications/Claude.app`. Add a Claude profile and choose **Claude Desktop**. Each profile starts the unmodified installed app with its own `--user-data-dir` and a separate Claude Code configuration directory. Sign in directly inside each profile window. Opening the profile again focuses its exact process; **Close account session…** closes only that profile and keeps its data.
+
+Existing Claude browser profiles retain browser mode and their saved browser sign-in. To change one, close its session, choose **Edit profile → Claude Desktop**, then sign in once in the new Desktop window. Browser and Desktop logins remain separate, and switching back retains the browser data. Claude does not support quota, background connection, startup connection, or shared ChatGPT Work history in AI Switcher.
+
+<details>
+<summary>Claude Desktop profile setup (fictional data)</summary>
+
+![Claude Desktop profile setup](docs/assets/claude-desktop-en.png)
+
+</details>
+
+This integration is experimental: app updates can change Electron behavior. The installed Claude 3.6556.2 was checked with two fresh profile windows, distinct processes, window reuse, targeted close/reopen, and persistent separate storage. Real sign-in to two accounts, OAuth/deep-link routing, Claude Code, and Cowork still need manual verification. No default Claude credentials or data are imported, and no app bundle or signature is modified.
 
 ## Install and use
 
@@ -72,9 +89,9 @@ Closing the manager keeps the menu bar available. Quitting AI Switcher leaves De
 
 ## Language and appearance
 
-Open **Appearance & Language** from the sidebar, the menu bar, or **⌘,**. Choose **English** or **Tiếng Việt** and one of six themes: **Light**, **Dark**, **Terminal**, **Code** (inspired by VS Code), **Dracula**, or **Playful Retro Neo-Brutalism**. Changes apply immediately and persist after relaunch. Existing users keep Vietnamese and Light until they choose otherwise.
+Open **Appearance & Language** from the sidebar, the menu bar, or **⌘,**. Choose **English** or **Tiếng Việt** and one of seven themes: **Light**, **Dark**, **Terminal**, **Code** (inspired by VS Code), **Dracula**, **Playful Retro Neo-Brutalism**, or **Terminal Black**. Changes apply immediately and persist after relaunch. Existing users keep Vietnamese and Light until they choose otherwise.
 
-Terminal and Code use monospace typography and compact corners. Playful Retro Neo-Brutalism adds warm cream surfaces, pastel yellow/pink/blue/mint cards, rounded system typography, 2.5-point ink outlines, and hard 4-point offset shadows. Its pill buttons and cards respond to presses and hovering, with animations respecting Reduce Motion. Themes cover the manager, account cards, dialogs, quota details, and native menu appearance. Language selection also updates menus, errors, quota labels, and date/number formatting. These preferences apply to AI Switcher.
+Terminal, Terminal Black, and Code use monospace typography and compact corners. Terminal Black adds a pure black canvas/sidebar, near-black cards, bright text, and a green accent; the original Terminal palette stays available. Playful Retro Neo-Brutalism adds warm cream surfaces, pastel yellow/pink/blue/mint cards, rounded system typography, 2.5-point ink outlines, and hard 4-point offset shadows. Its pill buttons and cards respond to presses and hovering, with animations respecting Reduce Motion. Themes cover the manager, account cards, dialogs, quota details, and native menu appearance. Language selection also updates menus, errors, quota labels, and date/number formatting. These preferences apply to AI Switcher.
 
 <p align="center"><img src="docs/assets/appearance-en.png" width="550" alt="Appearance settings with English and Vietnamese and theme choices"></p>
 
@@ -82,6 +99,13 @@ Terminal and Code use monospace typography and compact corners. Playful Retro Ne
 <summary>Playful Retro Neo-Brutalism preview (fictional profiles and quota)</summary>
 
 ![Playful Retro Neo-Brutalism theme](docs/assets/playful-retro-en.png)
+
+</details>
+
+<details>
+<summary>Terminal Black preview (fictional profiles and quota)</summary>
+
+![Terminal Black](docs/assets/terminal-black-en.png)
 
 </details>
 
@@ -151,6 +175,8 @@ AI Switcher does not read passwords, cookies, token files, or conversations. Cha
 ```text
 ~/Library/Application Support/AI Switcher/
 ├── accounts.json                  # Labels, selected mode, identities and cached quota
+├── Claude/<UUID>/UserData/         # Separate Claude Desktop session storage
+├── Claude/<UUID>/CodeConfig/       # Separate Claude Code configuration path
 ├── Desktop/<UUID>/UserData/        # ChatGPT Desktop UI and browser storage
 ├── Desktop/<UUID>/backend-location.txt
 ├── SharedWorkspaceMetadata/       # Local sidebar metadata retained for shared history
@@ -185,9 +211,10 @@ Local integration checks require a graphical macOS login session:
 bash scripts/test.sh --desktop  # Two disposable real ChatGPT instances and local backend connections
 bash scripts/test.sh --browser  # Chrome windows plus loopback cookie/localStorage fixture
 bash scripts/test.sh --codex    # Installed CLI handshake in a fresh unauthenticated home
+bash scripts/test.sh --claude   # Two disposable Claude Desktop profiles, reuse, targeted close/reopen
 ```
 
-The core/protocol, Desktop discovery and shared-workspace suite has 108 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, theme text contrast, agent migration/filter persistence, provider routing, and capability guards. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. The optional `bash scripts/test.sh --session` smoke check verifies a real isolated backend starts, restarts, and stops without launching a ChatGPT Desktop process. Notification decisions, permission handling, quick-menu wiring, and recovery failure guards use fixtures; actual notification banners depend on macOS permission and notification settings. No real accounts or model requests are used in automated checks.
+The core/protocol, Desktop discovery and shared-workspace suite has 112 tests covering storage, ownership, migration, exact routing, deletion/rollback, quota semantics, JSONL lifecycle, preference persistence, translation coverage/format placeholders, theme text contrast, agent migration/filter persistence, provider routing, and capability guards. Desktop smoke checks verify distinct processes, empty identities through each shared backend, window reuse, close/reopen persistence, and cleanup without closing existing ChatGPT instances. The optional `bash scripts/test.sh --session` smoke check verifies a real isolated backend starts, restarts, and stops without launching a ChatGPT Desktop process. Notification decisions, permission handling, quick-menu wiring, and recovery failure guards use fixtures; actual notification banners depend on macOS permission and notification settings. No real accounts or model requests are used in automated checks.
 
 **Early preview:** local checks run on Intel with ChatGPT Desktop 26.1021.31345. Universal compilation does not establish Apple Silicon runtime coverage. Real sign-in, live quotas, minimized windows, multiple Spaces, and OS deep-link routing still require manual field testing. Edge/Brave have less integration coverage than Chrome. The interface supports Vietnamese and English.
 

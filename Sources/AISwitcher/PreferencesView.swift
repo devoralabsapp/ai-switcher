@@ -79,7 +79,7 @@ struct PreferencesView: View {
                     Spacer(minLength: 0)
                 }.padding(9).frame(width: 38).background(colors.sidebar)
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(theme == .terminal ? "$ switch account" : "AI Switcher")
+                    Text(theme.isTerminal ? "$ switch account" : "AI Switcher")
                         .font(theme.font(size: 10, weight: .semibold)).foregroundColor(colors.ink)
                     HStack(spacing: 5) {
                         ForEach(0..<2) { index in

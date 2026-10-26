@@ -89,7 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.rebuildStatusMenu()
         }
 
-        if arguments.contains("--session-smoke-test") {
+        if arguments.contains("--claude-smoke-test") {
+            Task { await claudeSmokeTest(root: root) }
+        } else if arguments.contains("--session-smoke-test") {
             Task { await sessionSmokeTest(root: root) }
         } else if arguments.contains("--desktop-smoke-test") {
             Task { await desktopSmokeTest(root: root) }
@@ -324,6 +326,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         menu.addItem(item)
+    }
+
+    /// Opens only disposable Claude profiles and closes only their exact PIDs.
+    private func claudeSmokeTest(root: URL) async {
+        setbuf(stdout, nil)
+        guard CommandLine.arguments.contains("--data-dir"), root.lastPathComponent.hasPrefix("ai-switcher-smoke."),
+              model.accounts.isEmpty else { Darwin.exit(1) }
+        let a = Account(name: "Claude Smoke A", launchMode: .desktop, agent: .claude)
+        let b = Account(name: "Claude Smoke B", launchMode: .desktop, agent: .claude)
+        let service = model.claudeDesktopService
+        let existing = NSRunningApplication.runningApplications(withBundleIdentifier: ClaudeLaunch.bundleIdentifier)
+        var failure: Error?
+        do {
+            let first = try await service.open(a), second = try await service.open(b)
+            guard first.processIdentifier != second.processIdentifier,
+                  !existing.contains(where: { $0.processIdentifier == first.processIdentifier || $0.processIdentifier == second.processIdentifier }),
+                  service.hasWindow(a), service.hasWindow(b) else { throw ClaudeProfileError.launchFailed }
+            let reused = try await service.open(a)
+            guard reused.processIdentifier == first.processIdentifier else { throw ClaudeProfileError.launchFailed }
+            print("PASS: two distinct Claude Desktop processes/windows; exact profile focus reuses its window")
+            // A harmless marker tests persistence; no authentication data is read.
+            let marker = model.repository.claudeUserDataURL(for: a.id).appendingPathComponent("ai-switcher-smoke-marker")
+            try Data("fixture".utf8).write(to: marker)
+            try await service.close(a)
+            guard !second.isTerminated else { throw ClaudeProfileError.launchFailed }
+            _ = try await service.open(a)
+            guard try Data(contentsOf: marker) == Data("fixture".utf8) else { throw ClaudeProfileError.launchFailed }
+            print("PASS: closing/reopening A preserves its storage and leaves B running")
+            // Allow offscreen QA to inspect the disposable windows when requested.
+            if CommandLine.arguments.contains("--claude-smoke-hold") {
+                print("QA: disposable Claude windows open for inspection (30 seconds)")
+                try await Task.sleep(nanoseconds: 30_000_000_000)
+            }
+        } catch { failure = error }
+        for account in [a,b] {
+            do {
+                try await service.close(account)
+                _ = try model.repository.remove(account.id, from: .init())
+            } catch { failure = failure ?? error }
+        }
+        if existing.contains(where: { $0.isTerminated }) { failure = failure ?? ClaudeProfileError.launchFailed }
+        if let failure {
+            fputs("FAIL: \(failure.localizedDescription)\n", stderr)
+            Darwin.exit(1)
+        }
+        print("PASS: disposable Claude profiles cleaned up; existing Claude processes left running")
+        Darwin.exit(0)
     }
 
     /// Verifies a real, disposable backend without launching any ChatGPT Desktop window.

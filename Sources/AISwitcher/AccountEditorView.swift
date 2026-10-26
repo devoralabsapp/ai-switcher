@@ -35,7 +35,7 @@ struct AccountEditorView: View {
     }
 
     private var isNew: Bool { editor.account == nil }
-    private var selectedMode: LaunchMode { agent == .chatgpt ? launchMode : agent.isSharedApplication ? .desktop : .browser }
+    private var selectedMode: LaunchMode { agent == .chatgpt || agent == .claude ? launchMode : agent.isSharedApplication ? .desktop : .browser }
     private var modeLocked: Bool {
         editor.account.map { model.hasRunningSession($0) || model.launchingIDs.contains($0.id) || model.quotaBusyIDs.contains($0.id) || model.pendingConnections[$0.id] != nil } ?? false
     }
@@ -112,6 +112,23 @@ struct AccountEditorView: View {
                                     .padding(3).overlay(Circle().stroke(item == color ? item.tint(for: appearanceTheme).opacity(0.5) : Color.clear, lineWidth: 1))
                             }.buttonStyle(ThemedPlainButtonStyle()).help(item.name).accessibilityLabel(item.name)
                                 .accessibilityAddTraits(item == color ? .isSelected : [])
+                        }
+                    }
+                }
+
+                if agent == .claude {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Text(L10n.text("Open accounts with")).font(appearanceTheme.font(size: 12, weight: .medium))
+                        Picker(L10n.text("Mode"), selection: $launchMode) {
+                            Text("Claude Desktop").tag(LaunchMode.desktop)
+                            Text(L10n.text("Browser")).tag(LaunchMode.browser)
+                        }.pickerStyle(.segmented).labelsHidden().disabled(modeLocked)
+                            .accessibilityIdentifier("claudeLaunchMode")
+                        Text(L10n.text("Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota is not available."))
+                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        if modeLocked {
+                            Text(L10n.text("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                         }
                     }
                 }

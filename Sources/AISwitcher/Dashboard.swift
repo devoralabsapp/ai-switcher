@@ -193,7 +193,7 @@ struct Dashboard: View {
     private var toolbar: some View {
         HStack(spacing: 16) {
             HStack(spacing: 7) {
-                if appearanceTheme == .terminal {
+                if appearanceTheme.isTerminal {
                     Text("~/accounts $ ai-switcher").foregroundColor(palette.accent)
                 } else if appearanceTheme == .code {
                     Label("accounts.workspace", systemImage: "chevron.left.forwardslash.chevron.right").foregroundColor(palette.secondary)

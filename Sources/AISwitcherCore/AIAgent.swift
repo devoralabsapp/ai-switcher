@@ -40,6 +40,7 @@ public enum AIAgent: String, Codable, CaseIterable, Identifiable, Sendable {
     public var openTitle: String { L10n.format("Open %@", name) }
     public var supportDetail: String {
         if supportsCodexQuota { return L10n.text("Desktop sessions, browser profiles, and Codex quota") }
+        if self == .claude { return L10n.text("Separate Claude Desktop or browser sign-in for each profile. Quota and background connections are not available.") }
         if isSharedApplication { return L10n.text("Opens the installed app with its own shared sign-in. Separate account switching and quota are not available.") }
         return L10n.text("Separate browser sign-in for each profile. Quota and background connections are not available for this agent.")
     }
