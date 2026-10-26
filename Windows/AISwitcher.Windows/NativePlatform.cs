@@ -37,9 +37,9 @@ internal sealed class NativePlatform {
             List<OwnedProcess> result=[];
             using var searcher=new ManagementObjectSearcher("SELECT ProcessId, ExecutablePath, CommandLine FROM Win32_Process WHERE Name='Claude.exe' OR Name='ChatGPT.exe' OR Name='Codex.exe' OR Name='chrome.exe' OR Name='msedge.exe' OR Name='brave.exe' OR Name='Antigravity.exe' OR Name='AISwitcher.exe'");
             foreach(ManagementObject value in searcher.Get())using(value){
-                if(value["ExecutablePath"] is not string exe||value["CommandLine"] is not string args)continue;
+                if(value["CommandLine"] is not string args)continue;
                 var pid=Convert.ToInt32(value["ProcessId"]);
-                try{using var process=Process.GetProcessById(pid);result.Add(new(pid,exe,SplitArguments(args),process.MainWindowHandle!=IntPtr.Zero));}catch(ArgumentException){}
+                try{using var process=Process.GetProcessById(pid);var exe=value["ExecutablePath"] as string??process.MainModule?.FileName;if(exe!=null)result.Add(new(pid,exe,SplitArguments(args),process.MainWindowHandle!=IntPtr.Zero));}catch(ArgumentException){}catch(System.ComponentModel.Win32Exception){}
             }
             return result;
         });
@@ -47,8 +47,8 @@ internal sealed class NativePlatform {
     public OwnedProcess? Owned(Account account){var path=repository.DataPath(account);
         return processes.FirstOrDefault(p=>p.Arguments.Contains("--user-data-dir="+path,StringComparer.OrdinalIgnoreCase)&&!p.Arguments.Any(x=>x.StartsWith("--type=",StringComparison.OrdinalIgnoreCase))&&IsAgentExecutable(account,p.Executable));}
     bool IsAgentExecutable(Account account,string executable){var expected=ExecutableKey(account);var configured=preferences.Executables.GetValueOrDefault(expected);
-        if(!string.IsNullOrWhiteSpace(configured))return SamePath(executable,configured);
-        return discovered.TryGetValue(expected,out var found)&&found!=null&&SamePath(executable,found);}
+        if(!string.IsNullOrWhiteSpace(configured))return SamePath(executable,configured)||account.UsesCodexDesktop&&StoreRuntime.IsManagedExecutable(repository.Root,executable);
+        return discovered.TryGetValue(expected,out var found)&&found!=null&&(SamePath(executable,found)||account.UsesCodexDesktop&&StoreRuntime.IsManagedExecutable(repository.Root,executable));}
     public static bool SamePath(string a,string b)=>string.Equals(Path.GetFullPath(a),Path.GetFullPath(b),StringComparison.OrdinalIgnoreCase);
     public static string ExecutableKey(Account account)=>account.EffectiveMode==LaunchMode.Browser?account.Browser.ToString().ToLowerInvariant():account.Agent.Name().ToLowerInvariant();
     public async Task<string?> FindExecutableAsync(string key){
@@ -88,7 +88,7 @@ internal sealed class NativePlatform {
     }
     static async Task<IReadOnlyList<string>> PackageLocationsAsync(string package){
         var info=new ProcessStartInfo("powershell.exe"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
-        foreach(var arg in new[]{"-NoProfile","-NonInteractive","-Command","Get-AppxPackage -Name $env:AISW_PACKAGE | Select-Object -ExpandProperty InstallLocation"})info.ArgumentList.Add(arg);info.Environment["AISW_PACKAGE"]=package;
+        foreach(var arg in new[]{"-NoProfile","-NonInteractive","-Command","Get-AppxPackage -Name $env:AISW_PACKAGE | Where-Object { $_.Name -ne 'OpenAI.Codex' -or $_.PublisherId -eq '2p2nqsd0c76g0' } | Select-Object -ExpandProperty InstallLocation"})info.ArgumentList.Add(arg);info.Environment["AISW_PACKAGE"]=package;
         using var child=Process.Start(info);if(child==null)return [];
         var output=child.StandardOutput.ReadToEndAsync();var error=child.StandardError.ReadToEndAsync();
         try{await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));await error;return (await output).Split(['\r','\n'],StringSplitOptions.RemoveEmptyEntries).Where(Directory.Exists).ToArray();}
@@ -107,6 +107,11 @@ internal sealed class NativePlatform {
         await RefreshProcessesAsync();var owned=Owned(account);
         if(url==null&&owned?.HasWindow==true){Activate(owned.Id);return;}
         if(account.EffectiveMode==LaunchMode.Desktop)VerifyIsolation(exe,account.Agent);
+        if(account.UsesCodexDesktop&&WindowsExecutable.IsStorePath(exe)){
+            var installed=await PackageLocationsAsync("OpenAI.Codex");
+            if(!installed.Any(location=>SamePath(Path.GetDirectoryName(exe)!,Path.Combine(location,"app"))||SamePath(Path.GetDirectoryName(exe)!,location)))throw new AppError("The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.");
+            try{exe=await StoreRuntime.PrepareAsync(repository.Root,exe);}catch(Exception error)when(error is IOException or UnauthorizedAccessException){throw new AppError("Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check free disk space and try again.");}
+        }
         repository.PrepareProfile(account);ProtectDirectory(repository.ProfilePath(account));
         var env=ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
         if(account.UsesCodexDesktop){env["CODEX_ELECTRON_USER_DATA_PATH"]=repository.DataPath(account);if(useLocalDaemon)env["CODEX_APP_SERVER_USE_LOCAL_DAEMON"]="1";if(account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.Database(preferences);}

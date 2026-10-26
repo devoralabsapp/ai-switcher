@@ -14,8 +14,9 @@ using AISwitcher.Core;
 
 namespace AISwitcher.Windows;
 internal static class PreviewRunner {
-    public static int Run(string[] args){var root=Program.Argument(args,"--data-dir");var output=Program.Argument(args,"--output");var smoke=args.Contains("--ui-smoke-test");var stdio=args.Contains("--stdio-smoke-test");var backend=args.Contains("--backend-smoke-test")||stdio;
+    public static int Run(string[] args){var root=Program.Argument(args,"--data-dir");var output=Program.Argument(args,"--output");var smoke=args.Contains("--ui-smoke-test");var stdio=args.Contains("--stdio-smoke-test");var realStore=args.Contains("--store-runtime-smoke-test");var backend=args.Contains("--backend-smoke-test")||stdio||realStore;
         if(root==null||output==null||!Path.GetFileName(root).StartsWith(smoke||backend?"ai-switcher-smoke.":"ai-switcher-preview.",StringComparison.Ordinal)||!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))return 2;
+        if(realStore){try{Directory.CreateDirectory(output);RealStoreAsync(root,output,Program.Argument(args,"--store-executable")??throw new InvalidOperationException("Store executable required")).GetAwaiter().GetResult();return 0;}catch(Exception error){File.WriteAllText(Path.Combine(output,"store-runtime-error.txt"),error.ToString());return 1;}}
         if(backend){try{Directory.CreateDirectory(output);BackendFixtureAsync(root,output,Program.Argument(args,"--codex-executable")??throw new InvalidOperationException("Codex executable is required"),stdio).GetAwaiter().GetResult();File.WriteAllText(Path.Combine(output,"backend-smoke-result.txt"),stdio?"PASS: standalone EXE starts real native Windows Codex RPC in its own signed-out home; initialization and signed-out identity verified; elevated daemon startup rejected; no Desktop or real account.\n":"PASS: native Windows Codex daemon starts, accepts a local handshake in its own signed-out home, restarts, stops and cleans up without a Desktop window or real account.\n");return 0;}catch(Exception error){File.AppendAllText(Path.Combine(output,"backend-smoke-error.txt"),error.ToString());return 1;}}
         var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/AISwitcher;component/Styles.xaml",UriKind.Relative)});int code=0;
         app.Startup+=async(_,_)=>{try{Directory.CreateDirectory(output);foreach(var language in new[]{"en","vi"})foreach(var theme in Themes.All){var data=Path.Combine(root,language,theme.Id);var repository=new Repository(data);repository.Save(Demo());var engine=new AppEngine(data);engine.Preferences.Language=language;engine.Preferences.Theme=theme.Id;
@@ -41,6 +42,25 @@ internal static class PreviewRunner {
     static Snapshot Demo(){var limits=System.Text.Json.JsonSerializer.Deserialize<Limits>("{\"rateLimits\":{\"limitId\":\"codex\",\"primary\":{\"usedPercent\":23,\"windowDurationMins\":300,\"resetsAt\":"+DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds()+"},\"secondary\":{\"usedPercent\":41,\"windowDurationMins\":10080,\"resetsAt\":"+DateTimeOffset.UtcNow.AddDays(3).ToUnixTimeSeconds()+"}}}",Json.Options)!;
         return new(){Accounts=[new(){Name="Demo Personal",EmailHint="personal@example.test",Agent=Agent.Chatgpt,Color="mint",IsFavorite=true,DesktopConnection=new(new("demo@example.test","plus"),new(limits,DateTimeOffset.UtcNow))},new(){Name="Claude Work",EmailHint="work@example.test",Agent=Agent.Claude,Color="peach",IsFavorite=true},new(){Name="Claude Personal",Agent=Agent.Claude,LaunchMode=LaunchMode.Browser,Color="rose"},new(){Name="Gemini Study",Agent=Agent.Gemini,Color="blue"},new(){Name="Antigravity",Agent=Agent.Antigravity,Color="violet"},new(){Name="Perplexity Research",Agent=Agent.Perplexity,Color="mint"},new(){Name="DeepSeek Work",Agent=Agent.Deepseek,Color="gold"}]};}
     static void ReadOnlyPreferences(string root){var repo=new Repository(Path.Combine(root,"corrupt-preferences"));Directory.CreateDirectory(repo.Root);File.WriteAllText(repo.PreferencesPath,"{");var engine=new AppEngine(repo.Root);Require(engine.ReadOnly,"Corrupt preferences must leave the manager read-only");engine.SetQuotaOnly(true);engine.SetAgent(Agent.Claude);Require(File.ReadAllText(repo.PreferencesPath)=="{","Read-only controls overwrote corrupt preferences");}
+    static async Task RealStoreAsync(string root,string output,string source){
+        var repo=new Repository(root);var a=new Account{Name="Store A"};var b=new Account{Name="Store B"};repo.Save(new(){Accounts=[a,b]});var engine=new AppEngine(root);var children=new List<int>();
+        var runtime=await StoreRuntime.PrepareAsync(repo.Root,source);engine.Preferences.Executables["chatgpt"]=runtime;
+        engine.Preferences.Executables["codex"]=Path.Combine(Path.GetDirectoryName(runtime)!,"resources","codex.exe");
+        Require(await CodexLocator.VerifyAsync(engine.Preferences.Executables["codex"]),"Copied native Store CLI did not run");
+        try{
+            foreach(var account in new[]{a,b}){
+                repo.PrepareQuota(account);repo.PrepareProfile(account);await engine.Platform.OpenAsync(account,useLocalDaemon:false);
+                var process=engine.Platform.Owned(account)??throw new InvalidOperationException("Missing runtime process");children.Add(process.Id);Require(process.HasWindow,"Store runtime did not create a window");
+                await using var client=await engine.Backend.StdioClientAsync(account);
+                try{await client.ReadIdentityAsync();throw new InvalidOperationException("Fresh Store profile unexpectedly signed in");}catch(AppError error)when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
+            }
+            Require(children[0]!=children[1],"Store profiles shared a process");await engine.Platform.OpenAsync(a,useLocalDaemon:false);Require(engine.Platform.Owned(a)?.Id==children[0],"Switching A did not reuse its window");
+            File.WriteAllText(Path.Combine(output,"store-runtime-result.txt"),"PASS: real official ChatGPT program files copied intact; packaged CLI executes; two private profile windows/PIDs; signed-out identities in separate homes; existing A window reused. Source: "+source+"\n");
+        }finally{
+            foreach(var pid in children){try{using var child=Process.GetProcessById(pid);if(!child.HasExited)child.Kill(true);await child.WaitForExitAsync();}catch(ArgumentException){}}
+            foreach(var account in new[]{a,b})repo.Remove(account,repo.Load());
+        }
+    }
     static async Task BackendFixtureAsync(string root,string output,string executable,bool stdio=false){
         var account=new Account{Name="Native backend smoke"};var repo=new Repository(root);repo.Save(new(){Accounts=[account]});var engine=new AppEngine(root);engine.Preferences.Executables["codex"]=executable;engine.Backend.FixtureDiagnostic=text=>File.AppendAllText(Path.Combine(output,"backend-smoke-error.txt"),text+"\n");
         if(stdio){try{
