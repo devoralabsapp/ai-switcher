@@ -47,8 +47,10 @@ internal sealed class BackendService {
         if(!account.Agent.HasQuota())throw new AppError("Quota is not available for this agent.");
         if(account.UsesCodexDesktop){
             if(!IsActive(account)&&platform.Owned(account)==null)await StartAsync(account);
-            try{if(!IsActive(account))throw new AppError("The Codex session is signed out or expired. Reconnect the account.");await using var local=await SocketClientAsync(account);return await local.ReadQuotaAsync(ct);}
-            catch(AppError error) when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
+            if(IsActive(account)){
+                try{await using var local=await SocketClientAsync(account);return await local.ReadQuotaAsync(ct);}
+                catch(AppError error) when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
+            }
         }
         await using var fallback=await StdioClientAsync(account,ct);return await fallback.ReadQuotaAsync(ct);
     }

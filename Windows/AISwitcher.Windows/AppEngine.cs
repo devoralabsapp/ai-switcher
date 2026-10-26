@@ -116,7 +116,7 @@ internal sealed class AppEngine {
             var sweep=DateTimeOffset.UtcNow-lastSweep>TimeSpan.FromMinutes(5);
             foreach(var account in Snapshot.Accounts.ToArray()){
                 if(Busy.Contains(account.Id)||!account.Agent.HasQuota())continue;
-                var active=account.UsesCodexDesktop?Backend.IsActive(account):account.BrowserConnection!=null;
+                var active=account.UsesCodexDesktop?Backend.IsActive(account)||Platform.Owned(account)!=null:account.BrowserConnection!=null;
                 var missing=account.UsesCodexDesktop&&active&&account.Connection?.Quota==null&&(!Checks.TryGetValue(account.Id,out var checkedAt)||DateTimeOffset.UtcNow-checkedAt>TimeSpan.FromSeconds(30));
                 if(active&&(sweep||missing))await RefreshAsync(account,false);
             }
