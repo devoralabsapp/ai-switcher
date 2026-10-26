@@ -23,6 +23,7 @@ internal sealed class NativePlatform {
     public IReadOnlyList<OwnedProcess> Processes=>processes;
     public HashSet<Guid> PreparingRuntime { get; }=[];
     public event Action? PreparationChanged;
+    internal Action<int>? FixtureStarted { get; set; }
     public NativePlatform(Repository repository,Preferences preferences){this.repository=repository;this.preferences=preferences;}
     public static Dictionary<string,string> EnvironmentValues()=>Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>().ToDictionary(x=>(string)x.Key,x=>(string)x.Value!,StringComparer.OrdinalIgnoreCase);
     public static bool IsElevated()=>new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
@@ -123,6 +124,7 @@ internal sealed class NativePlatform {
         var arguments=new List<string>{"--user-data-dir="+repository.DataPath(account)};
         if(account.EffectiveMode==LaunchMode.Browser)arguments.AddRange(["--no-first-run","--no-default-browser-check","--disable-background-mode","--app="+(url??account.Agent.Url()).AbsoluteUri]);
         using var child=Process.Start(ChildEnvironment.StartInfo(exe,arguments,env,repository.ProfilePath(account)))??throw new AppError("Could not open the AI agent window. Try again or check the browser.");
+        FixtureStarted?.Invoke(child.Id);
         for(var i=0;i<120;i++){
             await Task.Delay(250);await RefreshProcessesAsync();var running=Owned(account);if(running?.HasWindow==true){Activate(running.Id);return;}
             if(child.HasExited&&child.ExitCode!=0)break;

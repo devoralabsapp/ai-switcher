@@ -44,24 +44,24 @@ internal static class PreviewRunner {
     static void ReadOnlyPreferences(string root){var repo=new Repository(Path.Combine(root,"corrupt-preferences"));Directory.CreateDirectory(repo.Root);File.WriteAllText(repo.PreferencesPath,"{");var engine=new AppEngine(repo.Root);Require(engine.ReadOnly,"Corrupt preferences must leave the manager read-only");engine.SetQuotaOnly(true);engine.SetAgent(Agent.Claude);Require(File.ReadAllText(repo.PreferencesPath)=="{","Read-only controls overwrote corrupt preferences");}
     [System.Runtime.InteropServices.DllImport("user32.dll",EntryPoint="GetClassNameW",CharSet=System.Runtime.InteropServices.CharSet.Unicode)]static extern int GetClassName(IntPtr window,System.Text.StringBuilder name,int length);
     static async Task RealStoreAsync(string root,string output,string source){
-        var repo=new Repository(root);var a=new Account{Name="Store A"};var b=new Account{Name="Store B"};repo.Save(new(){Accounts=[a,b]});var engine=new AppEngine(root);var children=new List<int>();
+        var repo=new Repository(root);var a=new Account{Name="Store A"};var b=new Account{Name="Store B"};repo.Save(new(){Accounts=[a,b]});var engine=new AppEngine(root);var children=new List<int>();engine.Platform.FixtureStarted=pid=>children.Add(pid);Exception? failure=null;
         var runtime=await StoreRuntime.PrepareAsync(repo.Root,source);engine.Preferences.Executables["chatgpt"]=runtime;
         engine.Preferences.Executables["codex"]=Path.Combine(Path.GetDirectoryName(runtime)!,"resources","codex.exe");
         Require(await CodexLocator.VerifyAsync(engine.Preferences.Executables["codex"]),"Copied native Store CLI did not run");
         try{
             foreach(var account in new[]{a,b}){
                 repo.PrepareQuota(account);repo.PrepareProfile(account);await engine.Platform.OpenAsync(account,useLocalDaemon:false);
-                var process=engine.Platform.Owned(account)??throw new InvalidOperationException("Missing runtime process");children.Add(process.Id);Require(process.HasWindow,"Store runtime did not create a window");
-                await Task.Delay(5000);using(var launched=Process.GetProcessById(process.Id)){Require(!launched.HasExited,"Store runtime exited after showing its window");var className=new System.Text.StringBuilder(128);GetClassName(launched.MainWindowHandle,className,128);Require(className.ToString().StartsWith("Chrome_WidgetWin_",StringComparison.Ordinal),"Store runtime displayed a native error dialog instead of Electron: "+className);}
+                var process=engine.Platform.Owned(account)??throw new InvalidOperationException("Missing runtime process");Require(process.HasWindow,"Store runtime did not create a window");
+                await Task.Delay(5000);using(var launched=Process.GetProcessById(process.Id)){Require(!launched.HasExited,"Store runtime exited after showing its window");File.AppendAllText(Path.Combine(output,"store-runtime-windows.txt"),launched.Id+": "+launched.MainWindowTitle+"\n");var className=new System.Text.StringBuilder(128);GetClassName(launched.MainWindowHandle,className,128);Require(className.ToString().StartsWith("Chrome_WidgetWin_",StringComparison.Ordinal),"Store runtime displayed a native error dialog instead of Electron: "+className);}
                 Require(Directory.EnumerateFileSystemEntries(repo.DataPath(account)).Any(),"Desktop ignored its private user-data directory");
                 await using var client=await engine.Backend.StdioClientAsync(account);
                 try{await client.ReadIdentityAsync();throw new InvalidOperationException("Fresh Store profile unexpectedly signed in");}catch(AppError error)when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
             }
             Require(children[0]!=children[1],"Store profiles shared a process");await engine.Platform.OpenAsync(a,useLocalDaemon:false);Require(engine.Platform.Owned(a)?.Id==children[0],"Switching A did not reuse its window");
             File.WriteAllText(Path.Combine(output,"store-runtime-result.txt"),"PASS: real official ChatGPT program files copied intact; packaged CLI executes; two private profile windows/PIDs; signed-out identities in separate homes; existing A window reused. Source: "+source+"\n");
-        }finally{
-            foreach(var pid in children){try{using var child=Process.GetProcessById(pid);if(!child.HasExited)child.Kill(true);await child.WaitForExitAsync();}catch(ArgumentException){}}
-            foreach(var account in new[]{a,b})repo.Remove(account,repo.Load());
+        }catch(Exception error){failure=error;throw;}finally{
+            foreach(var pid in children.Distinct()){try{using var child=Process.GetProcessById(pid);if(!child.HasExited)child.Kill(true);await child.WaitForExitAsync();}catch(ArgumentException){}}
+            foreach(var account in new[]{a,b}){for(var attempt=0;attempt<10;attempt++){try{repo.Remove(account,repo.Load());break;}catch(IOException)when(attempt<9){await Task.Delay(400);}catch(Exception error)when(failure!=null){File.AppendAllText(Path.Combine(output,"store-runtime-cleanup.txt"),error.GetType().Name+"\n");break;}}}
         }
     }
     static async Task BackendFixtureAsync(string root,string output,string executable,bool stdio=false){
