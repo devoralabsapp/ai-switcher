@@ -38,7 +38,7 @@ try {
     $process=Start-Process $App -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$Output`"",'--store-runtime-smoke-test','--store-executable',"`"$source`"") -PassThru
     if(-not $process.WaitForExit(360000)){$process.Kill();throw 'Real Store runtime smoke timed out'}
     if($process.ExitCode -ne 0){if(Test-Path (Join-Path $Output 'store-runtime-error.txt')){Get-Content (Join-Path $Output 'store-runtime-error.txt')};throw 'Real Store runtime smoke failed'}
-    Get-Content (Join-Path $Output 'store-package-mode.txt'),(Join-Path $Output 'store-runtime-result.txt')
+    Get-Content (Join-Path $Output 'store-package-mode.txt'),(Join-Path $Output 'store-runtime-result.txt'),(Join-Path $Output 'store-runtime-reopen-result.txt')
     Remove-Item $root -Recurse -Force
 }finally{
     if($installed){$env:AISW_FIXTURE_FULLNAME=$installed.PackageFullName;& powershell.exe -NoProfile -NonInteractive -Command 'Remove-AppxPackage -Package $env:AISW_FIXTURE_FULLNAME -ErrorAction Continue'}

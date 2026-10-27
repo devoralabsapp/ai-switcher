@@ -48,6 +48,8 @@ Lần mở đầu cần thêm dung lượng bằng khoảng thư mục chương 
 
 Trong chẩn đoán sẽ có cả đường dẫn ứng dụng Store và runtime thực tế. CLI cài bằng npm vẫn được hỗ trợ; cài thêm CLI đơn thuần không giải quyết việc Windows chặn chạy file GUI trong WindowsApps. Nếu từng chọn đường dẫn CLI thủ công bị lỗi, đặt lại `codex` trong cài đặt.
 
+Preview 5 sửa lỗi đọc lại runtime khi tên file khác chữ hoa/thường. Sau khi khởi động lại AI Switcher, tên file vẫn được đối chiếu theo cách của Windows. Cache và hồ sơ hiện có được dùng lại, không cần tạo lại tài khoản. Kiểm tra Windows tự động mở lại cả hai app qua đường dẫn Store đã đăng ký, rồi chạy một tiến trình AI Switcher mới để đọc lại hồ sơ và cài đặt đã lưu.
+
 ## Claude Store và đóng phiên Desktop
 
 Preview 4 thêm runtime riêng cho Claude Store tại `Runtimes\claude\<version-key>`. Cache ChatGPT và các hồ sơ hiện có được giữ nguyên. Mỗi tài khoản Claude Desktop tiếp tục dùng thư mục user-data và cấu hình Code riêng.

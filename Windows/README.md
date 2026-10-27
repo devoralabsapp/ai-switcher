@@ -42,6 +42,8 @@ The first open requires additional disk space approximately equal to the app's p
 
 Codex CLI discovery validates console binaries and `codex-cli --version`, rejecting GUI binaries and protected Store aliases. Diagnostics shows both the installed ChatGPT path and the prepared runtime path. Reset a stale manually selected `codex` path in Settings if needed. There is no fallback to the default shared sign-in.
 
+Preview 5 fixes reuse of existing runtime metadata when installed filenames differ in letter case. Windows filename matching now remains case-insensitive after restarting AI Switcher. Existing runtimes and account profiles are reused without recreating accounts. Automated Windows checks reopen both official Desktop apps through their registered Store paths and launch a fresh AI Switcher process with the saved profile and preferences.
+
 ## Claude Store and closing Desktop sessions
 
 Preview 4 adds a separate `Runtimes\claude\<version-key>` cache for the registered official Claude package (`Claude_pzs8sxrjxfjjc`). ChatGPT's existing cache and profiles are retained. Each Claude Desktop account has its own user-data and Code config directories; browser-mode Claude is unchanged.

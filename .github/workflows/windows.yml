@@ -79,13 +79,13 @@ jobs:
           Remove-Item -Recurse -Force $root
           if('${{ inputs.daemon_probe }}' -eq 'true'){../scripts/test-windows-backend.ps1 -App $app -Tools $tools -Output $output}
           Remove-Item -Recurse -Force $tools
-      - name: Exercise real official ChatGPT Store runtime with two private windows
+      - name: Exercise real ChatGPT Store profiles, cache reuse and manager restart
         if: matrix.runtime == 'win-x64'
         run: |
           $output=Join-Path $PWD 'artifacts/previews'
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
           ../scripts/test-windows-store-runtime.ps1 -App $app -Output $output
-      - name: Exercise real official Claude Store runtime and targeted graceful quit
+      - name: Exercise real Claude Store profiles, cache reuse and manager restart
         if: matrix.runtime == 'win-x64'
         run: |
           $output=Join-Path $PWD 'artifacts/previews/claude'

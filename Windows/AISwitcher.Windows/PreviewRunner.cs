@@ -14,9 +14,9 @@ using AISwitcher.Core;
 
 namespace AISwitcher.Windows;
 internal static class PreviewRunner {
-    public static int Run(string[] args){var root=Program.Argument(args,"--data-dir");var output=Program.Argument(args,"--output");var smoke=args.Contains("--ui-smoke-test");var stdio=args.Contains("--stdio-smoke-test");var realStore=args.Contains("--store-runtime-smoke-test");var backend=args.Contains("--backend-smoke-test")||stdio||realStore;
+    public static int Run(string[] args){var root=Program.Argument(args,"--data-dir");var output=Program.Argument(args,"--output");var smoke=args.Contains("--ui-smoke-test");var stdio=args.Contains("--stdio-smoke-test");var reopenStore=args.Contains("--store-runtime-reopen-smoke-test");var realStore=args.Contains("--store-runtime-smoke-test")||reopenStore;var backend=args.Contains("--backend-smoke-test")||stdio||realStore;
         if(root==null||output==null||!Path.GetFileName(root).StartsWith(smoke||backend?"ai-switcher-smoke.":"ai-switcher-preview.",StringComparison.Ordinal)||!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))return 2;
-        if(realStore){try{Directory.CreateDirectory(output);RealStoreAsync(root,output,Program.Argument(args,"--store-executable")??throw new InvalidOperationException("Store executable required"),Program.Argument(args,"--store-agent")=="claude"?Agent.Claude:Agent.Chatgpt).GetAwaiter().GetResult();return 0;}catch(Exception error){File.WriteAllText(Path.Combine(output,"store-runtime-error.txt"),error.ToString());return 1;}}
+        if(realStore){try{Directory.CreateDirectory(output);RunStoreAsync(root,output,args,reopenStore).GetAwaiter().GetResult();return 0;}catch(Exception error){File.WriteAllText(Path.Combine(output,"store-runtime-error.txt"),error.ToString());return 1;}}
         if(backend){try{Directory.CreateDirectory(output);BackendFixtureAsync(root,output,Program.Argument(args,"--codex-executable")??throw new InvalidOperationException("Codex executable is required"),stdio).GetAwaiter().GetResult();File.WriteAllText(Path.Combine(output,"backend-smoke-result.txt"),stdio?"PASS: standalone EXE starts real native Windows Codex RPC in its own signed-out home; initialization and signed-out identity verified; elevated daemon startup rejected; no Desktop or real account.\n":"PASS: native Windows Codex daemon starts, accepts a local handshake in its own signed-out home, restarts, stops and cleans up without a Desktop window or real account.\n");return 0;}catch(Exception error){File.AppendAllText(Path.Combine(output,"backend-smoke-error.txt"),error.ToString());return 1;}}
         var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/AISwitcher;component/Styles.xaml",UriKind.Relative)});int code=0;
         app.Startup+=async(_,_)=>{try{Directory.CreateDirectory(output);foreach(var language in new[]{"en","vi"})foreach(var theme in Themes.All){var data=Path.Combine(root,language,theme.Id);var repository=new Repository(data);repository.Save(Demo());var engine=new AppEngine(data);engine.Preferences.Language=language;engine.Preferences.Theme=theme.Id;
@@ -44,10 +44,40 @@ internal static class PreviewRunner {
     static void ReadOnlyPreferences(string root){var repo=new Repository(Path.Combine(root,"corrupt-preferences"));Directory.CreateDirectory(repo.Root);File.WriteAllText(repo.PreferencesPath,"{");var engine=new AppEngine(repo.Root);Require(engine.ReadOnly,"Corrupt preferences must leave the manager read-only");engine.SetQuotaOnly(true);engine.SetAgent(Agent.Claude);Require(File.ReadAllText(repo.PreferencesPath)=="{","Read-only controls overwrote corrupt preferences");}
     [System.Runtime.InteropServices.DllImport("user32.dll",EntryPoint="GetClassNameW",CharSet=System.Runtime.InteropServices.CharSet.Unicode)]static extern int GetClassName(IntPtr window,System.Text.StringBuilder name,int length);
     [System.Runtime.InteropServices.DllImport("user32.dll")]static extern bool ShowWindow(IntPtr window,int command);
+    static async Task RunStoreAsync(string root,string output,string[] args,bool reopen){
+        var source=Program.Argument(args,"--store-executable")??throw new InvalidOperationException("Store executable required");
+        var agent=Program.Argument(args,"--store-agent")=="claude"?Agent.Claude:Agent.Chatgpt;
+        if(reopen)await ReopenStoreAsync(root,output,source,agent);else await RealStoreAsync(root,output,source,agent);
+    }
+    static async Task ReopenStoreAsync(string root,string output,string source,Agent agent){
+        var engine=new AppEngine(root);var repo=engine.Repository;var account=engine.Snapshot.Accounts.First();
+        Require(account.Agent==agent,"Persisted profile agent changed");
+        var sentinel=Path.Combine(repo.DataPath(account),"ai-switcher-reopen-fixture.txt");
+        Require(File.ReadAllText(sentinel)==account.Id.ToString(),"Restart lost the existing profile data");
+        var expected=WindowsExecutable.IsStorePath(source)?source:StoreRuntime.ExecutableFor(root,source);
+        Require(NativePlatform.SamePath(engine.Preferences.Executables[agent.Name().ToLowerInvariant()],expected),"Restart lost the original executable selection");
+        // Fallback extracted payloads also revalidate the persisted cache; registered Store installs go through OpenAsync below.
+        if(!WindowsExecutable.IsStorePath(source))await StoreRuntime.PrepareAsync(root,source);
+        var children=new List<int>();engine.Platform.FixtureStarted=pid=>children.Add(pid);
+        try{
+            await engine.Platform.OpenAsync(account,useLocalDaemon:false);
+            var process=engine.Platform.Owned(account)??throw new InvalidOperationException("Restart did not open the saved account");
+            await Task.Delay(5000);using(var opened=Process.GetProcessById(process.Id)){
+                Require(!opened.HasExited,"Restarted runtime exited");var name=new System.Text.StringBuilder(128);GetClassName(opened.MainWindowHandle,name,128);
+                Require(name.ToString().StartsWith("Chrome_WidgetWin_",StringComparison.Ordinal),"Restart showed a native error instead of the Desktop window");
+            }
+            Require(File.ReadAllText(sentinel)==account.Id.ToString(),"Opening after restart changed existing profile data");
+            await engine.Platform.CloseAsync(account);Require(engine.Platform.Owned(account)==null,"Restarted session did not quit");
+            File.WriteAllText(Path.Combine(output,"store-runtime-reopen-result.txt"),"PASS: fresh AI Switcher EXE process reloads saved account/preferences, revalidates cached program files through the original Store executable, opens the same private profile with existing data intact, and closes normally.\n");
+        }finally{
+            engine.Shutdown();foreach(var pid in children){try{using var child=Process.GetProcessById(pid);if(!child.HasExited)child.Kill(true);await child.WaitForExitAsync();}catch(ArgumentException){}}
+        }
+    }
     static async Task RealStoreAsync(string root,string output,string source,Agent agent){
         var repo=new Repository(root);var a=new Account{Name="Store A",Agent=agent};var b=new Account{Name="Store B",Agent=agent};repo.Save(new(){Accounts=[a,b]});var engine=new AppEngine(root);var children=new List<int>();engine.Platform.FixtureStarted=pid=>children.Add(pid);Exception? failure=null;
-        var runtime=await StoreRuntime.PrepareAsync(repo.Root,source);engine.Preferences.Executables[agent.Name().ToLowerInvariant()]=runtime;
+        var runtime=await StoreRuntime.PrepareAsync(repo.Root,source);engine.Preferences.Executables[agent.Name().ToLowerInvariant()]=WindowsExecutable.IsStorePath(source)?source:runtime;
         if(agent==Agent.Chatgpt){engine.Preferences.Executables["codex"]=Path.Combine(Path.GetDirectoryName(runtime)!,"resources","codex.exe");Require(await CodexLocator.VerifyAsync(engine.Preferences.Executables["codex"]),"Copied native Store CLI did not run");}
+        engine.SavePreferences();
         try{
             foreach(var account in new[]{a,b}){
                 if(account.UsesCodexDesktop)repo.PrepareQuota(account);repo.PrepareProfile(account);await engine.Platform.OpenAsync(account,useLocalDaemon:false);
@@ -63,7 +93,15 @@ internal static class PreviewRunner {
             Require(engine.Platform.Owned(a)==null,"Hidden A did not quit");
             await engine.Platform.OpenAsync(a,useLocalDaemon:false);Require(engine.Platform.Owned(a)?.Id!=oldA.Id,"Reopened A reused an exited process");
             await engine.Platform.CloseAsync(a);await engine.Platform.CloseAsync(b);
-            File.WriteAllText(Path.Combine(output,"store-runtime-result.txt"),"PASS: real official "+agent.Name()+" program files copied intact; two private profile windows/PIDs and user-data directories; existing A window reused; graceful close of hidden A preserves B; A reopens; both sessions quit without forced shutdown. Source: "+source+"\n");
+            var sentinel=Path.Combine(repo.DataPath(a),"ai-switcher-reopen-fixture.txt");File.WriteAllText(sentinel,a.Id.ToString());engine.Shutdown();
+            var restart=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};
+            foreach(var argument in new[]{"--data-dir",root,"--output",output,"--store-runtime-reopen-smoke-test","--store-agent",agent==Agent.Claude?"claude":"chatgpt","--store-executable",source})restart.ArgumentList.Add(argument);
+            using(var manager=Process.Start(restart)??throw new InvalidOperationException("Could not restart the test manager")){
+                var wait=manager.WaitForExitAsync();if(await Task.WhenAny(wait,Task.Delay(TimeSpan.FromSeconds(120)))!=wait){manager.Kill(true);throw new InvalidOperationException("Restarted manager timed out");}
+                Require(manager.ExitCode==0,"Fresh manager failed: "+(File.Exists(Path.Combine(output,"store-runtime-error.txt"))?File.ReadAllText(Path.Combine(output,"store-runtime-error.txt")):manager.ExitCode.ToString()));
+            }
+            Require(File.ReadAllText(sentinel)==a.Id.ToString(),"Fresh manager did not preserve the same profile");
+            File.WriteAllText(Path.Combine(output,"store-runtime-result.txt"),"PASS: real official "+agent.Name()+" program files copied intact; two private profile windows/PIDs and user-data directories; existing A window reused; graceful close of hidden A preserves B; A reopens through original Store path; fresh AI Switcher process reloads the same saved profile and cache; both sessions quit without forced shutdown. Source: "+source+"\n");
         }catch(Exception error){failure=error;throw;}finally{
             foreach(var pid in children.Distinct()){try{using var child=Process.GetProcessById(pid);if(!child.HasExited)child.Kill(true);await child.WaitForExitAsync();}catch(ArgumentException){}}
             foreach(var account in new[]{a,b}){for(var attempt=0;attempt<10;attempt++){try{repo.Remove(account,repo.Load());break;}catch(IOException)when(attempt<9){await Task.Delay(400);}catch(Exception error)when(failure!=null){File.AppendAllText(Path.Combine(output,"store-runtime-cleanup.txt"),error.GetType().Name+"\n");break;}}}
