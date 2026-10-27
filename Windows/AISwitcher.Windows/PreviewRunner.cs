@@ -44,6 +44,10 @@ internal static class PreviewRunner {
     static void ReadOnlyPreferences(string root){var repo=new Repository(Path.Combine(root,"corrupt-preferences"));Directory.CreateDirectory(repo.Root);File.WriteAllText(repo.PreferencesPath,"{");var engine=new AppEngine(repo.Root);Require(engine.ReadOnly,"Corrupt preferences must leave the manager read-only");engine.SetQuotaOnly(true);engine.SetAgent(Agent.Claude);Require(File.ReadAllText(repo.PreferencesPath)=="{","Read-only controls overwrote corrupt preferences");}
     [System.Runtime.InteropServices.DllImport("user32.dll",EntryPoint="GetClassNameW",CharSet=System.Runtime.InteropServices.CharSet.Unicode)]static extern int GetClassName(IntPtr window,System.Text.StringBuilder name,int length);
     [System.Runtime.InteropServices.DllImport("user32.dll")]static extern bool ShowWindow(IntPtr window,int command);
+    static async Task CloseStoreAsync(AppEngine engine,Account account){
+        await engine.Platform.CloseAsync(account);
+        if(account.UsesCodexDesktop)await engine.Backend.StopAsync(account);
+    }
     static async Task RunStoreAsync(string root,string output,string[] args,bool reopen){
         var source=Program.Argument(args,"--store-executable")??throw new InvalidOperationException("Store executable required");
         var agent=Program.Argument(args,"--store-agent")=="claude"?Agent.Claude:Agent.Chatgpt;
@@ -67,7 +71,7 @@ internal static class PreviewRunner {
                 Require(name.ToString().StartsWith("Chrome_WidgetWin_",StringComparison.Ordinal),"Restart showed a native error instead of the Desktop window");
             }
             Require(File.ReadAllText(sentinel)==account.Id.ToString(),"Opening after restart changed existing profile data");
-            await engine.Platform.CloseAsync(account);Require(engine.Platform.Owned(account)==null,"Restarted session did not quit");
+            await CloseStoreAsync(engine,account);Require(engine.Platform.Owned(account)==null,"Restarted session did not quit");
             File.WriteAllText(Path.Combine(output,"store-runtime-reopen-result.txt"),"PASS: fresh AI Switcher EXE process reloads saved account/preferences, revalidates cached program files through the original Store executable, opens the same private profile with existing data intact, and closes normally.\n");
         }finally{
             engine.Shutdown();foreach(var pid in children){try{using var child=Process.GetProcessById(pid);if(!child.HasExited)child.Kill(true);await child.WaitForExitAsync();}catch(ArgumentException){}}
@@ -89,10 +93,10 @@ internal static class PreviewRunner {
             Require(children[0]!=children[1],"Store profiles shared a process");await engine.Platform.OpenAsync(a,useLocalDaemon:false);Require(engine.Platform.Owned(a)?.Id==children[0],"Switching A did not reuse its window");
             var oldA=engine.Platform.Owned(a)!;using(var window=Process.GetProcessById(oldA.Id))ShowWindow(window.MainWindowHandle,0);
             await engine.Platform.RefreshProcessesAsync();Require(engine.Platform.Owned(a)?.HasWindow==false,"Hidden fixture still exposed a main window");
-            await engine.Platform.CloseAsync(a);using(var other=Process.GetProcessById(children[1]))Require(!other.HasExited,"Closing hidden A affected B");
+            await CloseStoreAsync(engine,a);using(var other=Process.GetProcessById(children[1]))Require(!other.HasExited,"Closing hidden A affected B");
             Require(engine.Platform.Owned(a)==null,"Hidden A did not quit");
             await engine.Platform.OpenAsync(a,useLocalDaemon:false);Require(engine.Platform.Owned(a)?.Id!=oldA.Id,"Reopened A reused an exited process");
-            await engine.Platform.CloseAsync(a);await engine.Platform.CloseAsync(b);
+            await CloseStoreAsync(engine,a);await CloseStoreAsync(engine,b);
             var sentinel=Path.Combine(repo.DataPath(a),"ai-switcher-reopen-fixture.txt");File.WriteAllText(sentinel,a.Id.ToString());engine.Shutdown();
             var restart=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};
             foreach(var argument in new[]{"--data-dir",root,"--output",output,"--store-runtime-reopen-smoke-test","--store-agent",agent==Agent.Claude?"claude":"chatgpt","--store-executable",source})restart.ArgumentList.Add(argument);
@@ -104,7 +108,7 @@ internal static class PreviewRunner {
             File.WriteAllText(Path.Combine(output,"store-runtime-result.txt"),"PASS: real official "+agent.Name()+" program files copied intact; two private profile windows/PIDs and user-data directories; existing A window reused; graceful close of hidden A preserves B; A reopens through original Store path; fresh AI Switcher process reloads the same saved profile and cache; both sessions quit without forced shutdown. Source: "+source+"\n");
         }catch(Exception error){failure=error;throw;}finally{
             foreach(var pid in children.Distinct()){try{using var child=Process.GetProcessById(pid);if(!child.HasExited)child.Kill(true);await child.WaitForExitAsync();}catch(ArgumentException){}}
-            foreach(var account in new[]{a,b}){for(var attempt=0;attempt<10;attempt++){try{repo.Remove(account,repo.Load());break;}catch(IOException)when(attempt<9){await Task.Delay(400);}catch(Exception error)when(failure!=null){File.AppendAllText(Path.Combine(output,"store-runtime-cleanup.txt"),error.GetType().Name+"\n");break;}}}
+            foreach(var account in new[]{a,b}){for(var attempt=0;attempt<75;attempt++){try{repo.Remove(account,repo.Load());break;}catch(IOException)when(attempt<74){await Task.Delay(400);}catch(Exception error)when(failure!=null){File.AppendAllText(Path.Combine(output,"store-runtime-cleanup.txt"),error.GetType().Name+"\n");break;}}}
         }
     }
     static async Task BackendFixtureAsync(string root,string output,string executable,bool stdio=false){

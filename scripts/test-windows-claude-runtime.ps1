@@ -37,7 +37,7 @@ try {
     $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
     $process=Start-Process $App -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$Output`"",'--store-runtime-smoke-test','--store-agent','claude','--store-executable',"`"$source`"") -PassThru
     if(-not $process.WaitForExit(360000)){$process.Kill();throw 'Real Claude Store runtime smoke timed out'}
-    if($process.ExitCode -ne 0){if(Test-Path (Join-Path $Output 'store-runtime-error.txt')){Get-Content (Join-Path $Output 'store-runtime-error.txt')};throw 'Real Claude Store runtime smoke failed'}
+    if($process.ExitCode -ne 0){Get-CimInstance Win32_Process | Where-Object {$_.Name -match '^(codex|ChatGPT|claude|AISwitcher)\.exe$'} | Select-Object ProcessId,ParentProcessId,ExecutablePath | ConvertTo-Json | Set-Content (Join-Path $Output 'store-runtime-processes-on-failure.json');if(Test-Path (Join-Path $Output 'store-runtime-error.txt')){Get-Content (Join-Path $Output 'store-runtime-error.txt')};throw 'Real Claude Store runtime smoke failed'}
     Get-Content (Join-Path $Output 'store-package-mode.txt'),(Join-Path $Output 'store-runtime-result.txt'),(Join-Path $Output 'store-runtime-reopen-result.txt')
     Remove-Item $root -Recurse -Force
 }finally{
