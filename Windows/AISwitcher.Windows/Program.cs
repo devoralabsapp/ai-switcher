@@ -46,24 +46,30 @@ internal sealed class Program:Application {
         manager.CommandBindings.Add(new System.Windows.Input.CommandBinding(System.Windows.Input.ApplicationCommands.Close,(_,_)=>manager.Hide()));
     }
     void RebuildTray(){if(engine==null||tray==null||manager==null)return;
-        var next=System.Text.Json.JsonSerializer.Serialize(engine.Snapshot,Json.Options)+System.Text.Json.JsonSerializer.Serialize(engine.Preferences,Json.Options)+string.Join("|",engine.Snapshot.Accounts.Select(a=>engine.Status(a)));
+        var next=System.Text.Json.JsonSerializer.Serialize(engine.Snapshot,Json.Options)+System.Text.Json.JsonSerializer.Serialize(engine.Preferences,Json.Options)+engine.StoppingAll+string.Join("|",engine.Snapshot.Accounts.Select(a=>engine.Status(a)+":"+engine.Running(a)+":"+engine.CanConnect(a)));
         if(next==traySignature)return;traySignature=next;var l=engine.L;var menu=new Forms.ContextMenuStrip();
         menu.Items.Add(l["Show manager"],null,(_,_)=>Dispatcher.Invoke(manager.ShowManager));menu.Items.Add(new Forms.ToolStripSeparator());
         foreach(var account in engine.Snapshot.Accounts){var a=account;var item=new Forms.ToolStripMenuItem(a.Agent.Name()+" · "+a.Name);var status=new Forms.ToolStripMenuItem(engine.Status(a)){Enabled=false};item.DropDownItems.Add(status);
             if(a.Connection?.Quota is { } quota){if(quota.IsStale(DateTimeOffset.UtcNow)||engine.Errors.ContainsKey(a.Id))item.DropDownItems.Add(new Forms.ToolStripMenuItem(l["Stale data · refresh needed"]){Enabled=false});foreach(var b in quota.Limits.Buckets){item.DropDownItems.Add(new Forms.ToolStripMenuItem(b.Value.LimitName??b.Key){Enabled=false});foreach(var w in new[]{b.Value.Primary,b.Value.Secondary}.OfType<QuotaWindow>()){var value=!w.Expired(DateTimeOffset.UtcNow)?w.Remaining:null;item.DropDownItems.Add(new Forms.ToolStripMenuItem(w.Duration(l)+": "+(value.HasValue?value.Value.ToString("0.#",l.Culture)+"%":l["No data yet"])){Enabled=false});if(w.Reset is { } reset)item.DropDownItems.Add(new Forms.ToolStripMenuItem(l.Format("Reset: %@",l.Date(reset))){Enabled=false});}}item.DropDownItems.Add(new Forms.ToolStripMenuItem(l.Format("Last read: %@",l.Date(quota.FetchedAt))){Enabled=false});}
             void Action(string text,Action action,bool enabled=true){var button=new Forms.ToolStripMenuItem(text){Enabled=enabled};button.Click+=(_,_)=>Dispatcher.Invoke(action);item.DropDownItems.Add(button);}
-            item.DropDownItems.Add(new Forms.ToolStripSeparator());Action(engine.DefaultTitle(a),()=>_=engine.DefaultAsync(a),!engine.Busy.Contains(a.Id));
-            if(a.UsesCodexDesktop){Action(l["Open ChatGPT Desktop"],()=>_=engine.OpenAsync(a),!engine.Busy.Contains(a.Id));Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
-            if(a.Agent.HasQuota()){Action(l["Refresh quota"],()=>_=engine.RefreshAsync(a),!engine.Busy.Contains(a.Id)&&(a.UsesCodexDesktop||a.BrowserConnection!=null));Action(l["Details"],()=>manager.QuotaDetails(a));}
-            Action(l["Close account session…"],()=>manager.Close(a),!a.Agent.IsShared()&&engine.Running(a)&&!engine.Busy.Contains(a.Id));menu.Items.Add(item);
+            item.DropDownItems.Add(new Forms.ToolStripSeparator());Action(engine.DefaultTitle(a),()=>_=engine.DefaultAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id));
+            if(a.UsesCodexDesktop){Action(l["Open ChatGPT Desktop"],()=>_=engine.OpenAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id));Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
+            if(a.Agent.HasQuota()){Action(l["Refresh quota"],()=>_=engine.RefreshAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id)&&(a.UsesCodexDesktop||a.BrowserConnection!=null));Action(l["Details"],()=>manager.QuotaDetails(a));}
+            Action(l["Close account session…"],()=>manager.Close(a),!a.Agent.IsShared()&&engine.Running(a)&&!engine.StoppingAll&&!engine.Busy.Contains(a.Id));menu.Items.Add(item);
         }
-        menu.Items.Add(new Forms.ToolStripSeparator());menu.Items.Add(l["Add account…"],null,(_,_)=>Dispatcher.Invoke(()=>manager.EditAccount()));menu.Items.Add(l["Appearance & Language"],null,(_,_)=>Dispatcher.Invoke(manager.Settings));menu.Items.Add(l["Session diagnostics"],null,(_,_)=>Dispatcher.Invoke(manager.Diagnostics));menu.Items.Add(l["Quit AI Switcher"],null,(_,_)=>Dispatcher.Invoke(()=>{manager.Exiting=true;engine.Shutdown();Shutdown();}));
+        menu.Items.Add(new Forms.ToolStripSeparator());menu.Items.Add(l["Add account…"],null,(_,_)=>Dispatcher.Invoke(()=>manager.EditAccount()));menu.Items.Add(l["Appearance & Language"],null,(_,_)=>Dispatcher.Invoke(manager.Settings));menu.Items.Add(l["Session diagnostics"],null,(_,_)=>Dispatcher.Invoke(manager.Diagnostics));var force=menu.Items.Add(l["Force stop all…"],null,(_,_)=>Dispatcher.Invoke(manager.ForceStopAll));force.Enabled=!engine.ReadOnly&&!engine.StoppingAll;menu.Items.Add(l["Quit AI Switcher"],null,(_,_)=>Dispatcher.Invoke(async()=>{manager.Exiting=true;await engine.ShutdownAsync();Shutdown();}));
         var old=tray.ContextMenuStrip;tray.ContextMenuStrip=menu;old?.Dispose();
     }
     protected override void OnExit(ExitEventArgs e){timer?.Stop();engine?.Shutdown();tray?.Dispose();lease?.Dispose();base.OnExit(e);}
     public static string? Argument(string[] args,string key){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:null;}
     static void RunFixture(string[] args){var root=Argument(args,"--data-dir");var profile=args.FirstOrDefault(x=>x.StartsWith("--user-data-dir=",StringComparison.Ordinal));
         if(root==null||!Path.GetFileName(root).StartsWith("ai-switcher-smoke.",StringComparison.Ordinal)||profile==null||!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))return;
+        if(args.Contains("--spawn-child-fixture")){
+            var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};
+            foreach(var argument in new[]{"--process-fixture","--data-dir",root,profile+"-child"})info.ArgumentList.Add(argument);
+            using var child=Process.Start(info)??throw new InvalidOperationException("Could not create disposable child fixture");
+            File.WriteAllText(Path.Combine(root,"fixture-child.pid"),child.Id.ToString());
+        }
         var app=new Application{ShutdownMode=args.Contains("--hide-on-close-fixture")?ShutdownMode.OnExplicitShutdown:ShutdownMode.OnLastWindowClose};var window=new Window{Title="AI Switcher disposable profile fixture",Width=400,Height=250,Content=new System.Windows.Controls.TextBlock{Text="Disposable Windows process fixture",Margin=new Thickness(25)}};window.Closing+=(_,e)=>{if(args.Contains("--hide-on-close-fixture")){e.Cancel=true;window.Hide();}};app.Run(window);
     }
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern uint RegisterWindowMessage(string value);

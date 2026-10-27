@@ -24,6 +24,9 @@ internal sealed class AppEngine {
     public event Action? Changed;
     public event Action<string>? Error;
     public event Action<Account,IReadOnlyList<QuotaAlert>>? QuotaAlert;
+    sealed record Operation(CancellationTokenSource Cancellation,TaskCompletionSource Completion);
+    readonly Dictionary<Guid,Operation> operations=[];
+    public bool StoppingAll { get; private set; }
     readonly CancellationTokenSource lifetime=new();bool observing;DateTimeOffset lastSweep=DateTimeOffset.MinValue;
     public AppEngine(string root){
         Repository=new(root);
@@ -35,7 +38,7 @@ internal sealed class AppEngine {
     public void SetQuotaOnly(bool enabled){Preferences.SetQuotaOnly(enabled);SavePreferences();}
     public void SetAgent(Agent? agent){Preferences.AgentFilter=agent;SavePreferences();}
     public async Task<bool> SetExecutableAsync(string key,string? path){
-        if(ReadOnly)return false;
+        if(ReadOnly||StoppingAll)return false;
         try{
             await Platform.RefreshProcessesAsync();
             if(Snapshot.Accounts.Any(a=>(NativePlatform.ExecutableKey(a)==key||key=="codex"&&a.UsesCodexDesktop)&&(Busy.Contains(a.Id)||Running(a))))throw new AppError("Close running sessions before changing their application executable.");
@@ -44,9 +47,9 @@ internal sealed class AppEngine {
         }catch(Exception error){Error?.Invoke(Message(error));return false;}
     }
     public string Message(Exception error)=>error is System.ComponentModel.Win32Exception native?L.Format("Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.",native.NativeErrorCode):error is UnauthorizedAccessException?L["Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions."]:L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
-    public bool Running(Account a)=>a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a)||Backend.HasSocket(a);
-    public bool CanConnect(Account a)=>a.UsesCodexDesktop&&!ReadOnly&&!Busy.Contains(a.Id)&&!Running(a);
-    public string Status(Account a)=>Busy.Contains(a.Id)?L[Platform.PreparingRuntime.Contains(a.Id)?a.Agent==Agent.Claude?"Preparing Claude for the first launch…":"Preparing ChatGPT for the first launch…":"Working…"]:Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]?L["Sign-in required"]:a.Agent.IsShared()?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Backend.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
+    public bool Running(Account a)=>a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a);
+    public bool CanConnect(Account a)=>a.UsesCodexDesktop&&!ReadOnly&&!StoppingAll&&!Busy.Contains(a.Id)&&!Running(a);
+    public string Status(Account a)=>StoppingAll||Busy.Contains(a.Id)?L[Platform.PreparingRuntime.Contains(a.Id)?a.Agent==Agent.Claude?"Preparing Claude for the first launch…":"Preparing ChatGPT for the first launch…":"Working…"]:Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]?L["Sign-in required"]:a.Agent.IsShared()?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Platform.Owned(a)!=null||Backend.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
     public bool DefaultConnect(Account a)=>a.UsesCodexDesktop&&(Preferences.QuotaOnlyMode||a.DefaultAction==DefaultAction.ConnectSession);
     public string DefaultTitle(Account a)=>DefaultConnect(a)?Running(a)?L["Refresh quota"]:L["Connect account session"]:L.Format("Open %@",a.Agent.Name());
     public Task DefaultAsync(Account a)=>DefaultConnect(a)?Running(a)?RefreshAsync(a):ConnectAsync(a):OpenAsync(a);
@@ -58,7 +61,7 @@ internal sealed class AppEngine {
         await ObserveAsync();
     }
     public bool SaveAccount(Account edited){
-        if(ReadOnly)return false;
+        if(ReadOnly||StoppingAll)return false;
         try{
             edited.Validate();var old=Snapshot.Accounts.FirstOrDefault(x=>x.Id==edited.Id);
             if(old!=null){if(old.Agent!=edited.Agent||old.Browser!=edited.Browser)throw new AppError("The agent of an existing profile cannot change. Create a new profile instead.");
@@ -70,23 +73,24 @@ internal sealed class AppEngine {
     }
     public void ToggleFavorite(Account a)=>SaveAccount(a with{IsFavorite=!a.IsFavorite});
     Account Current(Account a)=>Snapshot.Accounts.First(x=>x.Id==a.Id);
-    async Task Run(Account a,Func<Task> action,bool report=true){
-        if(ReadOnly||lifetime.IsCancellationRequested||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!Busy.Add(a.Id))return;Notify();
-        try{Errors.Remove(a.Id);await action();}catch(OperationCanceledException){}catch(Exception error){Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
-        finally{Busy.Remove(a.Id);try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}Notify();}
+    async Task Run(Account a,Func<CancellationToken,Task> action,bool report=true){
+        if(ReadOnly||StoppingAll||lifetime.IsCancellationRequested||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!Busy.Add(a.Id))return;
+        using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var operation=new Operation(cancellation,new(TaskCreationOptions.RunContinuationsAsynchronously));operations[a.Id]=operation;Notify();
+        try{Errors.Remove(a.Id);await action(cancellation.Token);}catch(OperationCanceledException){}catch(Exception error){Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
+        finally{Busy.Remove(a.Id);try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}operations.Remove(a.Id);operation.Completion.TrySetResult();Notify();}
     }
-    public Task OpenAsync(Account a)=>Run(a,async()=>{
+    public Task OpenAsync(Account a)=>Run(a,async ct=>{
         string? backgroundError=null;
-        if(a.UsesCodexDesktop){Repository.PrepareQuota(a);Repository.PrepareProfile(a);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);try{await Backend.StartAsync(a);}catch(Exception error)when(error is AppError or System.ComponentModel.Win32Exception){backgroundError=Message(error);}}
-        await Platform.OpenAsync(a,useLocalDaemon:Backend.IsActive(a));var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
+        if(a.UsesCodexDesktop){Repository.PrepareQuota(a);Repository.PrepareProfile(a);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);try{await Backend.StartAsync(a,ct);}catch(Exception error)when(error is AppError or System.ComponentModel.Win32Exception){backgroundError=Message(error);}}
+        await Platform.OpenAsync(a,useLocalDaemon:Backend.UsesLocalDaemon(a),ct:ct);var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
         if(backgroundError!=null)Errors[a.Id]=backgroundError;
     });
-    public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;return Run(a,async()=>{await Backend.StartAsync(a);await ReadAsync(a);},report);}
-    public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,()=>ReadAsync(a),report);}
-    async Task ReadAsync(Account a){
+    public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;return Run(a,async ct=>{await Backend.StartAsync(a,ct);await ReadAsync(a,ct);},report);}
+    public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,ct=>ReadAsync(a,ct),report);}
+    async Task ReadAsync(Account a,CancellationToken ct){
         Checks[a.Id]=DateTimeOffset.UtcNow;
         try{
-            var connection=await Backend.ReadAsync(a,lifetime.Token);var current=Current(a);
+            var connection=await Backend.ReadAsync(a,ct);var current=Current(a);
             if(!a.UsesCodexDesktop&&current.BrowserConnection is { } verified&&!verified.Identity.Matches(connection.Identity))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
             if(current.UsesCodexDesktop)current.DesktopConnection=connection;else current.BrowserConnection=connection;
             Repository.Save(Snapshot);var alerts=AlertTracker.Evaluate(current,Preferences,DateTimeOffset.UtcNow);Repository.SavePreferences(Preferences);if(alerts.Count>0)QuotaAlert?.Invoke(current,alerts);
@@ -94,27 +98,29 @@ internal sealed class AppEngine {
             if(a.UsesCodexDesktop){Current(a).DesktopConnection=null;Repository.Save(Snapshot);}throw;
         }
     }
-    public Task CloseAsync(Account a)=>Run(a,async()=>{if(a.Agent.IsShared())return;await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);});
-    public Task RestartAsync(Account a){if(!a.UsesCodexDesktop)return Task.CompletedTask;return Run(a,async()=>{await Platform.CloseAsync(a);await Backend.StopAsync(a);await Backend.StartAsync(a);await ReadAsync(a);});}
-    public Task DeleteAsync(Account a)=>Run(a,async()=>{await Platform.RefreshProcessesAsync();if(Running(a)&&!a.Agent.IsShared())throw new AppError("Close this session before deleting its profile.");if(a.UsesCodexDesktop)SharedWorkspace.Archive(a,Repository);Snapshot=Repository.Remove(a,Snapshot);});
-    public Task BrowserLoginAsync(Account a,Func<Identity,Task<bool>> confirm,CancellationToken ct)=>Run(a,async()=>{
+    public Task CloseAsync(Account a)=>Run(a,async ct=>{if(a.Agent.IsShared())return;await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);});
+    public Task RestartAsync(Account a){if(!a.UsesCodexDesktop)return Task.CompletedTask;return Run(a,async ct=>{await Platform.CloseAsync(a);await Backend.StopAsync(a);await Backend.StartAsync(a,ct);await ReadAsync(a,ct);});}
+    public Task DeleteAsync(Account a)=>Run(a,async ct=>{await Platform.RefreshProcessesAsync();if(Running(a)&&!a.Agent.IsShared())throw new AppError("Close this session before deleting its profile.");if(a.UsesCodexDesktop)SharedWorkspace.Archive(a,Repository);Snapshot=Repository.Remove(a,Snapshot);});
+    public Task BrowserLoginAsync(Account a,Func<Identity,Task<bool>> confirm,CancellationToken externalCt)=>Run(a,async operationCt=>{
+        using var linked=CancellationTokenSource.CreateLinkedTokenSource(operationCt,externalCt);var ct=linked.Token;
         if(!a.Agent.HasQuota()||a.EffectiveMode!=LaunchMode.Browser)return;
         await using var client=await Backend.StdioClientAsync(a,ct);var login=await client.StartLoginAsync(ct);bool confirmed=false;
         try{
-            await Platform.OpenAsync(a,login.Url);await client.WaitForLoginAsync(login.Id,ct);var identity=await client.ReadIdentityAsync(ct);
+            await Platform.OpenAsync(a,login.Url,ct:ct);await client.WaitForLoginAsync(login.Id,ct);var identity=await client.ReadIdentityAsync(ct);
             if(!await confirm(identity))return;var connection=await client.ReadQuotaAsync(ct);if(!identity.Matches(connection.Identity))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
             Current(a).BrowserConnection=connection;Repository.Save(Snapshot);confirmed=true;
         }finally{if(!confirmed){try{await client.CancelLoginAsync(login.Id);await client.LogoutAsync();}catch{}}}
     });
-    public Task DisconnectBrowserAsync(Account a)=>Run(a,async()=>{if(a.EffectiveMode!=LaunchMode.Browser||!a.Agent.HasQuota())return;await using var client=await Backend.StdioClientAsync(a,lifetime.Token);await client.LogoutAsync(lifetime.Token);Current(a).BrowserConnection=null;Repository.Save(Snapshot);});
+    public Task DisconnectBrowserAsync(Account a)=>Run(a,async ct=>{if(a.EffectiveMode!=LaunchMode.Browser||!a.Agent.HasQuota())return;await using var client=await Backend.StdioClientAsync(a,ct);await client.LogoutAsync(ct);Current(a).BrowserConnection=null;Repository.Save(Snapshot);});
     public async Task ObserveAsync(bool refresh=true){
-        if(observing||ReadOnly||lifetime.IsCancellationRequested)return;observing=true;
+        if(observing||ReadOnly||StoppingAll||lifetime.IsCancellationRequested)return;observing=true;
         try{
             await Platform.RefreshProcessesAsync();LifecycleError=null;
-            foreach(var a in Snapshot.Accounts.Where(x=>x.UsesCodexDesktop&&!Busy.Contains(x.Id)))if(!Backend.IsActive(a))await Backend.DiscoverAsync(a);
-            Notify();if(!refresh)return;
+            foreach(var a in Snapshot.Accounts.Where(x=>x.UsesCodexDesktop&&!Busy.Contains(x.Id)))await Backend.DiscoverAsync(a);
+            Notify();if(!refresh||StoppingAll)return;
             var sweep=DateTimeOffset.UtcNow-lastSweep>TimeSpan.FromMinutes(5);
             foreach(var account in Snapshot.Accounts.ToArray()){
+                if(StoppingAll)return;
                 if(Busy.Contains(account.Id)||!account.Agent.HasQuota())continue;
                 var active=account.UsesCodexDesktop?Backend.IsActive(account)||Platform.Owned(account)!=null:account.BrowserConnection!=null;
                 var missing=account.UsesCodexDesktop&&active&&account.Connection?.Quota==null&&(!Checks.TryGetValue(account.Id,out var checkedAt)||DateTimeOffset.UtcNow-checkedAt>TimeSpan.FromSeconds(30));
@@ -123,5 +129,20 @@ internal sealed class AppEngine {
             if(sweep)lastSweep=DateTimeOffset.UtcNow;
         }catch(Exception error){LifecycleError=Message(error);Notify();}finally{observing=false;}
     }
-    public void Shutdown(){lifetime.Cancel();}
+    public async Task ForceStopAllAsync(){
+        if(ReadOnly||StoppingAll)return;StoppingAll=true;Backend.Suspended=true;Notify();
+        var pending=operations.Values.ToArray();foreach(var op in pending)op.Cancellation.Cancel();
+        try{
+            try{await Task.WhenAll(pending.Select(op=>op.Completion.Task)).WaitAsync(TimeSpan.FromSeconds(25));}catch(TimeoutException){}
+            var failed=false;
+            foreach(var account in Snapshot.Accounts.Where(a=>!a.Agent.IsShared()).ToArray()){
+                Errors.Remove(account.Id);
+                try{using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(8));await Backend.StopAsync(account,timeout.Token);}catch(Exception error){Errors[account.Id]=Message(error);failed=true;}
+                try{await Platform.ForceStopAsync(account);}catch(Exception error){Errors[account.Id]=Message(error);failed=true;}
+            }
+            if(failed)Error?.Invoke(L["Some account processes could not be stopped. Check Session diagnostics and try again."]);
+        }finally{StoppingAll=false;Backend.Suspended=false;try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}Notify();}
+    }
+    public async Task ShutdownAsync(){lifetime.Cancel();await Backend.ShutdownAsync();}
+    public void Shutdown(){_=ShutdownAsync();}
 }

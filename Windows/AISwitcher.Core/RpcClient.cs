@@ -29,6 +29,8 @@ public static class ChildEnvironment {
 public sealed class StdioTransport : IRpcTransport {
     readonly Process process;
     readonly SemaphoreSlim writeLock=new(1,1);
+    bool disposed;
+    public bool IsRunning { get { try{return !disposed&&!process.HasExited;}catch(InvalidOperationException){return false;} } }
     public StdioTransport(ProcessStartInfo info) {
         info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
         info.StandardOutputEncoding=Encoding.UTF8;info.StandardErrorEncoding=Encoding.UTF8;
@@ -46,10 +48,12 @@ public sealed class StdioTransport : IRpcTransport {
         return line;
     }
     public async ValueTask DisposeAsync() {
-        process.StandardInput.Close();
-        try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3)); }
-        catch(TimeoutException) { if(!process.HasExited)process.Kill(entireProcessTree:true); }
-        process.Dispose();writeLock.Dispose();
+        if(disposed)return;disposed=true;
+        try{
+            try{process.StandardInput.Close();}catch(IOException){}
+            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3)); }
+            catch(TimeoutException) { if(!process.HasExited)process.Kill(entireProcessTree:true);await process.WaitForExitAsync(); }
+        }finally{process.Dispose();writeLock.Dispose();}
     }
 }
 public sealed class LocalSocketTransport : IRpcTransport {
@@ -83,7 +87,8 @@ public sealed class RpcClient : IAsyncDisposable {
     readonly ConcurrentDictionary<string,TaskCompletionSource<bool>> logins=new();
     readonly ConcurrentDictionary<string,bool> earlyLogins=new();
     readonly SemaphoreSlim sendLock=new(1,1);
-    Task? pump;int nextId;
+    Task? pump;int nextId;int disposed;
+    public bool IsConnected=>disposed==0&&pump!=null&&!pump.IsCompleted&&!lifetime.IsCancellationRequested;
     public RpcClient(IRpcTransport transport,TimeSpan? timeout=null){this.transport=transport;this.timeout=timeout??TimeSpan.FromSeconds(20);}
     public async Task StartAsync(CancellationToken ct=default) {
         pump=PumpAsync();
@@ -126,5 +131,5 @@ public sealed class RpcClient : IAsyncDisposable {
     public Task CancelLoginAsync(string id,CancellationToken ct=default)=>RequestAsync("account/login/cancel",new{loginId=id},ct);
     public Task LogoutAsync(CancellationToken ct=default)=>RequestAsync("account/logout",null,ct);
     public static Uri ValidateLoginUrl(string value){if(!Uri.TryCreate(value,UriKind.Absolute,out var uri)||uri.Scheme!="https"||!string.IsNullOrEmpty(uri.UserInfo)||(!uri.IsDefaultPort&&uri.Port!=443)||uri.Host.ToLowerInvariant() is not ("auth.openai.com" or "chatgpt.com"))throw new AppError("Codex returned an invalid sign-in URL. The connection was stopped.");return uri;}
-    public async ValueTask DisposeAsync(){lifetime.Cancel();await transport.DisposeAsync();if(pump!=null)await pump;sendLock.Dispose();lifetime.Dispose();}
+    public async ValueTask DisposeAsync(){if(Interlocked.Exchange(ref disposed,1)!=0)return;lifetime.Cancel();await transport.DisposeAsync();if(pump!=null)await pump;sendLock.Dispose();lifetime.Dispose();}
 }

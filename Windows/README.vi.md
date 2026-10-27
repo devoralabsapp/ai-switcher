@@ -28,7 +28,7 @@ Windows 11 là môi trường kiểm tra chính. Bản preview chưa ký số; f
 - Menu khay hệ thống; thông báo quota thấp/hồi không âm thanh, có tùy chọn bật/tắt và ngưỡng cảnh báo.
 - Chẩn đoán phiên, lựa chọn đường dẫn ứng dụng, chia sẻ workspace cục bộ theo từng hồ sơ.
 
-Đóng cửa sổ AI Switcher sẽ ẩn về khay hệ thống. Chọn **Thoát AI Switcher** trong menu khay để thoát; các cửa sổ agent và phiên nền vẫn giữ nguyên.
+Đóng cửa sổ AI Switcher sẽ ẩn về khay hệ thống. Chọn **Thoát AI Switcher** trong menu khay để thoát; các cửa sổ agent vẫn giữ nguyên, còn kết nối quota do AI Switcher quản lý sẽ đóng.
 
 ## Tài khoản và workspace
 
@@ -50,6 +50,14 @@ Trong chẩn đoán sẽ có cả đường dẫn ứng dụng Store và runtime
 
 Preview 5 sửa lỗi đọc lại runtime khi tên file khác chữ hoa/thường. Sau khi khởi động lại AI Switcher, tên file vẫn được đối chiếu theo cách của Windows. Cache và hồ sơ hiện có được dùng lại, không cần tạo lại tài khoản. Kiểm tra Windows tự động mở lại cả hai app qua đường dẫn Store đã đăng ký, rồi chạy một tiến trình AI Switcher mới để đọc lại hồ sơ và cài đặt đã lưu.
 
+## Trạng thái phiên, thanh cuộn và dừng cưỡng bức
+
+Preview 6 ghi **Chạy nền** khi cửa sổ đã đóng nhưng agent vẫn ở khay hệ thống. Khi tiến trình và backend thực sự thoát, nút đóng phiên tắt và nút Connect bật lại. File socket cũ không còn bị xem là phiên đang chạy. Kết nối quota mới dùng tiến trình Codex RPC riêng do AI Switcher quản lý, không gọi lệnh khởi động daemon đang gây lỗi.
+
+Nút **Dừng cưỡng bức…** nằm ở thanh trái, menu khay và Chẩn đoán phiên. Thao tác hủy tác vụ tài khoản đang chờ, đóng kết nối quota và dừng các tiến trình đã xác minh thuộc hồ sơ cùng các tiến trình con được theo dõi. Thời điểm tạo tiến trình được kiểm tra lại để tránh nhầm PID. Bản nháp chưa lưu có thể mất; hồ sơ và đăng nhập được giữ nguyên. App mở riêng, một AI Switcher dùng thư mục dữ liệu khác và Antigravity dùng chung không bị đóng. Tiến trình không xác định được quyền sở hữu sẽ được giữ lại và báo lỗi nếu chưa dừng hết.
+
+Thanh cuộn dọc/ngang dùng màu theme, tay kéo bo góc, đổi màu khi rê chuột hoặc kéo; vẫn hỗ trợ bàn phím và cuộn từng dòng/trang.
+
 ## Claude Store và đóng phiên Desktop
 
 Preview 4 thêm runtime riêng cho Claude Store tại `Runtimes\claude\<version-key>`. Cache ChatGPT và các hồ sơ hiện có được giữ nguyên. Mỗi tài khoản Claude Desktop tiếp tục dùng thư mục user-data và cấu hình Code riêng.
@@ -58,7 +66,7 @@ Preview 4 thêm runtime riêng cho Claude Store tại `Runtimes\claude\<version-
 
 ## Phạm vi kiểm tra
 
-Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện bảy theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. File EXE phát hành còn được thử kết nối RPC với Codex native Windows trong hồ sơ mới chưa đăng nhập. Vòng đời daemon nền chưa xác minh được trên runner: Codex từ chối quyền quản trị/giới hạn tiến trình của runner, còn Task Scheduler không chạy tác vụ người dùng thường (267011). Cần thử kết nối/khởi động lại/dừng daemon trên máy Windows thường trước khi xác nhận phần này tương đương macOS. Bản macOS tiếp tục có bộ kiểm tra riêng.
+Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện bảy theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. File EXE phát hành còn được thử kết nối RPC với Codex native Windows trong hồ sơ mới chưa đăng nhập. Kết nối nền mới dùng Codex RPC qua stdio do AI Switcher quản lý, không phụ thuộc daemon hoặc Task Scheduler. Kiểm tra có thêm kết nối/dừng/kết nối lại, bỏ qua socket cũ và hủy tác vụ khi dừng cưỡng bức. Bản macOS tiếp tục có bộ kiểm tra riêng.
 
 Tích hợp Desktop vẫn là preview: đăng nhập ChatGPT/Claude thực tế, OAuth/deep link, cập nhật Store, quota của tài khoản thật, Claude Code/Cowork và hành vi giao diện Work cần kiểm tra thêm trên máy Windows có các app đó. Không dùng tài khoản thật hoặc gửi yêu cầu model trong kiểm tra tự động.
 

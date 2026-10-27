@@ -42,7 +42,7 @@ internal sealed partial class MainWindow:Window {
         if(workspaceFilter=="recent")result=result.Where(x=>x.LastOpenedAt!=null).OrderByDescending(x=>x.LastOpenedAt);
         if(!string.IsNullOrWhiteSpace(search))result=result.Where(x=>(x.Name+" "+x.EmailHint+" "+x.Agent.Name()).Contains(search,StringComparison.CurrentCultureIgnoreCase));return result;}
     void Update(){if(!Dispatcher.CheckAccess()){Dispatcher.Invoke(Update);return;}
-        var next=System.Text.Json.JsonSerializer.Serialize(engine.Snapshot,Json.Options)+System.Text.Json.JsonSerializer.Serialize(engine.Preferences,Json.Options)+workspaceFilter+search+engine.LifecycleError+string.Join("|",engine.Snapshot.Accounts.Select(a=>engine.Status(a)))+string.Join("|",engine.Errors.Values);
+        var next=System.Text.Json.JsonSerializer.Serialize(engine.Snapshot,Json.Options)+System.Text.Json.JsonSerializer.Serialize(engine.Preferences,Json.Options)+engine.StoppingAll+workspaceFilter+search+engine.LifecycleError+string.Join("|",engine.Snapshot.Accounts.Select(a=>engine.Status(a)+":"+engine.Running(a)+":"+engine.CanConnect(a)))+string.Join("|",engine.Errors.Values);
         if(signature==next)return;signature=next;
         if(currentTheme!=engine.Preferences.Theme||currentLanguage!=engine.Preferences.Language){Render();return;}RenderSidebar();RenderWorkspace();}
     void Render(){ThemeManager.Apply(T);ThemeManager.ApplyChrome(this,T);currentTheme=engine.Preferences.Theme;currentLanguage=engine.Preferences.Language;
@@ -66,6 +66,7 @@ internal sealed partial class MainWindow:Window {
         foreach(var agent in Enum.GetValues<Agent>()){var button=Button(agent.Name()+"   "+engine.Snapshot.Accounts.Count(x=>x.Agent==agent),()=>{engine.SetAgent(agent);Render();});button.Margin=new Thickness(0,0,0,5);button.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(button,engine.Preferences.AgentFilter==agent,T.Retro?"#A8D8F0":T.Surface);AutomationProperties.SetAutomationId(button,"agent-filter-"+agent.ToString().ToLowerInvariant());sidebar.Children.Add(button);}
         if(engine.Snapshot.Accounts.FirstOrDefault(x=>x.Id==engine.Snapshot.LastOpenedId) is { } last){sidebar.Children.Add(Space(18));sidebar.Children.Add(Text(L["OPEN AGAIN"],10,true,T.Secondary));sidebar.Children.Add(Button(last.Name,()=>_=engine.DefaultAsync(last)));}
         sidebar.Children.Add(Space(28));foreach(var (title,action) in new(string,Action)[]{("Appearance & Language",Settings),("How it works",Guide),("Session diagnostics",Diagnostics),("Local data",RevealData)}){var button=Button(L[title],action);button.Margin=new Thickness(0,0,0,8);button.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(button,false,T.Surface);sidebar.Children.Add(button);}
+        var force=Button(L["Force stop all…"],ForceStopAll);force.IsEnabled=!engine.ReadOnly&&!engine.StoppingAll;force.ToolTip=L["Force stop all account processes"];AutomationProperties.SetAutomationId(force,"forceStopAll");sidebar.Children.Add(force);
         sidebar.Children.Add(Space(14));sidebar.Children.Add(Text(L["Choose an agent to view its accounts and supported features."],10,false,T.Secondary));
     }
     void RenderWorkspace(){workspace.Children.Clear();
@@ -75,7 +76,7 @@ internal sealed partial class MainWindow:Window {
         }
         if(engine.ReadOnly){var warning=Panel(Stack(Text(engine.LoadError??L["Could not read data. The existing file has been preserved."],13,true),Button(L["Open folder"],RevealData)),T);warning.Margin=new Thickness(0,0,0,18);workspace.Children.Add(warning);}
         var header=new DockPanel{LastChildFill=true,Margin=new Thickness(0,0,0,22)};
-        var add=Button("＋ "+L["Add account"],()=>EditAccount(),true,T);add.IsEnabled=!engine.ReadOnly;AutomationProperties.SetAutomationId(add,"addAccount");
+        var add=Button("＋ "+L["Add account"],()=>EditAccount(),true,T);add.IsEnabled=!engine.ReadOnly&&!engine.StoppingAll;AutomationProperties.SetAutomationId(add,"addAccount");
         var toggle=Switch(L["Quota-only mode"],engine.Preferences.QuotaOnlyMode,engine.SetQuotaOnly);AutomationProperties.SetAutomationId(toggle,"quotaOnlyMode");toggle.Margin=new Thickness(0,0,16,0);
         var actions=Row(toggle,add);actions.VerticalAlignment=VerticalAlignment.Center;DockPanel.SetDock(actions,Dock.Right);header.Children.Add(actions);
         header.Children.Add(Stack(Text(L[workspaceFilter=="favorites"?"Favorites":workspaceFilter=="recent"?"Recent":"All accounts"]+"   "+Visible().Count(),18,true),Space(4),Text(L["Profiles grouped by your AI agents."],11,false,T.Secondary)));workspace.Children.Add(header);
@@ -89,11 +90,11 @@ internal sealed partial class MainWindow:Window {
         var top=new DockPanel();var controls=Row(favorite,menu);DockPanel.SetDock(controls,Dock.Right);top.Children.Add(controls);top.Children.Add(Text(a.Name.Split(' ',StringSplitOptions.RemoveEmptyEntries).Select(x=>x[0]).Take(2).Aggregate("",(s,c)=>s+char.ToUpper(c)),19,true));
         var stack=Stack(top,Space(18),Text(a.Name,17,true),Space(4),Text(string.IsNullOrWhiteSpace(a.EmailHint)?a.Agent.Name():a.EmailHint,11,false,T.Secondary),Space(16),Text(a.Agent.Name()+" · "+(a.EffectiveMode==LaunchMode.Desktop?L["Desktop"]:a.Browser.ToString()),10,false,T.Secondary),Space(8),Text(engine.Status(a),10,true),Space(16));
         if(a.Agent.HasQuota())stack.Children.Add(QuotaSummary(a,false));else stack.Children.Add(Text(Support(a),11,false,T.Secondary));
-        stack.Children.Add(Space(18));var open=Button(engine.DefaultTitle(a)+"  ↗",()=>_=engine.DefaultAsync(a));open.IsEnabled=!engine.Busy.Contains(a.Id);open.HorizontalAlignment=HorizontalAlignment.Stretch;stack.Children.Add(open);
+        stack.Children.Add(Space(18));var open=Button(engine.DefaultTitle(a)+"  ↗",()=>_=engine.DefaultAsync(a));open.IsEnabled=!engine.StoppingAll&&!engine.Busy.Contains(a.Id);open.HorizontalAlignment=HorizontalAlignment.Stretch;stack.Children.Add(open);
         var panel=Panel(stack,T,ProfileColors.Pale(a.Color,T),true);panel.ContextMenu=AccountMenu(a);return panel;
     }
     string Support(Account a)=>a.Agent.IsShared()?L["Opens the installed app with its own shared sign-in. Separate account switching and quota are not available."]:a.Agent==Agent.Claude?L["Separate Claude Desktop or browser sign-in for each profile. Quota and background connections are not available."]:L["Separate browser sign-in for each profile. Quota and background connections are not available for this agent."];
-    ContextMenu AccountMenu(Account a){var menu=new ContextMenu();bool busy=engine.Busy.Contains(a.Id);
+    ContextMenu AccountMenu(Account a){var menu=new ContextMenu();bool busy=engine.StoppingAll||engine.Busy.Contains(a.Id);
         void Item(string text,Action action,bool enabled=true){var item=new MenuItem{Header=text,IsEnabled=enabled};item.Click+=(_,_)=>action();menu.Items.Add(item);}
         Item(L.Format("Open %@",a.Agent.Name()),()=>_=engine.OpenAsync(a),!busy);
         if(a.UsesCodexDesktop){Item(L["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));Item(L["Refresh quota"],()=>_=engine.RefreshAsync(a),!busy);Item(L["Restart session…"],()=>Restart(a),!busy);}
@@ -126,6 +127,7 @@ internal sealed partial class MainWindow:Window {
             var action=Button(a.Agent.HasQuota()?L["Details"]:L["Open agent"],()=>QuotaDetails(a));row.Children.Add(action);row.ContextMenu=AccountMenu(a);table.Children.Add(row);table.Children.Add(Text(engine.Status(a)+(a.Connection?.Quota?.IsStale(DateTimeOffset.UtcNow)==true?" · "+L["Stale data · refresh needed"]:""),10,false,T.Secondary));}
         workspace.Children.Add(new ScrollViewer{Content=table,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled});
     }
+    public void ForceStopAll(){if(Ask(L["Force stop all account processes?"],L["This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept."],L["Force stop all"]))_=engine.ForceStopAllAsync();}
     public void Close(Account a){if(Ask(L["Close this account session?"],L.Format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.",a.Name),L["Close session"]))_=engine.CloseAsync(a);}
     public void Restart(Account a){if(Ask(L["Restart this account session?"],L.Format("Windows for “%@” will close. Send or copy drafts first. Only this profile restarts in the background; your saved sign-in is kept.",a.Name),L["Restart in background"]))_=engine.RestartAsync(a);}
     void Delete(Account a){if(Ask(L["Delete this local profile?"],L.Format("The “%@” profile and its local Desktop, browser, and backend data will be deleted. Service accounts and conversation history are kept.",a.Name),L["Delete profile"]))_=engine.DeleteAsync(a);}

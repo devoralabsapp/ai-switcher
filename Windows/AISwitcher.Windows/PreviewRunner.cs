@@ -17,16 +17,16 @@ internal static class PreviewRunner {
     public static int Run(string[] args){var root=Program.Argument(args,"--data-dir");var output=Program.Argument(args,"--output");var smoke=args.Contains("--ui-smoke-test");var stdio=args.Contains("--stdio-smoke-test");var reopenStore=args.Contains("--store-runtime-reopen-smoke-test");var realStore=args.Contains("--store-runtime-smoke-test")||reopenStore;var backend=args.Contains("--backend-smoke-test")||stdio||realStore;
         if(root==null||output==null||!Path.GetFileName(root).StartsWith(smoke||backend?"ai-switcher-smoke.":"ai-switcher-preview.",StringComparison.Ordinal)||!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))return 2;
         if(realStore){try{Directory.CreateDirectory(output);RunStoreAsync(root,output,args,reopenStore).GetAwaiter().GetResult();return 0;}catch(Exception error){File.WriteAllText(Path.Combine(output,"store-runtime-error.txt"),error.ToString());return 1;}}
-        if(backend){try{Directory.CreateDirectory(output);BackendFixtureAsync(root,output,Program.Argument(args,"--codex-executable")??throw new InvalidOperationException("Codex executable is required"),stdio).GetAwaiter().GetResult();File.WriteAllText(Path.Combine(output,"backend-smoke-result.txt"),stdio?"PASS: standalone EXE starts real native Windows Codex RPC in its own signed-out home; initialization and signed-out identity verified; elevated daemon startup rejected; no Desktop or real account.\n":"PASS: native Windows Codex daemon starts, accepts a local handshake in its own signed-out home, restarts, stops and cleans up without a Desktop window or real account.\n");return 0;}catch(Exception error){File.AppendAllText(Path.Combine(output,"backend-smoke-error.txt"),error.ToString());return 1;}}
+        if(backend){try{Directory.CreateDirectory(output);BackendFixtureAsync(root,output,Program.Argument(args,"--codex-executable")??throw new InvalidOperationException("Codex executable is required"),stdio).GetAwaiter().GetResult();File.WriteAllText(Path.Combine(output,"backend-smoke-result.txt"),stdio?"PASS: standalone EXE starts real native Windows Codex RPC in its own signed-out home; initialization and signed-out identity verified; managed connect/stop/reconnect; stale sockets ignored; two private backends force-stopped while another manager survives; no Desktop or real account.\n":"PASS: managed native Windows Codex RPC connects in its own signed-out home, restarts, stops and cleans up without a Desktop window or real account.\n");return 0;}catch(Exception error){File.AppendAllText(Path.Combine(output,"backend-smoke-error.txt"),error.ToString());return 1;}}
         var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/AISwitcher;component/Styles.xaml",UriKind.Relative)});int code=0;
         app.Startup+=async(_,_)=>{try{Directory.CreateDirectory(output);foreach(var language in new[]{"en","vi"})foreach(var theme in Themes.All){var data=Path.Combine(root,language,theme.Id);var repository=new Repository(data);repository.Save(Demo());var engine=new AppEngine(data);engine.Preferences.Language=language;engine.Preferences.Theme=theme.Id;
             var window=new MainWindow(engine){Width=1200,Height=950};window.Show();await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);window.UpdateLayout();Save(window,Path.Combine(output,$"{theme.Id}-{language}.png"));
-            Require(Find(window,"addAccount") is Button,"Add account button missing");Require(Find(window,"quotaOnlyMode") is CheckBox,"Quota-only control missing");Require(Find(window,"agent-filter-claude") is Button,"Agent filter missing");
+            Require(Find(window,"addAccount") is Button,"Add account button missing");Require(Find(window,"quotaOnlyMode") is CheckBox,"Quota-only control missing");Require(Find(window,"agent-filter-claude") is Button,"Agent filter missing");Require(Find(window,"forceStopAll") is Button,"Force-stop control missing");CheckScrollbars(window);
             engine.SetQuotaOnly(true);Require(engine.Preferences.WorkspaceLayout==WorkspaceLayout.QuotaTable,"Quota-only must select table");engine.SetQuotaOnly(false);Require(engine.Preferences.WorkspaceLayout==WorkspaceLayout.Cards,"Disabling quota-only must restore cards");
             if(theme.Id=="terminalBlack"){Require(theme.Canvas=="#000000","Terminal Black canvas mismatch");engine.SetAgent(Agent.Claude);await CaptureDialog(window,()=>window.EditAccount(),Path.Combine(output,$"claude-editor-{language}.png"));await CaptureDialog(window,window.Settings,Path.Combine(output,$"settings-{language}.png"));}
             window.Exiting=true;window.Close();engine.Shutdown();
         }
-        if(smoke){ReadOnlyPreferences(root);await ProcessRoutingAsync(Path.Combine(root,"processes"));await WorkspaceFixtureAsync(root);}
+        if(smoke){await ScrollbarFixtureAsync();ReadOnlyPreferences(root);await ProcessRoutingAsync(Path.Combine(root,"processes"));await WorkspaceFixtureAsync(root);}
         File.WriteAllText(Path.Combine(output,"ui-smoke-result.txt"),"PASS: 7 themes × 2 languages; account/filter/quota controls; cards/table transition; Claude editor and settings rendering; exact native Windows fixture process routing; private workspace junctions, custom database, metadata projection, SQLite path canonicalization and safe deletion.\n");
         }catch(Exception error){code=1;File.AppendAllText(Path.Combine(output,backend?"backend-smoke-error.txt":"ui-smoke-error.txt"),error.ToString());}finally{app.Shutdown(code);}};
         app.Run();return code;
@@ -121,17 +121,56 @@ internal static class PreviewRunner {
             var candidates=new[]{Environment.ProcessPath!,protectedCli}.Concat(CodexLocator.UserCandidates(local,Path.Combine(root,"fake-roaming")));
             var resolved=await CodexLocator.ResolveAsync(candidates);Require(resolved!=null&&NativePlatform.SamePath(resolved,relocated),"Store/GUI candidates hid the runnable relocated CLI");
             engine.Preferences.Executables["codex"]=relocated;
-            if(NativePlatform.IsElevated()){try{await engine.Backend.StartAsync(account);throw new InvalidOperationException("Elevated daemon startup was accepted");}catch(AppError error)when(error.Key=="Run AI Switcher without administrator privileges to connect background sessions."){}}
             await using var client=await engine.Backend.StdioClientAsync(account);
             try{await client.ReadIdentityAsync();throw new InvalidOperationException("Fresh native Codex returned an existing identity");}catch(AppError error)when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
+            await ManagedBackendFixtureAsync(engine,account,relocated,output);
             return;
-        }finally{repo.Remove(account,repo.Load());}}
+        }finally{await engine.Backend.StopAsync(account);repo.Remove(account,repo.Load());}}
         try{
             await engine.Backend.StartAsync(account);Require(engine.Backend.IsActive(account),"Native daemon was not active after connect");
             try{await engine.Backend.ReadAsync(account);throw new InvalidOperationException("A fresh profile unexpectedly returned a signed-in identity");}catch(AppError error)when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
             var marker=Path.Combine(repo.QuotaHome(account),"smoke-persistence.txt");File.WriteAllText(marker,"fixture");await engine.Backend.StopAsync(account);await engine.Backend.StartAsync(account);Require(File.ReadAllText(marker)=="fixture","Backend restart did not preserve its own home");
             await engine.Platform.RefreshProcessesAsync();Require(engine.Platform.Owned(account)==null,"Headless connection unexpectedly opened a Desktop window");await engine.Backend.StopAsync(account);
         }finally{try{await engine.Backend.StopAsync(account);}finally{repo.Remove(account,repo.Load());}}
+    }
+    static async Task ScrollbarFixtureAsync(){
+        var scroll=new ScrollViewer{VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,Content=new Border{Width=1400,Height=1400}};
+        var window=new Window{Width=320,Height=240,Content=scroll};window.Show();
+        try{
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);window.UpdateLayout();CheckScrollbars(window);
+            var bars=Descendants(window).OfType<System.Windows.Controls.Primitives.ScrollBar>().ToArray();
+            var vertical=bars.First(b=>b.Orientation==Orientation.Vertical);var horizontal=bars.First(b=>b.Orientation==Orientation.Horizontal);
+            System.Windows.Controls.Primitives.ScrollBar.PageDownCommand.Execute(null,vertical);System.Windows.Controls.Primitives.ScrollBar.PageRightCommand.Execute(null,horizontal);
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);window.UpdateLayout();
+            Require(scroll.VerticalOffset>0&&scroll.HorizontalOffset>0,"Themed scrollbar paging broke scrolling");
+            var offset=scroll.VerticalOffset;scroll.LineDown();window.UpdateLayout();Require(scroll.VerticalOffset>offset,"Themed scrollbar broke line scrolling");
+        }finally{window.Close();}
+    }
+    static void CheckScrollbars(DependencyObject root){
+        foreach(var scroll in Descendants(root).OfType<System.Windows.Controls.Primitives.ScrollBar>()){
+            scroll.ApplyTemplate();Require(scroll.Template.FindName("PART_Track",scroll) is System.Windows.Controls.Primitives.Track,"Themed scrollbar track is missing");
+            Require(scroll.Template.FindName("Handle",scroll) is System.Windows.Controls.Primitives.Thumb,"Native scrollbar was not replaced by the themed thumb");
+        }
+    }
+    static IEnumerable<DependencyObject> Descendants(DependencyObject root){for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var child=VisualTreeHelper.GetChild(root,i);yield return child;foreach(var nested in Descendants(child))yield return nested;}}
+    static async Task ManagedBackendFixtureAsync(AppEngine engine,Account a,string executable,string output){
+        var repo=engine.Repository;var b=new Account{Name="Second managed backend"};engine.SaveAccount(b);repo.PrepareQuota(a);repo.PrepareProfile(a);
+        var socket=engine.Backend.SocketPath(a);Directory.CreateDirectory(Path.GetDirectoryName(socket)!);File.WriteAllText(socket,"stale fixture, not a live daemon");
+        Require(!engine.Running(a)&&engine.CanConnect(a)&&engine.Status(a)==engine.L["Disconnected"],"A stale socket blocked Connect or enabled Close");
+        var other=new AppEngine(Path.Combine(repo.Root,"other-manager"));var outsider=new Account{Name="Separate manager"};other.SaveAccount(outsider);other.Preferences.Executables["codex"]=executable;
+        var marker=Path.Combine(repo.QuotaHome(a),"keep-account-fixture.txt");File.WriteAllText(marker,"keep");
+        try{
+            await engine.ConnectAsync(a,false);Require(engine.Backend.IsActive(a)&&!engine.CanConnect(a),"Connect did not retain its own headless RPC process");
+            Require(!engine.Errors.TryGetValue(a.Id,out var error)||error==engine.L["The Codex session is signed out or expired. Reconnect the account."],"Connect returned a daemon command failure");
+            await engine.Backend.StartAsync(b);await other.Backend.StartAsync(outsider);
+            await engine.ForceStopAllAsync();Require(!engine.Running(a)&&!engine.Running(b)&&engine.CanConnect(a),"Force stop left owned backends running");
+            Require(File.ReadAllText(marker)=="keep","Force stop changed account data");Require(other.Backend.IsActive(outsider),"Force stop affected another manager's backend");
+            var pending=engine.ConnectAsync(a,false);await engine.ForceStopAllAsync();await pending;
+            Require(!engine.Running(a)&&engine.CanConnect(a),"Force stop racing with Connect left a backend running");
+            await engine.Backend.StartAsync(a);Require(engine.Backend.IsActive(a),"Reconnect after force stop failed");await engine.Backend.StopAsync(a);
+            await engine.Platform.RefreshProcessesAsync();Require(engine.Platform.Owned(a)==null,"Connecting quota opened a Desktop window");
+            File.WriteAllText(Path.Combine(output,"managed-backend-result.txt"),"PASS: stale socket does not block Connect; the actual Connect action retains a native signed-out RPC session without Desktop/daemon startup; two owned backends stop; another manager's backend survives; data persists and reconnect works.\n");
+        }finally{await engine.Backend.StopAsync(a);await engine.Backend.StopAsync(b);await other.Backend.StopAsync(outsider);repo.Remove(b,repo.Load());other.Repository.Remove(outsider,other.Repository.Load());}
     }
     static async Task WorkspaceFixtureAsync(string root){
         var scope=Path.Combine(root,"workspace-fixture");var source=Path.Combine(scope,"source");var database=Path.Combine(scope,"database");var artifacts=Path.Combine(scope,"original-artifacts");Directory.CreateDirectory(source);Directory.CreateDirectory(database);Directory.CreateDirectory(artifacts);
@@ -161,15 +200,33 @@ internal static class PreviewRunner {
     [System.Runtime.InteropServices.DllImport("winsqlite3.dll",EntryPoint="sqlite3_column_text",CallingConvention=System.Runtime.InteropServices.CallingConvention.Cdecl)]static extern IntPtr SqlColumn(IntPtr statement,int column);
 
     static async Task ProcessRoutingAsync(string data){
-        // The fixture root itself must retain the explicitly disposable prefix.
-        var root=Path.Combine(Path.GetDirectoryName(data)!,"ai-switcher-smoke.process-"+Guid.NewGuid().ToString("N")+" space");var repository=new Repository(root,Path.Combine(root,"backend"));
-        var a=new Account{Name="A",Agent=Agent.Claude};var b=new Account{Name="B",Agent=Agent.Claude};repository.Save(new(){Accounts=[a,b]});var engine=new AppEngine(root);engine.Preferences.Executables["claude"]=Environment.ProcessPath!;
+        var root=Path.Combine(Path.GetDirectoryName(data)!,"ai-switcher-smoke.process-"+Guid.NewGuid().ToString("N")+" space");var repository=new Repository(root);
+        var a=new Account{Name="A",Agent=Agent.Chatgpt};var b=new Account{Name="B",Agent=Agent.Claude};repository.Save(new(){Accounts=[a,b]});var engine=new AppEngine(root);
+        engine.Preferences.Executables["claude"]=Environment.ProcessPath!;engine.Preferences.Executables["chatgpt"]=Environment.ProcessPath!;
         var children=new List<Process>();
         try{
-            foreach(var account in new[]{a,b}){repository.PrepareProfile(account);var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};foreach(var arg in new[]{"--process-fixture","--data-dir",root,"--user-data-dir="+repository.DataPath(account)})info.ArgumentList.Add(arg);if(account.Id==a.Id)info.ArgumentList.Add("--hide-on-close-fixture");children.Add(Process.Start(info)!);}
-            for(var i=0;i<40;i++){await Task.Delay(250);await engine.Platform.RefreshProcessesAsync();if(engine.Platform.Owned(a)?.HasWindow==true&&engine.Platform.Owned(b)?.HasWindow==true)break;}
+            foreach(var account in new[]{a,b}){
+                repository.PrepareProfile(account);var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};
+                foreach(var arg in new[]{"--process-fixture","--data-dir",root,"--user-data-dir="+repository.DataPath(account)})info.ArgumentList.Add(arg);
+                if(account.Id==a.Id){info.ArgumentList.Add("--hide-on-close-fixture");info.ArgumentList.Add("--spawn-child-fixture");}children.Add(Process.Start(info)!);
+            }
+            var separate=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};foreach(var arg in new[]{"--process-fixture","--data-dir",root,"--user-data-dir="+Path.Combine(root,"opened-separately")})separate.ArgumentList.Add(arg);children.Add(Process.Start(separate)!);
+            for(var i=0;i<60;i++){await Task.Delay(250);await engine.Platform.RefreshProcessesAsync();if(engine.Platform.Owned(a)?.HasWindow==true&&engine.Platform.Owned(b)?.HasWindow==true&&engine.Platform.Processes.Any(p=>p.ParentId==children[0].Id))break;}
             Require(engine.Platform.Owned(a)?.Id==children[0].Id,"A was not routed to its exact PID");Require(engine.Platform.Owned(b)?.Id==children[1].Id,"B was not routed to its exact PID");
-            Require(!await engine.SetExecutableAsync("claude",null),"A running profile allowed its executable routing to change");Require(engine.Preferences.Executables["claude"]==Environment.ProcessPath,"Rejected routing change mutated preferences");Require(!engine.CanConnect(a),"Claude must not expose a Codex connection");await engine.Platform.CloseAsync(a);Require(children[0].HasExited&&!children[1].HasExited,"Closing A affected B");await engine.Platform.CloseAsync(b);Require(children[1].HasExited,"B refused to close");
-        }finally{foreach(var child in children){if(!child.HasExited)child.Kill(true);child.Dispose();}Repository.DeleteTree(root);}
+            Require(!await engine.SetExecutableAsync("claude",null),"A running profile allowed executable routing to change");Require(engine.Preferences.Executables["claude"]==Environment.ProcessPath,"Rejected routing change mutated preferences");
+            var saved=Path.Combine(repository.DataPath(a),"preserved-fixture.txt");File.WriteAllText(saved,"keep");
+            Require(children[0].CloseMainWindow(),"Could not manually close the hide-to-tray fixture");
+            for(var i=0;i<40;i++){await Task.Delay(100);await engine.Platform.RefreshProcessesAsync();if(engine.Platform.Owned(a)?.HasWindow==false)break;}
+            Require(engine.Running(a)&&engine.Status(a)==engine.L["Running in background"]&&!engine.CanConnect(a),"A hidden Desktop was mislabeled disconnected or enabled Connect");
+            Require(children[1].CloseMainWindow(),"Could not manually close B");await children[1].WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));await engine.Platform.RefreshProcessesAsync();
+            Require(!engine.Running(b)&&engine.Status(b)==engine.L["Disconnected"],"A manually exited Desktop stayed running");
+            var nested=Process.GetProcessById(int.Parse(File.ReadAllText(Path.Combine(root,"fixture-child.pid"))));children.Add(nested);
+            await engine.ForceStopAllAsync();
+            Require(children[0].HasExited&&nested.HasExited,"Force stop left the hidden root or its verified child running");Require(!children[2].HasExited,"Force stop affected an app opened separately");Require(File.ReadAllText(saved)=="keep","Force stop changed profile data");
+            Require(!engine.Running(a)&&engine.CanConnect(a)&&engine.Status(a)==engine.L["Disconnected"],"Force stop did not restore disconnected/connectable state");
+        }finally{
+            await engine.Platform.ForceStopAsync(a);await engine.Platform.ForceStopAsync(b);
+            foreach(var child in children){if(!child.HasExited){child.Kill(true);await child.WaitForExitAsync();}child.Dispose();}Repository.DeleteTree(root);
+        }
     }
 }

@@ -23,7 +23,7 @@ Do not run this app as Administrator and do not copy authentication directories 
 - ChatGPT/Codex quota, independent limit groups, real reset times, freshness/error labels, numeric sorting and identity verification. No model turns or reset credits are used.
 - Headless ChatGPT backend connect/close/restart, explicit Desktop launch, and disabled Connect while a profile is already running.
 - System-tray account menus, silent low/recovered quota notifications, persistent alert deduplication, and notification clicks opening account details. Alerts are opt-in and obey Windows notification settings.
-- Session diagnostics, executable selection and private storage checks. Closing the manager hides it; Quit from the tray exits the manager and leaves external Desktop windows/daemons running.
+- Session diagnostics, executable selection and private storage checks. Closing the manager hides it. Quit from the tray closes its managed quota RPC connections while leaving external Desktop windows/legacy daemons running.
 - Optional shared local ChatGPT transcript storage and allowlisted project/sidebar metadata. Select the original local `.codex` workspace in Settings, then opt in on a stopped profile. Top-level `sqlite_home` is honored; Settings also offers an explicit database-folder override and an optional original Work artifact folder. Nonempty private history is preserved and blocks conversion. The source workspace is never deleted with a profile.
 
 ### Account setup
@@ -44,6 +44,14 @@ Codex CLI discovery validates console binaries and `codex-cli --version`, reject
 
 Preview 5 fixes reuse of existing runtime metadata when installed filenames differ in letter case. Windows filename matching now remains case-insensitive after restarting AI Switcher. Existing runtimes and account profiles are reused without recreating accounts. Automated Windows checks reopen both official Desktop apps through their registered Store paths and launch a fresh AI Switcher process with the saved profile and preferences.
 
+## Session status, scrollbars and emergency stop
+
+Preview 6 reports a Desktop process whose window has closed into its tray as **Running in background**. Once the process and live backend exit, **Close account session** is disabled and **Connect account session** becomes available. Menus refresh when action availability changes, even if a quota error label stays the same.
+
+**Force stop all…** is available in the left navigation, tray and diagnostics. It cancels pending account actions, closes managed quota RPC connections and force-stops verified account processes and descendants tracked while their parent was alive. PID creation times are checked again before termination. It keeps account files and sign-ins. Applications opened separately, other manager roots and the shared Antigravity launcher are excluded; processes that cannot be safely attributed are not terminated. Unsaved work in stopped sessions can be lost. Failed stops are reported rather than treated as success.
+
+Scrollbars use theme colors, a rounded thumb and accent hover/drag states in both orientations. Keyboard, paging and line scrolling are preserved.
+
 ## Claude Store and closing Desktop sessions
 
 Preview 4 adds a separate `Runtimes\claude\<version-key>` cache for the registered official Claude package (`Claude_pzs8sxrjxfjjc`). ChatGPT's existing cache and profiles are retained. Each Claude Desktop account has its own user-data and Code config directories; browser-mode Claude is unchanged.
@@ -60,7 +68,7 @@ Metadata and preferences: `%LOCALAPPDATA%\AISwitcher` by default. `--data-dir` s
 - `Codex\<UUID>` — browser-mode Codex sign-in.
 - `%USERPROFILE%\.aisw\win-<hash>` — short, root-specific ChatGPT backend home.
 
-The backend CLI creates its private local control-socket directory itself. The manager does not pre-create it or weaken its ACL. Shared transcripts and explicitly selected artifacts use targeted junctions on opted-in profiles only; authentication and cookies are never linked. Original private artifact caches are backed up and restored when sharing is disabled. SQLite rollout paths are canonicalized inside a transaction through Windows’ SQLite library before closing/deleting a shared profile; live databases/WAL files are never copied. Paths that exceed the Windows Unix-socket limit are rejected with an actionable error.
+New background connections use a native stdio RPC process owned by AI Switcher, with one private Codex home per account. They do not require a local daemon, Task Scheduler or Unix socket. An existing legacy daemon is adopted only after a successful live handshake; leftover socket files never count as a running session. Shared transcripts and explicitly selected artifacts use targeted junctions on opted-in profiles only; authentication and cookies are never linked. Original private artifact caches are backed up and restored when sharing is disabled. SQLite rollout paths are canonicalized inside a transaction through Windows’ SQLite library before closing/deleting a shared profile; live databases/WAL files are never copied. Legacy daemon discovery still respects Windows Unix-socket limits.
 
 Storage is private to the current Windows user, not an encrypted vault. Never upload account data. Deletion stages only owned profile directories; failed metadata saves roll them back. Last cached quota remains visibly stale after reset, six minutes, or an error; reset timers never fabricate refill or recovery alerts.
 
@@ -76,6 +84,6 @@ dotnet run --project AISwitcher.Tests/AISwitcher.Tests.csproj -c Release
 
 The output is `Windows/artifacts/AI-Switcher-Windows-<runtime>.zip` and `.sha256`. The app is self-contained; it includes the .NET runtime. Rebuild previews to receive runtime security updates.
 
-The Windows workflow checks shared resources, runs portable core/RPC tests, publishes both architectures, then launches the x64 WPF app to verify all themes/languages, key controls, cards/table transitions, dialogs, native process routing, and targeted close using disposable process fixtures. The released standalone EXE also verifies initialize/account-read against official native Windows Codex in a fresh signed-out home. Persistent daemon lifecycle remains unverified on the hosted runner: Codex rejects its elevated/restrictive process job, and Task Scheduler does not start the ordinary-user task (267011). The optional workflow-dispatch `daemon_probe` retains this failing environment check explicitly; run it on a suitable Windows host before claiming daemon lifecycle parity. PNG previews and test results are uploaded with the build. It never signs into vendor accounts or reads their existing credentials.
+The Windows workflow checks shared resources, runs portable core/RPC tests, publishes both architectures, then launches the x64 WPF app to verify all themes/languages, key controls, cards/table transitions, dialogs, native process routing, and targeted close using disposable process fixtures. The released standalone EXE also verifies initialize/account-read against official native Windows Codex in a fresh signed-out home. Managed background connect/stop/reconnect and cancellation are exercised with real native Codex RPC. The old daemon-launch restriction on hosted runners no longer blocks new connections. PNG previews and test results are uploaded with the build. It never signs into vendor accounts or reads their existing credentials.
 
 The core suite also runs on macOS/Linux with .NET 10. The WPF app can be cross-compiled with `EnableWindowsTargeting`, but only Windows can execute/render it. Use `python3 scripts/sync-windows-assets.py` from the repository root after editing Swift palettes or localization; Windows-specific translations are in `Windows/Strings.vi.json`.

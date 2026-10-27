@@ -15,10 +15,11 @@ using AISwitcher.Core;
 
 namespace AISwitcher.Windows;
 
-internal sealed record OwnedProcess(int Id,string Executable,string[] Arguments,bool HasWindow,long Created);
+internal sealed record OwnedProcess(int Id,string Executable,string[] Arguments,bool HasWindow,long Created,int ParentId=0);
 internal sealed class NativePlatform {
     readonly Repository repository;readonly Preferences preferences;
     List<OwnedProcess> processes=[];
+    readonly Dictionary<Guid,Dictionary<(int,long),OwnedProcess>> tracked=[];
     readonly Dictionary<string,string?> discovered=[];
     public IReadOnlyList<OwnedProcess> Processes=>processes;
     public HashSet<Guid> PreparingRuntime { get; }=[];
@@ -38,20 +39,62 @@ internal sealed class NativePlatform {
     public async Task RefreshProcessesAsync(){
         processes=await Task.Run(()=>{
             List<OwnedProcess> result=[];
-            using var searcher=new ManagementObjectSearcher("SELECT ProcessId, ExecutablePath, CommandLine, CreationDate FROM Win32_Process WHERE Name='Claude.exe' OR Name='ChatGPT.exe' OR Name='Codex.exe' OR Name='chrome.exe' OR Name='msedge.exe' OR Name='brave.exe' OR Name='Antigravity.exe' OR Name='AISwitcher.exe'");
+            using var searcher=new ManagementObjectSearcher("SELECT ProcessId, ParentProcessId, ExecutablePath, CommandLine, CreationDate FROM Win32_Process");
             foreach(ManagementObject value in searcher.Get())using(value){
                 if(value["CommandLine"] is not string args)continue;
                 var pid=Convert.ToInt32(value["ProcessId"]);
-                try{using var process=Process.GetProcessById(pid);var exe=value["ExecutablePath"] as string??process.MainModule?.FileName;if(exe!=null){var created=process.StartTime.ToUniversalTime().ToFileTimeUtc();if(value["CreationDate"] is not string timestamp||ManagementDateTimeConverter.ToDateTime(timestamp).ToUniversalTime().ToFileTimeUtc()/10!=created/10)continue;result.Add(new(pid,exe,SplitArguments(args),process.MainWindowHandle!=IntPtr.Zero,created));}}catch(ArgumentException){}catch(System.ComponentModel.Win32Exception){}
+                try{using var process=Process.GetProcessById(pid);var exe=value["ExecutablePath"] as string??process.MainModule?.FileName;if(exe!=null){var created=process.StartTime.ToUniversalTime().ToFileTimeUtc();if(value["CreationDate"] is not string timestamp||ManagementDateTimeConverter.ToDateTime(timestamp).ToUniversalTime().ToFileTimeUtc()/10!=created/10)continue;result.Add(new(pid,exe,SplitArguments(args),process.MainWindowHandle!=IntPtr.Zero,created,Convert.ToInt32(value["ParentProcessId"])));}}catch(ArgumentException){}catch(InvalidOperationException){}catch(System.ComponentModel.Win32Exception){}
             }
             return result;
         });
     }
     public OwnedProcess? Owned(Account account){var path=repository.DataPath(account);
-        return processes.FirstOrDefault(p=>p.Arguments.Contains("--user-data-dir="+path,StringComparer.OrdinalIgnoreCase)&&!p.Arguments.Any(x=>x.StartsWith("--type=",StringComparison.OrdinalIgnoreCase))&&IsAgentExecutable(account,p.Executable));}
-    bool IsAgentExecutable(Account account,string executable){var expected=ExecutableKey(account);var configured=preferences.Executables.GetValueOrDefault(expected);
-        if(!string.IsNullOrWhiteSpace(configured))return SamePath(executable,configured)||account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)&&StoreRuntime.IsManagedExecutable(repository.Root,executable,account.Agent);
-        return discovered.TryGetValue(expected,out var found)&&found!=null&&(SamePath(executable,found)||account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)&&StoreRuntime.IsManagedExecutable(repository.Root,executable,account.Agent));}
+        var owned=processes.FirstOrDefault(p=>p.Arguments.Contains("--user-data-dir="+path,StringComparer.OrdinalIgnoreCase)&&!p.Arguments.Any(x=>x.StartsWith("--type=",StringComparison.OrdinalIgnoreCase))&&IsAgentExecutable(account,p.Executable));
+        if(owned!=null){if(!tracked.TryGetValue(account.Id,out var family))tracked[account.Id]=family=[];family[(owned.Id,owned.Created)]=owned;}
+        TrackChildren(account.Id);return owned;
+    }
+    void TrackChildren(Guid id){
+        if(!tracked.TryGetValue(id,out var family))return;
+        bool added;
+        do{added=false;foreach(var child in processes){
+            if(child.Id==Environment.ProcessId||family.ContainsKey((child.Id,child.Created)))continue;
+            // Parent PID plus creation time must still identify a live, previously attributed process.
+            if(processes.Any(parent=>parent.Id==child.ParentId&&parent.Created<=child.Created&&family.ContainsKey((parent.Id,parent.Created)))){family[(child.Id,child.Created)]=child;added=true;}
+        }}while(added);
+    }
+    public async Task ForceStopAsync(Account account){
+        if(account.Agent.IsShared())return;
+        await FindExecutableAsync(ExecutableKey(account));
+        for(var pass=0;pass<3;pass++){
+            await RefreshProcessesAsync();Owned(account);
+            if(!tracked.TryGetValue(account.Id,out var family))return;
+            if(!Directory.Exists(repository.ProfilePath(account)))throw new AppError("Profile storage could not be verified.");
+            repository.ValidateOwned(repository.ProfilePath(account),account.Id);
+            foreach(var target in family.Values.OrderByDescending(p=>p.Created).ToArray()){
+                if(target.Id==Environment.ProcessId)continue;
+                var current=processes.FirstOrDefault(p=>p.Id==target.Id&&p.Created==target.Created&&SamePath(p.Executable,target.Executable));
+                if(current==null)continue;
+                try{using var process=Process.GetProcessById(target.Id);
+                    if(process.HasExited||process.StartTime.ToUniversalTime().ToFileTimeUtc()!=target.Created)continue;
+                    // Kill individual verified processes, never an unverified PID tree or every process with the same name.
+                    process.Kill();await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                }catch(ArgumentException){}catch(System.ComponentModel.Win32Exception)when(!StillSameProcess(target)){}
+            }
+        }
+        await RefreshProcessesAsync();
+        if(tracked.TryGetValue(account.Id,out var remaining)&&processes.Any(p=>remaining.ContainsKey((p.Id,p.Created))))throw new AppError("Some account processes could not be stopped. Check Session diagnostics and try again.");
+        tracked.Remove(account.Id);
+    }
+    static bool StillSameProcess(OwnedProcess target){
+        try{using var process=Process.GetProcessById(target.Id);return !process.HasExited&&process.StartTime.ToUniversalTime().ToFileTimeUtc()==target.Created;}
+        catch(ArgumentException){return false;}catch(System.ComponentModel.Win32Exception){return true;}
+    }
+    bool IsAgentExecutable(Account account,string executable){
+        if(account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)&&StoreRuntime.IsManagedExecutable(repository.Root,executable,account.Agent))return true;
+        var expected=ExecutableKey(account);var configured=preferences.Executables.GetValueOrDefault(expected);
+        if(!string.IsNullOrWhiteSpace(configured))return SamePath(executable,configured);
+        return discovered.TryGetValue(expected,out var found)&&found!=null&&SamePath(executable,found);
+    }
     public static bool SamePath(string a,string b)=>string.Equals(Path.GetFullPath(a),Path.GetFullPath(b),StringComparison.OrdinalIgnoreCase);
     public static string ExecutableKey(Account account)=>account.EffectiveMode==LaunchMode.Browser?account.Browser.ToString().ToLowerInvariant():account.Agent.Name().ToLowerInvariant();
     public async Task<string?> FindExecutableAsync(string key){
@@ -104,8 +147,9 @@ internal sealed class NativePlatform {
         var bytes=File.ReadAllBytes(archive);var terms=agent==Agent.Chatgpt?new[]{"CODEX_ELECTRON_USER_DATA_PATH","CODEX_APP_SERVER_USE_LOCAL_DAEMON"}:new[]{"user-data-dir","requestSingleInstanceLock"};
         if(terms.Any(term=>bytes.AsSpan().IndexOf(Encoding.ASCII.GetBytes(term))<0))throw new AppError("The installed Desktop app does not expose the required profile isolation mechanisms.");
     }
-    public async Task OpenAsync(Account account,Uri? url=null,bool useLocalDaemon=true){
+    public async Task OpenAsync(Account account,Uri? url=null,bool useLocalDaemon=true,CancellationToken ct=default){
         var exe=await FindExecutableAsync(ExecutableKey(account))??throw new AppError("The required app or browser was not found. Choose its executable in Settings.");
+        ct.ThrowIfCancellationRequested();
         if(account.Agent.IsShared()) { Process.Start(new ProcessStartInfo(exe){UseShellExecute=true});return; }
         await RefreshProcessesAsync();var owned=Owned(account);
         if(url==null&&owned?.HasWindow==true){Activate(owned.Id);return;}
@@ -114,7 +158,7 @@ internal sealed class NativePlatform {
             var installed=await PackageLocationsAsync(account.Agent==Agent.Claude?"Claude":"OpenAI.Codex");
             if(!installed.Any(location=>SamePath(Path.GetDirectoryName(exe)!,Path.Combine(location,"app"))||SamePath(Path.GetDirectoryName(exe)!,location)))throw new AppError(account.Agent==Agent.Claude?"The Claude Store installation could not be verified. Reset its path in Settings and try again.":"The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.");
             PreparingRuntime.Add(account.Id);PreparationChanged?.Invoke();
-            try{var source=exe;exe=await Task.Run(()=>StoreRuntime.PrepareAsync(repository.Root,source));}catch(Exception error)when(error is IOException or UnauthorizedAccessException){throw new AppError(account.Agent==Agent.Claude?"Windows could not prepare the Claude Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.":"Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.");}finally{PreparingRuntime.Remove(account.Id);PreparationChanged?.Invoke();}
+            try{var source=exe;exe=await Task.Run(()=>StoreRuntime.PrepareAsync(repository.Root,source,ct));}catch(Exception error)when(error is IOException or UnauthorizedAccessException){throw new AppError(account.Agent==Agent.Claude?"Windows could not prepare the Claude Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.":"Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.");}finally{PreparingRuntime.Remove(account.Id);PreparationChanged?.Invoke();}
         }
         repository.PrepareProfile(account);ProtectDirectory(repository.ProfilePath(account));
         var env=ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
@@ -123,10 +167,11 @@ internal sealed class NativePlatform {
         if(account.Agent==Agent.Claude&&account.EffectiveMode==LaunchMode.Desktop)env["CLAUDE_CONFIG_DIR"]=repository.CodeConfig(account);
         var arguments=new List<string>{"--user-data-dir="+repository.DataPath(account)};
         if(account.EffectiveMode==LaunchMode.Browser)arguments.AddRange(["--no-first-run","--no-default-browser-check","--disable-background-mode","--app="+(url??account.Agent.Url()).AbsoluteUri]);
+        ct.ThrowIfCancellationRequested();
         using var child=Process.Start(ChildEnvironment.StartInfo(exe,arguments,env,repository.ProfilePath(account)))??throw new AppError("Could not open the AI agent window. Try again or check the browser.");
         FixtureStarted?.Invoke(child.Id);
         for(var i=0;i<120;i++){
-            await Task.Delay(250);await RefreshProcessesAsync();var running=Owned(account);if(running?.HasWindow==true){Activate(running.Id);return;}
+            await Task.Delay(250,ct);await RefreshProcessesAsync();var running=Owned(account);if(running?.HasWindow==true){Activate(running.Id);return;}
             if(child.HasExited&&child.ExitCode!=0)break;
         }
         throw new AppError("Could not open the AI agent window. Try again or check the browser.");

@@ -429,5 +429,11 @@
   "Windows could not prepare the Claude Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.": "Windows could not prepare the Claude Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.",
   "Windows could not request this profile to quit. Quit it from its own tray menu, then retry.": "Windows could not request this profile to quit. Quit it from its own tray menu, then retry.",
   "This profile did not agree to quit. Finish any confirmation in its window or use its own tray Quit action, then retry.": "This profile did not agree to quit. Finish any confirmation in its window or use its own tray Quit action, then retry.",
-  "The session process changed. Check its status before closing again.": "The session process changed. Check its status before closing again."
+  "The session process changed. Check its status before closing again.": "The session process changed. Check its status before closing again.",
+  "Force stop all…": "Force stop all…",
+  "Force stop all account processes": "Force stop all account processes",
+  "Force stop all account processes?": "Force stop all account processes?",
+  "Force stop all": "Force stop all",
+  "This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept.": "This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept.",
+  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Some account processes could not be stopped. Check Session diagnostics and try again."
 }

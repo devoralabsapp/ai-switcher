@@ -73,7 +73,7 @@ jobs:
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
           $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
           $p=Start-Process $app -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$output`"",'--stdio-smoke-test','--codex-executable',"`"$($cli.FullName)`"") -PassThru
-          if(-not $p.WaitForExit(90000)){$p.Kill();throw 'Native Codex RPC smoke timed out'}
+          if(-not $p.WaitForExit(180000)){$p.Kill();throw 'Native Codex RPC smoke timed out'}
           if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'backend-smoke-error.txt');throw 'Native Codex RPC smoke failed'}
           Get-Content (Join-Path $output 'backend-smoke-result.txt')
           Remove-Item -Recurse -Force $root

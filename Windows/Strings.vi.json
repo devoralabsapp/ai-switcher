@@ -58,5 +58,11 @@
   "Windows could not prepare the Claude Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.": "Windows không chuẩn bị được runtime Claude Store. Ứng dụng đã cài và dữ liệu tài khoản được giữ nguyên. Hãy kiểm tra chẩn đoán phiên rồi thử lại.",
   "Windows could not request this profile to quit. Quit it from its own tray menu, then retry.": "Windows chưa gửi được yêu cầu thoát hồ sơ này. Hãy chọn Thoát trong menu khay của chính ứng dụng rồi thử lại.",
   "This profile did not agree to quit. Finish any confirmation in its window or use its own tray Quit action, then retry.": "Hồ sơ chưa chấp nhận thoát. Hãy xử lý hộp xác nhận trong cửa sổ hoặc chọn Thoát trong menu khay của ứng dụng rồi thử lại.",
-  "The session process changed. Check its status before closing again.": "Tiến trình của phiên đã thay đổi. Hãy kiểm tra trạng thái trước khi đóng lại."
+  "The session process changed. Check its status before closing again.": "Tiến trình của phiên đã thay đổi. Hãy kiểm tra trạng thái trước khi đóng lại.",
+  "Force stop all…": "Dừng cưỡng bức…",
+  "Force stop all account processes": "Dừng cưỡng bức mọi tiến trình tài khoản",
+  "Force stop all account processes?": "Dừng cưỡng bức mọi tiến trình tài khoản?",
+  "Force stop all": "Dừng tất cả",
+  "This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept.": "Thao tác này dừng ngay cửa sổ Desktop, trình duyệt và kết nối nền thuộc các tài khoản AI Switcher. Bản nháp chưa lưu có thể bị mất. Ứng dụng mở riêng và dữ liệu đăng nhập được giữ nguyên.",
+  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Một số tiến trình tài khoản chưa dừng được. Kiểm tra Chẩn đoán phiên rồi thử lại."
 }
