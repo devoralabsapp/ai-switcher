@@ -14,6 +14,7 @@ internal sealed class BackendService {
     readonly Repository repository;readonly NativePlatform platform;readonly Preferences preferences;
     sealed record Session(StdioTransport Transport,RpcClient Client){public bool Ready { get; set; }}
     readonly Dictionary<Guid,Session> sessions=[];
+    readonly Dictionary<Guid,List<Session>> requests=[];
     public bool Suspended { get; set; }
     readonly HashSet<Guid> active=[]; // Verified legacy daemons only; a socket file alone is never a connection.
     readonly Dictionary<Guid,DateTimeOffset> probes=[];
@@ -56,7 +57,10 @@ internal sealed class BackendService {
         return ChildEnvironment.StartInfo(cli,new[]{"app-server","--listen","stdio://","-c","cli_auth_credentials_store=\"file\"","-c","analytics.enabled=false"},EnvironmentFor(account),repository.QuotaHome(account));
     }
     public async Task<RpcClient> StdioClientAsync(Account account,CancellationToken ct=default){
-        var client=new RpcClient(new StdioTransport(await StdioInfoAsync(account)));
+        var info=await StdioInfoAsync(account);ct.ThrowIfCancellationRequested();
+        var transport=new StdioTransport(info);var client=new RpcClient(transport);
+        if(!requests.TryGetValue(account.Id,out var owned))requests[account.Id]=owned=[];
+        owned.RemoveAll(request=>!request.Transport.IsRunning);owned.Add(new(transport,client));
         try{await client.StartAsync(ct);return client;}catch{await client.DisposeAsync();throw;}
     }
     public async Task<Connection> ReadAsync(Account account,CancellationToken ct=default){
@@ -72,14 +76,24 @@ internal sealed class BackendService {
         await using var fallback=await StdioClientAsync(account,ct);return await fallback.ReadQuotaAsync(ct);
     }
     public async Task StopAsync(Account account,CancellationToken ct=default){
+        if(requests.Remove(account.Id,out var owned))foreach(var request in owned)await request.Client.DisposeAsync();
         if(!account.UsesCodexDesktop)return;
         if(sessions.Remove(account.Id,out var session))await session.Client.DisposeAsync();
         repository.ValidateOwned(repository.QuotaHome(account),account.Id);
         if(!Directory.Exists(repository.QuotaHome(account)))return;
+        // The Desktop window can start its own daemon after our last observation. Verify it live before stopping it.
+        if(HasSocket(account)&&!active.Contains(account.Id)){
+            try{await using var client=await SocketClientAsync(account);active.Add(account.Id);}catch{active.Remove(account.Id);}
+        }
+        ct.ThrowIfCancellationRequested();
         if(UsesLocalDaemon(account)){await CommandAsync(account,"stop",ct);active.Remove(account.Id);}
         SharedWorkspace.Archive(account,repository);
     }
-    public async Task ShutdownAsync(){Suspended=true;foreach(var id in new List<Guid>(sessions.Keys))if(sessions.Remove(id,out var session))await session.Client.DisposeAsync();}
+    public async Task ShutdownAsync(){
+        Suspended=true;
+        foreach(var id in new List<Guid>(requests.Keys))if(requests.Remove(id,out var owned))foreach(var request in owned)await request.Client.DisposeAsync();
+        foreach(var id in new List<Guid>(sessions.Keys))if(sessions.Remove(id,out var session))await session.Client.DisposeAsync();
+    }
     Dictionary<string,string> EnvironmentFor(Account account){var env=ChildEnvironment.Create(NativePlatform.EnvironmentValues(),repository.QuotaHome(account));if(account.UsesCodexDesktop&&account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.BoundDatabase(account,repository,preferences);return env;}
     async Task CommandAsync(Account account,string action,CancellationToken ct=default){
         var cli=await platform.FindExecutableAsync("codex")??throw new AppError("A runnable Codex CLI was not found. Open ChatGPT from the Windows Start menu once, then try again. You can also choose an installed Codex CLI in Settings.");

@@ -123,7 +123,7 @@ internal static class PreviewRunner {
             engine.Preferences.Executables["codex"]=relocated;
             await using var client=await engine.Backend.StdioClientAsync(account);
             try{await client.ReadIdentityAsync();throw new InvalidOperationException("Fresh native Codex returned an existing identity");}catch(AppError error)when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){}
-            await ManagedBackendFixtureAsync(engine,account,relocated,output);
+            await ManagedBackendFixtureAsync(engine,account,relocated,output);Require(!client.IsConnected,"Force stop left a temporary owned RPC process connected");
             return;
         }finally{await engine.Backend.StopAsync(account);repo.Remove(account,repo.Load());}}
         try{
