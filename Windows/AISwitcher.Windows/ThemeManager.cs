@@ -13,7 +13,7 @@ internal static class ThemeManager {
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]static extern int DwmSetWindowAttribute(IntPtr window,int attribute,ref int value,int size);
     public static void Apply(Theme theme){var r=Application.Current.Resources;
         foreach(var item in new[]{("Canvas",theme.Canvas),("Surface",theme.Surface),("Sidebar",theme.Sidebar),("Ink",theme.Ink),("Secondary",theme.Secondary),("Accent",theme.Accent),("OnAccent",theme.OnAccent),("Line",theme.Line)})r[item.Item1]=Brush(item.Item2);
-        r["UIFont"]=new FontFamily(theme.Mono?"Consolas":theme.Retro?"Segoe UI Variable Display":"Segoe UI");r["Outline"]=new Thickness(theme.Retro?2.5:1);r["ButtonRadius"]=new CornerRadius(theme.Retro?17:theme.Mono?3:7);
+        r["UIFont"]=new FontFamily(theme.Mono?"Consolas":theme.Retro?"Segoe UI Variable Display":"Segoe UI");r["ButtonRadius"]=new CornerRadius(theme.Id=="blackFriday"?3:theme.Seasonal?10:theme.Retro?17:theme.Mono?3:7);r["Outline"]=new Thickness(theme.Retro?2.5:1);
     }
     public static Border Panel(UIElement child,Theme theme,string? color=null,bool shadow=false){
         var border=new Border{Child=child,Background=Brush(color??theme.Surface),BorderBrush=Brush(theme.Line),BorderThickness=new Thickness(theme.Retro?2.5:1),CornerRadius=new CornerRadius(theme.Retro?16:theme.Mono?3:12),Padding=new Thickness(18)};

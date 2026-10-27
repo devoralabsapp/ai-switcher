@@ -1,6 +1,6 @@
 # AI Switcher cho Windows — bản preview
 
-Bản Windows dùng giao diện native .NET/WPF, có cùng bộ agent, bảy theme và không gian quản lý quota với bản macOS.
+Bản Windows dùng giao diện native .NET/WPF, có cùng bộ agent, 11 theme và không gian quản lý quota với bản macOS.
 
 ## Cài và mở
 
@@ -21,7 +21,7 @@ Windows 11 là môi trường kiểm tra chính. Bản preview chưa ký số; f
 - Hồ sơ ChatGPT Desktop và Claude Desktop với thư mục dữ liệu riêng cho từng tài khoản; mở lại đúng cửa sổ và đóng đúng phiên.
 - Chrome, Edge, Brave cho ChatGPT, Claude, Gemini, Perplexity, DeepSeek. Antigravity mở ứng dụng đã cài và dùng đăng nhập chung của ứng dụng.
 - Bộ lọc agent bên trái, tìm kiếm, yêu thích, gần đây và màu riêng cho hồ sơ.
-- Tiếng Việt/Anh và bảy theme: Light, Dark, Terminal, Code, Dracula, Playful Retro Neo-Brutalism, Terminal Black.
+- Tiếng Việt/Anh và 11 theme: Light, Dark, Terminal, Code, Dracula, Playful Retro Neo-Brutalism, Terminal Black, Halloween, Christmas, Tet Holiday, Black Friday.
 - Nút Quota-only cạnh Add account; tắt chế độ này tự về Account cards.
 - Kết nối ChatGPT ở nền để xem quota mà không mở cửa sổ Desktop; khóa Connect khi phiên đang chạy; đóng/khởi động lại phiên và tùy chọn kết nối khi AI Switcher mở.
 - Chi tiết quota theo từng nhóm giới hạn, thời gian reset, trạng thái dữ liệu cũ, sắp xếp và kiểm tra danh tính tài khoản.
@@ -66,8 +66,12 @@ Preview 4 thêm runtime riêng cho Claude Store tại `Runtimes\claude\<version-
 
 ## Phạm vi kiểm tra
 
-Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện bảy theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. File EXE phát hành còn được thử kết nối RPC với Codex native Windows trong hồ sơ mới chưa đăng nhập. Kết nối nền mới dùng Codex RPC qua stdio do AI Switcher quản lý, không phụ thuộc daemon hoặc Task Scheduler. Kiểm tra có thêm kết nối/dừng/kết nối lại, bỏ qua socket cũ và hủy tác vụ khi dừng cưỡng bức. Bản macOS tiếp tục có bộ kiểm tra riêng.
+Kiểm tra tự động chạy trên Windows x64 gồm core/RPC, giao diện 11 theme với hai ngôn ngữ, chuyển cards/quota, hộp thoại, định tuyến/đóng đúng tiến trình mẫu và chia sẻ workspace. File EXE phát hành còn được thử kết nối RPC với Codex native Windows trong hồ sơ mới chưa đăng nhập. Kết nối nền mới dùng Codex RPC qua stdio do AI Switcher quản lý, không phụ thuộc daemon hoặc Task Scheduler. Kiểm tra có thêm kết nối/dừng/kết nối lại, bỏ qua socket cũ và hủy tác vụ khi dừng cưỡng bức. Bản macOS tiếp tục có bộ kiểm tra riêng.
 
 Tích hợp Desktop vẫn là preview: đăng nhập ChatGPT/Claude thực tế, OAuth/deep link, cập nhật Store, quota của tài khoản thật, Claude Code/Cowork và hành vi giao diện Work cần kiểm tra thêm trên máy Windows có các app đó. Không dùng tài khoản thật hoặc gửi yêu cầu model trong kiểm tra tự động.
 
 Xem [hướng dẫn build và chi tiết kỹ thuật](README.md).
+
+### Theme theo dịp lễ
+
+Halloween, Christmas, Tết Nguyên Đán và Black Friday có bảng màu và hình vector riêng ở banner, bộ chọn theme, thanh bên và viền thẻ tài khoản. macOS và Windows dùng chung dữ liệu màu và hình minh họa. Chi tiết trang trí không chặn thao tác, không đổi dữ liệu tài khoản. Chọn trong Giao diện & Ngôn ngữ; lựa chọn được lưu cho lần mở sau.

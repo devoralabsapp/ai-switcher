@@ -9,6 +9,7 @@ public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 
 public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     case light, dark, terminal, code, dracula, playfulRetro, terminalBlack
+    case halloween, christmas, tetHoliday, blackFriday
     public var id: String { rawValue }
     public var isDark: Bool { self != .light && self != .playfulRetro }
     public var isTerminal: Bool { self == .terminal || self == .terminalBlack }
@@ -16,7 +17,7 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     /// Decoration tokens are zero for the original themes so their styling stays intact.
     public var outlineWidth: Double { isPlayfulRetro ? 2.5 : 0 }
     public var hardShadowOffset: Double { isPlayfulRetro ? 4 : 0 }
-    public var monospaced: Bool { isTerminal || self == .code }
+    public var monospaced: Bool { isTerminal || self == .code || self == .blackFriday }
     public var cornerRadius: Double { isTerminal ? 3 : self == .code ? 6 : 13 }
     public var name: String {
         switch self {
@@ -27,6 +28,10 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .code: return "Code"
         case .dracula: return "Dracula"
         case .playfulRetro: return "Playful Retro Neo-Brutalism"
+        case .halloween: return "Halloween"
+        case .christmas: return "Christmas"
+        case .tetHoliday: return L10n.text("Tet Holiday")
+        case .blackFriday: return "Black Friday"
         }
     }
     public var detail: String {
@@ -38,6 +43,10 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .code: return L10n.text("Inspired by VS Code")
         case .dracula: return L10n.text("Deep purple with pink accents")
         case .playfulRetro: return L10n.text("Cream, candy colors, and bold outlines")
+        case .halloween: return L10n.text("Pumpkin orange, midnight purple, and little ghosts")
+        case .christmas: return L10n.text("Evergreen, snowy lights, and wrapped gifts")
+        case .tetHoliday: return L10n.text("Crimson, golden blossoms, and lucky lanterns")
+        case .blackFriday: return L10n.text("Ink black, electric yellow, and ticket details")
         }
     }
     public var colors: ThemeColors {
@@ -49,6 +58,10 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         case .code: return .init(canvas: 0x1e1e1e, surface: 0x252526, sidebar: 0x181818, ink: 0xe0e0e0, secondary: 0xababab, accent: 0x75beff, onAccent: 0x09243d, line: 0x454545)
         case .dracula: return .init(canvas: 0x20212c, surface: 0x282a36, sidebar: 0x191a23, ink: 0xf8f8f2, secondary: 0xb3afd0, accent: 0xd2afff, onAccent: 0x2b1644, line: 0x4c4e65)
         case .playfulRetro: return .init(canvas: 0xfff7e8, surface: 0xfffdf7, sidebar: 0xf6eddb, ink: 0x171714, secondary: 0x171714, accent: 0x185e52, onAccent: 0xffffff, line: 0x171714)
+        case .halloween: return .init(canvas: 0x160e22, surface: 0x281936, sidebar: 0x1d122b, ink: 0xfff2df, secondary: 0xd2bedc, accent: 0xffb35b, onAccent: 0x29142e, line: 0x75508a)
+        case .christmas: return .init(canvas: 0x081f1c, surface: 0x12352e, sidebar: 0x0c2823, ink: 0xf8f4e9, secondary: 0xbbd8ce, accent: 0xf3d38a, onAccent: 0x203329, line: 0x477564)
+        case .tetHoliday: return .init(canvas: 0x360f18, surface: 0x571b26, sidebar: 0x43131e, ink: 0xfff1d6, secondary: 0xe8c4af, accent: 0xffd36e, onAccent: 0x511321, line: 0xa5684e)
+        case .blackFriday: return .init(canvas: 0x090909, surface: 0x181818, sidebar: 0x101010, ink: 0xf9f7ef, secondary: 0xc5c3b8, accent: 0xffe14d, onAccent: 0x171714, line: 0x6b6754)
         }
     }
 }

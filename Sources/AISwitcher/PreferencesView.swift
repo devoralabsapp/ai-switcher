@@ -97,7 +97,12 @@ struct PreferencesView: View {
                         }
                     }
                 }.padding(.trailing, 10)
-            }.frame(height: 80).background(colors.canvas).accessibilityHidden(true)
+            }.frame(height: 80).background(colors.canvas)
+                .overlay(alignment: .trailing) {
+                    if theme.seasonal != nil {
+                        SeasonalArtwork(theme: theme).frame(width: 138, height: 80).background(colors.canvas)
+                    }
+                }.accessibilityHidden(true)
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(theme.name).font(appearanceTheme.font(size: 12, weight: .semibold))

@@ -8,7 +8,7 @@ AI Switcher is a native SwiftUI and AppKit utility. Manage ChatGPT, Claude, Gemi
 
 **macOS 13+ · Windows preview (x64 / ARM64) · MIT license**
 
-The Windows companion uses native .NET/WPF with the same agents, seven themes and quota workspace. See the [Windows setup and compatibility notes](Windows/README.md) and [Windows build artifacts](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml). The guide below describes the macOS app.
+The Windows companion uses native .NET/WPF with the same agents, eleven themes and quota workspace. See the [Windows setup and compatibility notes](Windows/README.md) and [Windows build artifacts](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml). The guide below describes the macOS app.
 
 [![Windows build](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml/badge.svg)](https://github.com/devoralabsapp/ai-switcher/actions/workflows/windows.yml)
 [![macOS build](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml/badge.svg)](https://github.com/devoralabsapp/ai-switcher/actions/workflows/macos.yml)
@@ -98,7 +98,7 @@ Closing the manager keeps the menu bar available. Quitting AI Switcher leaves De
 
 ## Language and appearance
 
-Open **Appearance & Language** from the sidebar, the menu bar, or **⌘,**. Choose **English** or **Tiếng Việt** and one of seven themes: **Light**, **Dark**, **Terminal**, **Code** (inspired by VS Code), **Dracula**, **Playful Retro Neo-Brutalism**, or **Terminal Black**. Changes apply immediately and persist after relaunch. Existing users keep Vietnamese and Light until they choose otherwise.
+Open **Appearance & Language** from the sidebar, the menu bar, or **⌘,**. Choose **English** or **Tiếng Việt** and one of eleven themes: **Light**, **Dark**, **Terminal**, **Code** (inspired by VS Code), **Dracula**, **Playful Retro Neo-Brutalism**, **Terminal Black**, **Halloween**, **Christmas**, **Tet Holiday**, or **Black Friday**. Changes apply immediately and persist after relaunch. Existing users keep Vietnamese and Light until they choose otherwise.
 
 Terminal, Terminal Black, and Code use monospace typography and compact corners. Terminal Black adds a pure black canvas/sidebar, near-black cards, bright text, and a green accent; the original Terminal palette stays available. Playful Retro Neo-Brutalism adds warm cream surfaces, pastel yellow/pink/blue/mint cards, rounded system typography, 2.5-point ink outlines, and hard 4-point offset shadows. Its pill buttons and cards respond to presses and hovering, with animations respecting Reduce Motion. Themes cover the manager, account cards, dialogs, quota details, and native menu appearance. Language selection also updates menus, errors, quota labels, and date/number formatting. These preferences apply to AI Switcher.
 
@@ -238,3 +238,7 @@ Use a separate development profile root:
 Compatibility reports, accessibility improvements, and localization contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). The initial implementation was developed with OpenAI Codex assistance; contributors are responsible for checking changes and reporting actual validation.
 
 Released under the [MIT License](LICENSE). The icon is original geometric drawing code in this repository. Legacy browser isolation follows Chromium's [`--user-data-dir` mechanism](https://chromium.googlesource.com/chromium/src/+/main/docs/user_data_dir.md). AI Switcher is not affiliated with or endorsed by OpenAI or browser vendors.
+
+### Seasonal themes
+
+Halloween, Christmas, Tet Holiday and Black Friday each have a distinct palette, original vector artwork in the dashboard banner and theme picker, sidebar identity and matching account-card ribbons. The shared artwork and palettes render on macOS and Windows. Decorations are static, ignore pointer input and keep all existing account actions and data unchanged. Select a theme in Appearance & Language; selections persist after relaunch.

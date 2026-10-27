@@ -5,14 +5,14 @@ import AISwitcherCore
 /// Renders only app-owned, offscreen views with fictional data. No screen capture.
 @MainActor
 enum AppearancePreview {
-    static func render(root: URL, output: URL) throws {
+    static func render(root: URL, output: URL, galleryOnly: Bool = false) throws {
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let now = Int(Date().timeIntervalSince1970)
         let object: [String: Any] = ["accountId": "demo", "rateLimits": [
             "primary": ["usedPercent": 23, "windowDurationMins": 300, "resetsAt": now + 7_200],
             "secondary": ["usedPercent": 41, "windowDurationMins": 10_080, "resetsAt": now + 345_600]]]
         let limits = try JSONDecoder().decode(CodexRateLimits.self, from: JSONSerialization.data(withJSONObject: object))
-        for theme in AppTheme.allCases {
+        for theme in (galleryOnly ? [] : AppTheme.allCases) {
             let data = root.appendingPathComponent(theme.rawValue)
             let connection = CodexConnection(identity: CodexIdentity(email: "demo@example.test", planType: "plus"), quota: CodexQuotaSnapshot(limits: limits))
             let accounts = [Account(name: "Demo Personal", emailHint: "personal@example.test", color: .mint, isFavorite: true, launchMode: .desktop, desktopCodexConnection: connection),
@@ -75,7 +75,7 @@ enum AppearancePreview {
                                size: NSSize(width: 520, height: 760),
                                to: output.appendingPathComponent("session-settings-\(theme.rawValue)-\(L10n.language.rawValue).png"))
             }
-            if theme.isPlayfulRetro {
+            if theme.isPlayfulRetro || theme.seasonal != nil {
                 try renderView(Dashboard(model: model), size: NSSize(width: 900, height: 640),
                                to: output.appendingPathComponent("compact-\(theme.rawValue)-\(L10n.language.rawValue).png"))
                 try renderView(GuideView().appAppearance(model.preferences), size: NSSize(width: 530, height: 850),
@@ -88,6 +88,18 @@ enum AppearancePreview {
                                to: output.appendingPathComponent("empty-\(theme.rawValue)-\(L10n.language.rawValue).png"))
             }
         }
+        let seasonal: [AppTheme] = [.halloween, .christmas, .tetHoliday, .blackFriday]
+        let gallery = LazyVGrid(columns: [GridItem(.fixed(468)), GridItem(.fixed(468))], spacing: 16) {
+            ForEach(seasonal) { theme in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(theme.name).font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                    SeasonalHero(theme: theme).frame(width: 680, height: 235)
+                        .scaleEffect(0.68).frame(width: 468, height: 164)
+                }
+            }
+        }.padding(24).background(Color(hex: 0x101418))
+        try renderView(gallery, size: NSSize(width: 1000, height: 460),
+                       to: output.appendingPathComponent("seasonal-collection-\(L10n.language.rawValue).png"))
         print("Rendered appearance previews with fictional profiles: \(output.path)")
     }
 

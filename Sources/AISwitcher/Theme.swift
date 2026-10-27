@@ -65,6 +65,8 @@ private struct ThemeControls: ViewModifier {
         if theme.isPlayfulRetro {
             content.buttonStyle(RetroButtonStyle()).tint(ThemePalette(theme: theme).accent)
                 .font(theme.font(size: 13))
+        } else if theme.seasonal != nil {
+            content.tint(ThemePalette(theme: theme).accent).buttonStyle(SeasonalButtonStyle())
         } else { content }
     }
 }
@@ -259,5 +261,15 @@ struct AccountAvatar: View {
             .clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(size * 0.29)))
             .retroOutline(radius: appearanceTheme.radius(size * 0.29), shadow: size >= 40)
             .accessibilityHidden(true)
+    }
+}
+
+private struct SeasonalButtonStyle: ButtonStyle {
+    @Environment(\.appTheme) private var theme
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.padding(.horizontal, 12).padding(.vertical, 7)
+            .background(ThemePalette(theme: theme).accent.opacity(configuration.isPressed ? 0.22 : 0.09))
+            .clipShape(RoundedRectangle(cornerRadius: theme == .blackFriday ? 3 : 9))
+            .overlay(RoundedRectangle(cornerRadius: theme == .blackFriday ? 3 : 9).strokeBorder(ThemePalette(theme: theme).line))
     }
 }

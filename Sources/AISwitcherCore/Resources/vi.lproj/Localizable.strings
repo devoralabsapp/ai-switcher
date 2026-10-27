@@ -485,3 +485,14 @@
 "Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota is not available." = "Mỗi hồ sơ Claude Desktop có dữ liệu ứng dụng riêng. Đăng nhập một lần trong cửa sổ của hồ sơ; đăng nhập trình duyệt cũ vẫn ở trình duyệt. Chưa hỗ trợ quota.";
 
 "Separate Desktop profile" = "Hồ sơ Desktop riêng";
+
+// Seasonal appearance
+"Tet Holiday" = "Tết Nguyên Đán";
+"Pumpkin orange, midnight purple, and little ghosts" = "Cam bí ngô, tím đêm và những chú ma nhỏ";
+"Evergreen, snowy lights, and wrapped gifts" = "Xanh thông, ánh tuyết và những hộp quà";
+"Crimson, golden blossoms, and lucky lanterns" = "Đỏ thắm, hoa mai vàng và đèn lồng may mắn";
+"Ink black, electric yellow, and ticket details" = "Đen tuyền, vàng rực và họa tiết nhãn vé";
+"AFTER DARK" = "ĐÊM HỘI HALLOWEEN";
+"MERRY & BRIGHT" = "GIÁNG SINH AN LÀNH";
+"A LUCKY NEW START" = "CHÚC MỪNG NĂM MỚI";
+"BLACK FRIDAY EDITION" = "PHIÊN BẢN BLACK FRIDAY";

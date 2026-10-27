@@ -77,7 +77,11 @@ public sealed record Preferences {
         AlertThreshold = Math.Clamp(AlertThreshold, 1, 95);
     }
 }
-public sealed record Theme(string Id, string Name, bool Dark, bool Mono, bool Retro, string Canvas, string Surface, string Sidebar, string Ink, string Secondary, string Accent, string OnAccent, string Line);
+public sealed record Theme(string Id, string Name, bool Dark, bool Mono, bool Retro, string Canvas, string Surface, string Sidebar, string Ink, string Secondary, string Accent, string OnAccent, string Line){
+    public bool Seasonal=>Id is "halloween" or "christmas" or "tetHoliday" or "blackFriday";
+    public string SeasonalLabel=>Id switch{"halloween"=>"AFTER DARK","christmas"=>"MERRY & BRIGHT","tetHoliday"=>"A LUCKY NEW START","blackFriday"=>"BLACK FRIDAY EDITION",_=>""};
+    public string Companion=>Id switch{"halloween"=>"#C5A0EE","christmas"=>"#F2A7AD","tetHoliday"=>"#F49C87",_=>"#E1DDD1"};
+}
 public static class Themes {
     public static readonly IReadOnlyList<Theme> All = Assets.Read<List<Theme>>("themes.json");
     public static Theme Get(string id) => All.FirstOrDefault(x => x.Id == id) ?? All[0];

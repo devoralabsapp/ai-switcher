@@ -59,7 +59,7 @@ internal sealed partial class MainWindow:Window {
         RenderSidebar();RenderWorkspace();
     }
     void NavStyle(Button button,bool selected,string fill){button.Background=selected?Brush(fill):Brush("#00000000");button.BorderThickness=new Thickness(selected?(T.Retro?2.5:1):0);button.FontWeight=selected?FontWeights.SemiBold:FontWeights.Normal;}
-    void RenderSidebar(){sidebar.Children.Clear();sidebar.Children.Add(Text("⇅  AI Switcher",21,true));sidebar.Children.Add(Text(L["One click to your account"],11,false,T.Secondary));sidebar.Children.Add(Space(28));sidebar.Children.Add(Text(L["YOUR WORKSPACE"],10,true,T.Secondary));sidebar.Children.Add(Space(10));
+    void RenderSidebar(){sidebar.Children.Clear();sidebar.Children.Add(Text("⇅  AI Switcher",21,true));sidebar.Children.Add(Text(L["One click to your account"],11,false,T.Secondary));sidebar.Children.Add(Space(28));if(T.Seasonal){sidebar.Children.Add(Text(L[T.Name],11,true,T.Accent));sidebar.Children.Add(Space(16));}sidebar.Children.Add(Text(L["YOUR WORKSPACE"],10,true,T.Secondary));sidebar.Children.Add(Space(10));
         foreach(var (id,key) in new[]{("all","All accounts"),("favorites","Favorites"),("recent","Recent")}){var selected=workspaceFilter==id;var button=Button(L[key]+(id=="all"?"   "+engine.Snapshot.Accounts.Count:""),()=>{workspaceFilter=id;Update();});button.Margin=new Thickness(0,0,0,7);button.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(button,selected,T.Retro?"#B4EDC5":T.Surface);sidebar.Children.Add(button);}
         sidebar.Children.Add(Space(22));sidebar.Children.Add(Text(L["AI AGENTS"],10,true,T.Secondary));sidebar.Children.Add(Space(10));
         var all=Button(L["All agents"]+"   "+engine.Snapshot.Accounts.Count,()=>{engine.SetAgent(null);Render();});all.Margin=new Thickness(0,0,0,5);all.HorizontalContentAlignment=HorizontalAlignment.Left;NavStyle(all,engine.Preferences.AgentFilter==null,T.Retro?"#A8D8F0":T.Surface);sidebar.Children.Add(all);
@@ -71,8 +71,9 @@ internal sealed partial class MainWindow:Window {
     }
     void RenderWorkspace(){workspace.Children.Clear();
         if(engine.Preferences.WorkspaceLayout==WorkspaceLayout.Cards){
-            var hero=Stack(Text(L["FEWER CLICKS. KEEP YOUR FLOW."],10,true,T.Retro?T.Ink:T.Accent),Space(16),Text(L["Multiple accounts.\nOne click."],32,true),Space(12),Text(L["Sign in to each account once.\nSwitch freely, keep your conversations going."],12,false,T.Secondary));
-            var panel=Panel(hero,T,T.Retro?"#FFD84D":T.Canvas,T.Retro);panel.Padding=new Thickness(22);panel.Margin=new Thickness(0,0,4,28);workspace.Children.Add(panel);
+            if(T.Seasonal)workspace.Children.Add(SeasonalArtwork.Hero(T,L));
+            else {var hero=Stack(Text(L["FEWER CLICKS. KEEP YOUR FLOW."],10,true,T.Retro?T.Ink:T.Accent),Space(16),Text(L["Multiple accounts.\nOne click."],32,true),Space(12),Text(L["Sign in to each account once.\nSwitch freely, keep your conversations going."],12,false,T.Secondary));
+            var panel=Panel(hero,T,T.Retro?"#FFD84D":T.Canvas,T.Retro);panel.Padding=new Thickness(22);panel.Margin=new Thickness(0,0,4,28);workspace.Children.Add(panel);}
         }
         if(engine.ReadOnly){var warning=Panel(Stack(Text(engine.LoadError??L["Could not read data. The existing file has been preserved."],13,true),Button(L["Open folder"],RevealData)),T);warning.Margin=new Thickness(0,0,0,18);workspace.Children.Add(warning);}
         var header=new DockPanel{LastChildFill=true,Margin=new Thickness(0,0,0,22)};
@@ -89,6 +90,7 @@ internal sealed partial class MainWindow:Window {
         var favorite=Button(a.IsFavorite?"★":"☆",()=>engine.ToggleFavorite(a));favorite.Padding=new Thickness(5,3,5,3);var menu=Button("⋯",()=>{});menu.Padding=new Thickness(7,3,7,3);var context=AccountMenu(a);menu.ContextMenu=context;menu.Click+=(_,_)=>{context.PlacementTarget=menu;context.IsOpen=true;};
         var top=new DockPanel();var controls=Row(favorite,menu);DockPanel.SetDock(controls,Dock.Right);top.Children.Add(controls);top.Children.Add(Text(a.Name.Split(' ',StringSplitOptions.RemoveEmptyEntries).Select(x=>x[0]).Take(2).Aggregate("",(s,c)=>s+char.ToUpper(c)),19,true));
         var stack=Stack(top,Space(18),Text(a.Name,17,true),Space(4),Text(string.IsNullOrWhiteSpace(a.EmailHint)?a.Agent.Name():a.EmailHint,11,false,T.Secondary),Space(16),Text(a.Agent.Name()+" · "+(a.EffectiveMode==LaunchMode.Desktop?L["Desktop"]:a.Browser.ToString()),10,false,T.Secondary),Space(8),Text(engine.Status(a),10,true),Space(16));
+        if(T.Seasonal){stack.Children.Insert(0,SeasonalArtwork.Ribbon(T));stack.Children.Insert(1,Space(12));}
         if(a.Agent.HasQuota())stack.Children.Add(QuotaSummary(a,false));else stack.Children.Add(Text(Support(a),11,false,T.Secondary));
         stack.Children.Add(Space(18));var open=Button(engine.DefaultTitle(a)+"  ↗",()=>_=engine.DefaultAsync(a));open.IsEnabled=!engine.StoppingAll&&!engine.Busy.Contains(a.Id);open.HorizontalAlignment=HorizontalAlignment.Stretch;stack.Children.Add(open);
         var panel=Panel(stack,T,ProfileColors.Pale(a.Color,T),true);panel.ContextMenu=AccountMenu(a);return panel;

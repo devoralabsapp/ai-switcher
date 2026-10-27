@@ -10,14 +10,15 @@ for language in ['en','vi']:
     catalog={json.loads(k):json.loads(v) for k,v in entries}
     extra=json.loads((root/'Windows/Strings.vi.json').read_text())
     catalog.update(extra if language=='vi' else {k:k for k in extra})
-    if language=='en':catalog['Windows quick start']='Choose an agent, add a profile, and sign in directly in its own window. ChatGPT and Claude support Desktop profiles; web agents use separate browser profiles. Antigravity uses shared application sign-in. Quota-only connects ChatGPT in the background; disabling returns to cards. Connect is disabled while a profile is running. Closing the manager keeps the system tray available. Right-click the tray icon to show the manager or quit. Ctrl+N adds, Ctrl+K searches, Ctrl+1–9 opens a profile. Settings contains seven themes, language and executable paths. Quota is available only for ChatGPT/Codex.'
+    if language=='en':catalog['Windows quick start']='Choose an agent, add a profile, and sign in directly in its own window. ChatGPT and Claude support Desktop profiles; web agents use separate browser profiles. Antigravity uses shared application sign-in. Quota-only connects ChatGPT in the background; disabling returns to cards. Connect is disabled while a profile is running. Closing the manager keeps the system tray available. Right-click the tray icon to show the manager or quit. Ctrl+N adds, Ctrl+K searches, Ctrl+1–9 opens a profile. Settings contains appearance themes, language and executable paths. Quota is available only for ChatGPT/Codex.'
     (output/f'{language}.json').write_text(json.dumps(catalog,ensure_ascii=False,indent=2)+'\n')
 source=(root/'Sources/AISwitcherCore/AppPreferences.swift').read_text()
-names={'light':'Light','dark':'Dark','terminal':'Terminal','code':'Code','dracula':'Dracula','playfulRetro':'Playful Retro Neo-Brutalism','terminalBlack':'Terminal Black'}
+names={'light':'Light','dark':'Dark','terminal':'Terminal','code':'Code','dracula':'Dracula','playfulRetro':'Playful Retro Neo-Brutalism','terminalBlack':'Terminal Black','halloween':'Halloween','christmas':'Christmas','tetHoliday':'Tet Holiday','blackFriday':'Black Friday'}
 themes=[]
 for key,body in re.findall(r'case \.(\w+): return \.init\(([^\n]+)\)',source):
     colors={k:'#'+v.zfill(6).upper() for k,v in re.findall(r'(\w+): 0x([a-fA-F0-9]+)',body)}
-    if 'canvas'in colors:themes.append(dict(id=key,name=names[key],dark=key not in ['light','playfulRetro'],mono=key in ['terminal','terminalBlack','code'],retro=key=='playfulRetro',**colors))
+    if 'canvas'in colors:themes.append(dict(id=key,name=names[key],dark=key not in ['light','playfulRetro'],mono=key in ['terminal','terminalBlack','code','blackFriday'],retro=key=='playfulRetro',**colors))
+(output/'SeasonalScenes.json').write_text((root/'Sources/AISwitcherCore/Resources/SeasonalScenes.json').read_text())
 (output/'themes.json').write_text(json.dumps(themes,indent=2)+'\n')
 # Reuse the original repository icon as a PNG-backed ICO, without image editing.
 png=(root/'docs/assets/icon.png').read_bytes()

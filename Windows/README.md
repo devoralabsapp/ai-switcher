@@ -18,7 +18,7 @@ Do not run this app as Administrator and do not copy authentication directories 
 - Chrome, Edge and Brave profiles for ChatGPT, Claude, Gemini, Perplexity and DeepSeek.
 - Antigravity launcher with the application's existing shared sign-in; it has no per-account isolation, quota or close action.
 - Agent sidebar filters, search, favorites, recents and per-profile colors.
-- Seven palettes synchronized from macOS: Light, Dark, Terminal, Code, Dracula, Playful Retro Neo-Brutalism, Terminal Black. Matching English/Vietnamese catalogs are shared.
+- Eleven palettes synchronized from macOS: Light, Dark, Terminal, Code, Dracula, Playful Retro Neo-Brutalism, Terminal Black, Halloween, Christmas, Tet Holiday, Black Friday. Matching English/Vietnamese catalogs are shared.
 - Quota-only beside Add account; disabling always returns to cards. Layout choice remains in Settings. Default per-profile actions and opt-in startup connections are retained.
 - ChatGPT/Codex quota, independent limit groups, real reset times, freshness/error labels, numeric sorting and identity verification. No model turns or reset credits are used.
 - Headless ChatGPT backend connect/close/restart, explicit Desktop launch, and disabled Connect while a profile is already running.
@@ -87,3 +87,7 @@ The output is `Windows/artifacts/AI-Switcher-Windows-<runtime>.zip` and `.sha256
 The Windows workflow checks shared resources, runs portable core/RPC tests, publishes both architectures, then launches the x64 WPF app to verify all themes/languages, key controls, cards/table transitions, dialogs, native process routing, and targeted close using disposable process fixtures. The released standalone EXE also verifies initialize/account-read against official native Windows Codex in a fresh signed-out home. Managed background connect/stop/reconnect and cancellation are exercised with real native Codex RPC. The old daemon-launch restriction on hosted runners no longer blocks new connections. PNG previews and test results are uploaded with the build. It never signs into vendor accounts or reads their existing credentials.
 
 The core suite also runs on macOS/Linux with .NET 10. The WPF app can be cross-compiled with `EnableWindowsTargeting`, but only Windows can execute/render it. Use `python3 scripts/sync-windows-assets.py` from the repository root after editing Swift palettes or localization; Windows-specific translations are in `Windows/Strings.vi.json`.
+
+### Seasonal themes
+
+Halloween, Christmas, Tet Holiday and Black Friday each have a distinct palette, original vector artwork in the dashboard banner and theme picker, sidebar identity and matching account-card ribbons. The shared artwork and palettes render on macOS and Windows. Decorations are static, ignore pointer input and keep all existing account actions and data unchanged. Select a theme in Appearance & Language; selections persist after relaunch.

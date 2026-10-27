@@ -53,6 +53,27 @@ final class AppearanceTests: XCTestCase {
         XCTAssertEqual(AppTheme.playfulRetro.colors.secondary, AppTheme.playfulRetro.colors.ink)
     }
 
+    func testSeasonalThemesHaveDistinctSharedArtworkAndLocalizedLabels() throws {
+        let seasonal: [AppTheme] = [.halloween, .christmas, .tetHoliday, .blackFriday]
+        XCTAssertEqual(AppTheme.allCases.count, 11)
+        XCTAssertEqual(Set(seasonal.map { $0.colors.canvas }).count, 4)
+        for theme in seasonal {
+            let style = try XCTUnwrap(theme.seasonal)
+            XCTAssertEqual(style.id, theme.rawValue)
+            XCTAssertGreaterThan(style.marks.count, 20, theme.rawValue)
+            XCTAssertFalse(style.symbol.isEmpty)
+            for language in AppLanguage.allCases {
+                XCTAssertNotNil(try catalog(language)[style.label], style.label)
+            }
+            for mark in style.marks {
+                XCTAssertTrue(["ellipse", "rect", "path", "text"].contains(mark.kind))
+                if mark.kind == "path" { XCTAssertGreaterThanOrEqual(mark.points?.count ?? 0, 2) }
+            }
+        }
+        XCTAssertNil(AppTheme.light.seasonal)
+        XCTAssertNil(AppTheme.playfulRetro.seasonal)
+    }
+
     private func catalog(_ language: AppLanguage) throws -> [String: String] {
         let url = try XCTUnwrap(L10n.bundle(for: language).url(forResource: "Localizable", withExtension: "strings"))
         let data = try Data(contentsOf: url)

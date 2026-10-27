@@ -16,7 +16,9 @@ struct Dashboard: View {
                 Rectangle().fill(palette.line).frame(height: appearanceTheme.dividerWidth)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 27) {
-                        if model.preferences.workspaceLayout == .cards { hero }
+                        if model.preferences.workspaceLayout == .cards {
+                            if appearanceTheme.seasonal != nil { SeasonalHero(theme: appearanceTheme) } else { hero }
+                        }
                         if model.loadFailed { recoveryBanner }
                         accountSection
                         if model.accounts.isEmpty { setupSteps }
@@ -88,6 +90,12 @@ struct Dashboard: View {
             }
             .padding(.top, 26)
             .padding(.bottom, 24)
+
+            if let seasonal = appearanceTheme.seasonal {
+                Label(appearanceTheme.name, systemImage: seasonal.symbol)
+                    .font(appearanceTheme.font(size: 11, weight: .semibold)).foregroundColor(palette.accent)
+                    .padding(.horizontal, 10).padding(.bottom, 18)
+            }
 
             Text(L10n.text("YOUR WORKSPACE"))
                 .font(appearanceTheme.font(size: 9, weight: .semibold)).tracking(1.4)
@@ -455,6 +463,7 @@ private struct AccountCard: View {
         .overlay(RoundedRectangle(cornerRadius: appearanceTheme.radius(13)).stroke(hovering ? account.color.tint(for: appearanceTheme).opacity(0.4) : palette.line))
         .shadow(color: palette.ink.opacity(hovering ? 0.045 : 0), radius: 10, y: 4)
         .retroOutline(radius: appearanceTheme.radius(13))
+        .overlay(alignment: .top) { SeasonalRibbon(theme: appearanceTheme).frame(height: 3).padding(.horizontal, 18) }
         .offset(y: appearanceTheme.isPlayfulRetro && hovering ? -2 : 0)
         .animation(reduceMotion || !appearanceTheme.isPlayfulRetro ? nil : .easeOut(duration: 0.15), value: hovering)
         .onHover { hovering = $0 }

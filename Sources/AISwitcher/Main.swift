@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard arguments.contains("--data-dir"), root.lastPathComponent.hasPrefix("ai-switcher-preview.") else {
                     throw ProfileError.invalidSelection
                 }
-                try AppearancePreview.render(root: root, output: URL(fileURLWithPath: arguments[index + 1]))
+                try AppearancePreview.render(root: root, output: URL(fileURLWithPath: arguments[index + 1]), galleryOnly: arguments.contains("--seasonal-gallery"))
                 Darwin.exit(0)
             } catch { fputs("Preview render failed: \(error.localizedDescription)\n", stderr); Darwin.exit(1) }
         }
