@@ -241,4 +241,6 @@ Released under the [MIT License](LICENSE). The icon is original geometric drawin
 
 ### Seasonal themes
 
+![Halloween, Christmas, Tet Holiday and Black Friday themes](docs/assets/seasonal-themes.png)
+
 Halloween, Christmas, Tet Holiday and Black Friday each have a distinct palette, original vector artwork in the dashboard banner and theme picker, sidebar identity and matching account-card ribbons. The shared artwork and palettes render on macOS and Windows. Decorations are static, ignore pointer input and keep all existing account actions and data unchanged. Select a theme in Appearance & Language; selections persist after relaunch.
