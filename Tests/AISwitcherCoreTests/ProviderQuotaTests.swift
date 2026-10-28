@@ -110,6 +110,98 @@ final class ProviderQuotaTests: XCTestCase {
         do { _ = try await service.read(account, override: executable.path);XCTFail("Wrong account must be rejected") }
         catch { XCTAssertEqual(error as? ProviderQuotaError, .identityChanged) }
     }
+    private func temporaryCLI() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ai-switcher-cli-path-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+    private func fixtureExecutable(_ url: URL, version: String = "2.1.295 (Claude Code)") throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let script = "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '%s\\n' '" + version + "'; exit 0; fi\nexit 27\n"
+        try script.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+    }
+    private func fixtureBundle(_ root: URL, identifier: String) throws -> URL {
+        let exe = root.appendingPathComponent("Contents/MacOS/claude")
+        try fixtureExecutable(exe)
+        let plist = try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": identifier], format: .xml, options: 0)
+        try plist.write(to: root.appendingPathComponent("Contents/Info.plist"))
+        return exe
+    }
+    @MainActor
+    func testDirectoriesDesktopAppsAndTheirSymlinksCannotBeQuotaExecutables() throws {
+        let root = try temporaryCLI();defer { try? FileManager.default.removeItem(at: root) }
+        let app = root.appendingPathComponent("Claude.app")
+        let desktop = try fixtureBundle(app, identifier: "com.anthropic.claudefordesktop")
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: app.path))
+        for path in [root, app, desktop] { XCTAssertFalse(ProviderQuotaService.isCLIExecutable(path, agent: .claude)) }
+        let link = root.appendingPathComponent("claude-link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: desktop)
+        XCTAssertFalse(ProviderQuotaService.isCLIExecutable(link, agent: .claude))
+    }
+    @MainActor
+    func testNativeCLIAndItsSymlinksAreAcceptedWithoutAcceptingDesktop() throws {
+        let root = try temporaryCLI();defer { try? FileManager.default.removeItem(at: root) }
+        let cli = try fixtureBundle(root.appendingPathComponent("claude.app"), identifier: "com.anthropic.claude-code")
+        let link = root.appendingPathComponent("claude")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: cli)
+        XCTAssertTrue(ProviderQuotaService.isCLIExecutable(cli, agent: .claude))
+        XCTAssertTrue(ProviderQuotaService.isCLIExecutable(link, agent: .claude))
+        XCTAssertFalse(ProviderQuotaService.isCLIExecutable(cli, agent: .antigravity))
+        let text = root.appendingPathComponent("not-executable");try Data().write(to: text)
+        XCTAssertFalse(ProviderQuotaService.isCLIExecutable(text, agent: .claude))
+    }
+    @MainActor
+    func testInvalidSavedAppSelectionRecoversToDiscoveredCLIForBothProviders() throws {
+        let root = try temporaryCLI();defer { try? FileManager.default.removeItem(at: root) }
+        for agent in [AIAgent.claude, .antigravity] {
+            let app = root.appendingPathComponent(agent.name + ".app")
+            try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+            let cli = root.appendingPathComponent(agent.rawValue + "-cli");try fixtureExecutable(cli)
+            XCTAssertEqual(try ProviderQuotaService.resolveExecutable(agent, override: app.path, candidates: [app, cli]), cli)
+            XCTAssertEqual(try ProviderQuotaService.resolveExecutable(agent, override: cli.path, candidates: []), cli)
+            XCTAssertThrowsError(try ProviderQuotaService.resolveExecutable(agent, override: app.path, candidates: [app])) { XCTAssertEqual($0 as? ProviderQuotaError, .cliMissing) }
+        }
+    }
+    @MainActor
+    func testLoginPreflightRejectsWrongCLIWithoutWritingLauncher() async throws {
+        let root = try temporaryCLI();defer { try? FileManager.default.removeItem(at: root) }
+        let cli = root.appendingPathComponent("wrong-cli");try fixtureExecutable(cli, version: "Unrelated program 2.1.295")
+        let repo = ProfileRepository(root: root.appendingPathComponent("Data"))
+        let account = Account(name: "Fixture", agent: .claude)
+        do { _ = try await ProviderQuotaService(repository: repo).prepareSignInScript(account, override: cli.path);XCTFail("Expected CLI validation failure") }
+        catch { XCTAssertEqual(error as? ProviderQuotaError, .cliOutdated) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repo.root.appendingPathComponent("provider-login-\(account.id.uuidString).command").path))
+    }
+    @MainActor
+    func testLoginLauncherUsesValidatedCLIAndQuotesPaths() async throws {
+        let root = try temporaryCLI();defer { try? FileManager.default.removeItem(at: root) }
+        let cli = root.appendingPathComponent("Claude Code's CLI");try fixtureExecutable(cli)
+        let repo = ProfileRepository(root: root.appendingPathComponent("Profile Data"))
+        let account = Account(name: "Fixture", agent: .claude)
+        let script = try await ProviderQuotaService(repository: repo).prepareSignInScript(account, override: cli.path)
+        let text = try String(contentsOf: script, encoding: .utf8)
+        XCTAssertTrue(text.contains(" auth login"));XCTAssertTrue(text.contains("CLAUDE_CONFIG_DIR="))
+        XCTAssertTrue(text.contains("'\\''"))
+        XCTAssertEqual((try FileManager.default.attributesOfItem(atPath: script.path)[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+        let check = Process();check.executableURL = URL(fileURLWithPath: "/bin/sh");check.arguments = ["-n", script.path]
+        try check.run();check.waitUntilExit();XCTAssertEqual(check.terminationStatus, 0)
+    }
+    @MainActor
+    func testInstalledClaudeCLIRecoversSavedDesktopAppSelection() async throws {
+        guard ProcessInfo.processInfo.environment["AISWITCHER_TEST_INSTALLED_PROVIDER_CLI"] == "1" else { throw XCTSkip("Enable explicitly to check the installed CLI's version only") }
+        let root = try temporaryCLI();defer { try? FileManager.default.removeItem(at: root) }
+        let repo = ProfileRepository(root: root.appendingPathComponent("Private Fixture"))
+        let service = ProviderQuotaService(repository: repo)
+        let app = "/Applications/Claude.app"
+        let cli = try service.executable(.claude, override: app)
+        XCTAssertNotEqual(cli.path, app)
+        XCTAssertTrue(ProviderQuotaService.isCLIExecutable(cli, agent: .claude))
+        let account = Account(name: "Fixture", agent: .claude)
+        let script = try await service.prepareSignInScript(account, override: app)
+        XCTAssertTrue(try String(contentsOf: script, encoding: .utf8).contains(" auth login"))
+        // The launcher is inspected only. Never open Terminal or start a real login from a test.
+    }
     func testProviderPipeTimeoutClosesOwnedProcess() async throws {
         let pipe = ProviderCLICommand()
         try await pipe.start(executable: URL(fileURLWithPath: "/bin/cat"), arguments: [], environment: [:], directory: FileManager.default.temporaryDirectory)

@@ -396,6 +396,8 @@
   "ChatGPT reads Codex quota from its Desktop session. Claude reads subscription limits through a separate Claude Code sign-in per profile. Antigravity reads quota through its official CLI with shared application sign-in. Connect reads quota without opening Desktop or sending a model prompt.": "ChatGPT reads Codex quota from its Desktop session. Claude reads subscription limits through a separate Claude Code sign-in per profile. Antigravity reads quota through its official CLI with shared application sign-in. Connect reads quota without opening Desktop or sending a model prompt.",
   "Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota uses a separate Claude Code sign-in.": "Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota uses a separate Claude Code sign-in.",
   "Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action.": "Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action.",
+  "Choose the CLI executable, not the Desktop application.": "Choose the CLI executable, not the Desktop application.",
+  "Choose the Claude Code or Antigravity CLI file, not a Desktop .app or folder.": "Choose the Claude Code or Antigravity CLI file, not a Desktop .app or folder.",
   "AI Switcher": "AI Switcher",
   "Application executables": "Application executables",
   "Automatic detection": "Automatic detection",

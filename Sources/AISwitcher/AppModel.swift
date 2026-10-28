@@ -646,13 +646,21 @@ final class AppModel: ObservableObject {
 
     func setProviderExecutable(_ agent: AIAgent) {
         let picker = NSOpenPanel();picker.canChooseDirectories = false;picker.allowsMultipleSelection = false
+        picker.treatsFilePackagesAsDirectories = true
+        picker.message = L10n.text("Choose the CLI executable, not the Desktop application.")
         if picker.runModal() == .OK, let url = picker.url {
+            guard ProviderQuotaService.isCLIExecutable(url, agent: agent) else { showError(ProviderQuotaError.invalidExecutable);return }
             var next = preferences;next.providerExecutables[agent.rawValue] = url.path;preferencesStore.save(next);preferences = next
         }
     }
     func signInProvider(_ account: Account) {
-        do { try providerQuota.signIn(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]) }
-        catch { showError(error) }
+        guard !shuttingDown, !loadFailed, !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
+        quotaBusyIDs.insert(account.id)
+        quotaTasks[account.id] = Task {
+            defer { finishQuotaOperation(account.id) }
+            do { try await providerQuota.signIn(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]) }
+            catch is CancellationError {} catch { showError(error) }
+        }
     }
     func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();Task { await providerQuota.stop(account.id) } }
     private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
