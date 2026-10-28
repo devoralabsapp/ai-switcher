@@ -29,23 +29,19 @@ struct ProviderQuotaSummaryView: View {
                     Text(model.quotaErrors[account.id] != nil ? L10n.text("Refresh failed · previously read data") : quota.isStale(at: context.date) ? L10n.text("Stale data · refresh needed") : L10n.format("Last read: %@", L10n.dateTime(quota.fetchedAt)))
                         .font(theme.font(size: 9)).foregroundColor(palette.secondary)
                 } else {
-                    Text(L10n.text("Connect the official CLI session to read subscription quota. No model prompt is sent."))
+                    Text(L10n.text("Connect to view quota."))
                         .font(theme.font(size: 11)).foregroundColor(palette.secondary)
                 }
                 if let error = model.quotaErrors[account.id] { Text(error.localizedDescription).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
                 if model.quotaBusyIDs.contains(account.id) {
-                    HStack { ProgressView().controlSize(.mini); Button(L10n.text("Cancel")) { model.cancelProviderConnection(account) }.buttonStyle(ThemedPlainButtonStyle()) }
+                    HStack { ProgressView().controlSize(.mini); if model.providerSignInIDs.contains(account.id) { Text(L10n.text("Waiting for sign-in…")).font(theme.font(size: 10)) }; Button(L10n.text("Cancel")) { model.cancelProviderConnection(account) }.buttonStyle(ThemedPlainButtonStyle()) }
                 } else {
                     Button(model.providerSessionIDs.contains(account.id) ? L10n.text("Refresh quota") : L10n.text("Connect account session")) { model.providerSessionIDs.contains(account.id) ? model.refreshQuota(account) : model.connectSession(account) }
                         .buttonStyle(PrimaryButtonStyle(compact: true))
                 }
-                if details || account.providerQuotaConnection == nil || model.quotaErrors[account.id] != nil {
-                    Button(L10n.text("Sign in with official CLI…")) { model.signInProvider(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11)).disabled(model.quotaBusyIDs.contains(account.id))
-                    if !model.hasProviderCLI(account) {
-                        Link(L10n.text("Install official CLI…"), destination: URL(string: account.effectiveAgent == .claude ? "https://code.claude.com/docs/en/quickstart" : "https://antigravity.google/docs/getting-started")!).font(theme.font(size: 11))
-                        Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
-                    }
-                    Text(account.effectiveAgent.supportDetail).font(theme.font(size: 10)).foregroundColor(palette.secondary)
+                if !model.hasProviderCLI(account) {
+                    Link(L10n.text("Install official CLI…"), destination: URL(string: account.effectiveAgent == .claude ? "https://code.claude.com/docs/en/quickstart" : "https://antigravity.google/docs/getting-started")!).font(theme.font(size: 11))
+                    Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
                 }
                 if !details { Button(L10n.text("Details")) { model.quotaAccountID = account.id }.buttonStyle(ThemedPlainButtonStyle()) }
                 if model.providerSessionIDs.contains(account.id) { Button(L10n.text("Disconnect")) { model.closeSession(account) }.buttonStyle(ThemedPlainButtonStyle()) }

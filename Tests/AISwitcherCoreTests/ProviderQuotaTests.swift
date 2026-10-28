@@ -202,6 +202,27 @@ final class ProviderQuotaTests: XCTestCase {
         XCTAssertTrue(try String(contentsOf: script, encoding: .utf8).contains(" auth login"))
         // The launcher is inspected only. Never open Terminal or start a real login from a test.
     }
+    @MainActor
+    func testAntigravitySignedOutDiagnosticBecomesConnectLoginSignal() async throws {
+        let root = try temporaryCLI();defer { try? FileManager.default.removeItem(at: root) }
+        let cli = root.appendingPathComponent("agy-fixture")
+        let script = """
+        #!/bin/sh
+        if [ "$1" = --version ]; then printf '1.4.9\\n'; exit 0; fi
+        if [ "$1" = -p ] && [ "$2" = /usage ]; then
+          printf "Error: authentication required. Run 'agy' to log in.\\n" >&2
+          exit 1
+        fi
+        exit 27
+        """
+        try script.write(to: cli, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cli.path)
+        let dataRoot = root.appendingPathComponent("Data")
+        try FileManager.default.createDirectory(at: dataRoot, withIntermediateDirectories: true)
+        let service = ProviderQuotaService(repository: ProfileRepository(root: dataRoot))
+        do { _ = try await service.read(Account(name: "Fixture", agent: .antigravity), override: cli.path);XCTFail("Expected sign-in required") }
+        catch { XCTAssertEqual(error as? ProviderQuotaError, .signedOut) }
+    }
     func testProviderPipeTimeoutClosesOwnedProcess() async throws {
         let pipe = ProviderCLICommand()
         try await pipe.start(executable: URL(fileURLWithPath: "/bin/cat"), arguments: [], environment: [:], directory: FileManager.default.temporaryDirectory)

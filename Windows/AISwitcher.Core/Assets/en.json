@@ -398,6 +398,8 @@
   "Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action.": "Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action.",
   "Choose the CLI executable, not the Desktop application.": "Choose the CLI executable, not the Desktop application.",
   "Choose the Claude Code or Antigravity CLI file, not a Desktop .app or folder.": "Choose the Claude Code or Antigravity CLI file, not a Desktop .app or folder.",
+  "Connect to view quota.": "Connect to view quota.",
+  "Sign-in required. Click Connect account session to continue.": "Sign-in required. Click Connect account session to continue.",
   "AI Switcher": "AI Switcher",
   "Application executables": "Application executables",
   "Automatic detection": "Automatic detection",

@@ -2,6 +2,13 @@ import Foundation
 public enum ProviderCLIConfiguration {
     public static let claudeArguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--safe-mode", "--no-session-persistence", "--settings", "{\"disableAllHooks\":true}", "--mcp-config", "{\"mcpServers\":{}}", "--strict-mcp-config"]
     public static let antigravityArguments = ["-p", "/usage", "--output-format", "json"]
+    public static func antigravityRequiresSignIn(_ diagnostics: Data) -> Bool {
+        let text = String(decoding: diagnostics.suffix(16_384), as: UTF8.self).lowercased()
+        return text.contains("error: authentication required. run ")
+            || text.contains("print mode: not logged in and no controlling terminal")
+            || text.contains("not authenticated: no stored credentials found")
+            || text.contains("you are not logged into antigravity.")
+    }
     public static func accepts(version: String, agent: AIAgent) -> Bool {
         let regex = try! NSRegularExpression(pattern: #"(?:^|\s)(\d+)\.(\d+)\.(\d+)(?:\s|$|[-+])"#)
         guard let match = regex.firstMatch(in: version, range: NSRange(version.startIndex..., in: version)) else { return false }

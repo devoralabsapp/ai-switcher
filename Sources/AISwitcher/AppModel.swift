@@ -53,6 +53,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var closingSessionIDs: Set<UUID> = []
     @Published private(set) var desktopWindowIDs: Set<UUID> = []
     @Published private(set) var providerSessionIDs: Set<UUID> = []
+    @Published private(set) var providerSignInIDs: Set<UUID> = []
     private lazy var providerQuota = ProviderQuotaService(repository: repository)
     @Published private(set) var backendIDs: Set<UUID> = []
     @Published private(set) var runningIDs: Set<UUID> = []
@@ -283,7 +284,7 @@ final class AppModel: ObservableObject {
 
     func performDefaultAction(_ account: Account) {
         if defaultAction(for: account) == .connectSession {
-            if hasRunningSession(account) { refreshQuota(account) }
+            if (account.effectiveAgent.usesProviderQuota ? providerSessionIDs.contains(account.id) : hasRunningSession(account)) { refreshQuota(account) }
             else { connectSession(account) }
         }
         else { open(account) }
@@ -295,7 +296,7 @@ final class AppModel: ObservableObject {
         if launchingIDs.contains(account.id) { return L10n.text("Opening…") }
         if defaultAction(for: account) == .connectSession {
             if quotaBusyIDs.contains(account.id) { return L10n.text("Reading Desktop quota…") }
-            return hasRunningSession(account) ? L10n.text("Refresh quota") : L10n.text("Connect account session")
+            return (account.effectiveAgent.usesProviderQuota ? providerSessionIDs.contains(account.id) : hasRunningSession(account)) ? L10n.text("Refresh quota") : L10n.text("Connect account session")
         }
         return account.effectiveAgent.openTitle
     }
@@ -664,24 +665,25 @@ final class AppModel: ObservableObject {
             }
         }
     }
-    func signInProvider(_ account: Account) {
-        guard !shuttingDown, !loadFailed, !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
-        quotaBusyIDs.insert(account.id)
-        quotaTasks[account.id] = Task {
-            defer { finishQuotaOperation(account.id) }
-            do { try await providerQuota.signIn(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]) }
-            catch is CancellationError {} catch { showError(error) }
-        }
-    }
     func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();Task { await providerQuota.stop(account.id) } }
     private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
         guard !shuttingDown, !loadFailed, !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
         if connect && !canConnectSession(account) { return }
         quotaBusyIDs.insert(account.id);if connect { connectingSessionIDs.insert(account.id) };lastQuotaChecks[account.id] = Date()
         quotaTasks[account.id] = Task {
-            defer { connectingSessionIDs.remove(account.id);finishQuotaOperation(account.id);refreshRunning() }
+            defer { providerSignInIDs.remove(account.id);connectingSessionIDs.remove(account.id);finishQuotaOperation(account.id);refreshRunning() }
             do {
-                let value = try await providerQuota.read(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]);try Task.checkCancellation()
+                let read = { [self] in try await providerQuota.read(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]) }
+                let value: CodexConnection
+                if connect {
+                    value = try await ProviderSessionConnector.connect(read: read, signIn: { [self] in
+                        providerSessionIDs.remove(account.id)
+                        quotaErrors[account.id] = nil
+                        providerSignInIDs.insert(account.id)
+                        try await providerQuota.signIn(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue])
+                    })
+                } else { value = try await read() }
+                try Task.checkCancellation()
                 guard let index = snapshot.accounts.firstIndex(where: { $0.id == account.id }) else { return }
                 var updated = snapshot;updated.accounts[index].providerQuotaConnection = value;try persist(updated)
                 providerSessionIDs.insert(account.id);quotaErrors[account.id] = nil;await notifyQuota(account.id)

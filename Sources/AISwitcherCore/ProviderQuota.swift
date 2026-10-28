@@ -8,7 +8,7 @@ public enum ProviderQuotaError: LocalizedError, Equatable {
         case .cliMissing: return L10n.text("Install Claude Code or Antigravity CLI, or select its executable in quota settings.")
         case .invalidExecutable: return L10n.text("Choose the Claude Code or Antigravity CLI file, not a Desktop .app or folder.")
         case .cliOutdated: return L10n.text("Update the provider CLI to read quota without starting a model turn.")
-        case .signedOut: return L10n.text("The provider session is signed out. Choose Sign in with official CLI, then connect again.")
+        case .signedOut: return L10n.text("Sign-in required. Click Connect account session to continue.")
         case .unavailable: return L10n.text("The provider has not returned subscription quota. Previous data is kept.")
         case .invalidResponse: return L10n.text("The provider quota response could not be verified. Previous data is kept.")
         case .identityChanged: return L10n.text("The provider account does not match this profile. Verify the email before reconnecting.")

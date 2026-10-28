@@ -6,20 +6,56 @@ public actor ProviderCLICommand {
     private var child: Process?
     private var input: FileHandle?
     private var output: FileHandle?
+    private var errorOutput: FileHandle?
+    private var diagnosticBuffer = Data()
+    private var diagnosticsEnded = true
+    private var diagnosticWaiter: CheckedContinuation<Data, Never>?
+    private var diagnosticDeadline: Task<Void, Never>?
     private var buffer = Data()
     private var lines: [Data] = []
     private var ended = false
     private var waiter: CheckedContinuation<Data?, Error>?
     private var deadline: Task<Void, Never>?
     public init() {}
-    public func start(executable: URL, arguments: [String], environment: [String: String], directory: URL) throws {
+    public func start(executable: URL, arguments: [String], environment: [String: String], directory: URL, captureStandardError: Bool = false) throws {
         try Task.checkCancellation()
         let process = Process(), stdin = Pipe(), stdout = Pipe()
         process.executableURL = executable; process.arguments = arguments; process.environment = environment; process.currentDirectoryURL = directory
-        process.standardInput = stdin; process.standardOutput = stdout; process.standardError = FileHandle.nullDevice
+        process.standardInput = stdin; process.standardOutput = stdout
+        if captureStandardError {
+            let stderr = Pipe();process.standardError = stderr
+            errorOutput = stderr.fileHandleForReading;diagnosticsEnded = false
+            errorOutput?.readabilityHandler = { [weak self] file in
+                let bytes = (try? file.read(upToCount: 16_384)) ?? Data()
+                Task { await self?.receiveDiagnostic(bytes) }
+            }
+        } else { process.standardError = FileHandle.nullDevice }
         child = process; input = stdin.fileHandleForWriting; output = stdout.fileHandleForReading
         output?.readabilityHandler = { [weak self] file in let bytes = file.availableData; Task { await self?.receive(bytes) } }
-        do { try process.run() } catch { output?.readabilityHandler = nil; throw error }
+        do { try process.run() } catch { output?.readabilityHandler = nil;errorOutput?.readabilityHandler = nil;finishDiagnostics();throw error }
+    }
+    private func receiveDiagnostic(_ bytes: Data) {
+        guard !diagnosticsEnded else { return }
+        if bytes.isEmpty { finishDiagnostics();return }
+        diagnosticBuffer.append(bytes)
+        if diagnosticBuffer.count > 16_384 { diagnosticBuffer.removeFirst(diagnosticBuffer.count - 16_384) }
+    }
+    private func finishDiagnostics() {
+        diagnosticsEnded = true;diagnosticDeadline?.cancel()
+        let waiting = diagnosticWaiter;diagnosticWaiter = nil;waiting?.resume(returning: diagnosticBuffer)
+    }
+    /// Private, bounded diagnostics are used only to recognize an authentication failure; never display or persist them.
+    public func diagnosticOutput() async -> Data {
+        if diagnosticsEnded { return diagnosticBuffer }
+        return await withTaskCancellationHandler(operation: {
+            if diagnosticsEnded || Task.isCancelled { return diagnosticBuffer }
+            return await withCheckedContinuation { continuation in
+                diagnosticWaiter = continuation
+                diagnosticDeadline = Task { [weak self] in
+                    do { try await Task.sleep(nanoseconds: 1_000_000_000);await self?.finishDiagnostics() } catch {}
+                }
+            }
+        }, onCancel: { Task { await self.finishDiagnostics() } })
     }
     private func receive(_ bytes: Data) {
         if ended { return }
@@ -46,7 +82,7 @@ public actor ProviderCLICommand {
     }
     public func closeInput() { try? input?.close(); input = nil }
     public func stop() async {
-        finish(error: CancellationError()); output?.readabilityHandler = nil; try? input?.close(); try? output?.close(); input = nil; output = nil
+        finish(error: CancellationError());finishDiagnostics();errorOutput?.readabilityHandler = nil;try? errorOutput?.close();errorOutput = nil;output?.readabilityHandler = nil; try? input?.close(); try? output?.close(); input = nil; output = nil
         if let child, child.isRunning { child.terminate(); try? await Task.sleep(nanoseconds: 200_000_000); if child.isRunning { Darwin.kill(child.processIdentifier, SIGKILL) } }
         child = nil
     }

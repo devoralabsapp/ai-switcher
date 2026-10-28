@@ -57,16 +57,24 @@ final class ProviderQuotaService {
         if account.effectiveAgent == .claude { try repository.prepareClaudeProfile(for: account.id); env["CLAUDE_CONFIG_DIR"] = repository.claudeConfigURL(for: account.id).path }
         return env
     }
-    private func command(_ account: Account, executable: URL, arguments: [String]) async throws -> ProviderCLICommand {
+    private func command(_ account: Account, executable: URL, arguments: [String], captureStandardError: Bool = false) async throws -> ProviderCLICommand {
         let command = ProviderCLICommand();commands[account.id] = command
-        do { try await command.start(executable: executable, arguments: arguments, environment: environment(account), directory: repository.root) }
+        do { try await command.start(executable: executable, arguments: arguments, environment: environment(account), directory: repository.root, captureStandardError: captureStandardError) }
         catch { await command.stop();commands[account.id] = nil;throw error }
         return command
     }
-    private func run(_ account: Account, exe: URL, arguments: [String]) async throws -> Data {
-        let c = try await command(account, executable: exe, arguments: arguments)
-        do { await c.closeInput();let data = try await c.collect();await c.stop();commands[account.id] = nil;return data }
-        catch { await c.stop();commands[account.id] = nil;throw error }
+    private func run(_ account: Account, exe: URL, arguments: [String], detectSignOut: Bool = false) async throws -> Data {
+        let c = try await command(account, executable: exe, arguments: arguments, captureStandardError: detectSignOut)
+        do {
+            await c.closeInput()
+            let data = try await c.collect()
+            if detectSignOut {
+                let diagnostics = await c.diagnosticOutput()
+                try Task.checkCancellation()
+                if ProviderCLIConfiguration.antigravityRequiresSignIn(diagnostics) { throw ProviderQuotaError.signedOut }
+            }
+            await c.stop();commands[account.id] = nil;return data
+        } catch { await c.stop();commands[account.id] = nil;throw error }
     }
     private func verifiedExecutable(_ account: Account, override: String?) async throws -> URL {
         let exe = try executable(account.effectiveAgent, override: override)
@@ -93,7 +101,7 @@ final class ProviderQuotaService {
             let after = try await identity();guard before.matches(after) else { throw ProviderQuotaError.identityChanged }
             return try ProviderQuotaParser.parse(data, agent: .claude, identity: after)
         }
-        let data = try await run(account, exe: exe, arguments: ProviderCLIConfiguration.antigravityArguments)
+        let data = try await run(account, exe: exe, arguments: ProviderCLIConfiguration.antigravityArguments, detectSignOut: true)
         return try ProviderQuotaParser.parse(data, agent: .antigravity, identity: CodexIdentity(email: nil, planType: nil))
     }
     func prepareSignInScript(_ account: Account, override: String?) async throws -> URL {

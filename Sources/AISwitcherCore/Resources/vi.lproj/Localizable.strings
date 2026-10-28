@@ -535,3 +535,7 @@
 "Choose the CLI executable, not the Desktop application." = "Chọn tệp chạy CLI, không chọn ứng dụng Desktop.";
 
 "Choose the Claude Code or Antigravity CLI file, not a Desktop .app or folder." = "Chọn tệp Claude Code hoặc Antigravity CLI, không chọn ứng dụng Desktop .app hoặc thư mục.";
+
+"Connect to view quota." = "Kết nối để xem hạn mức.";
+
+"Sign-in required. Click Connect account session to continue." = "Cần đăng nhập. Bấm Kết nối phiên tài khoản để tiếp tục.";
