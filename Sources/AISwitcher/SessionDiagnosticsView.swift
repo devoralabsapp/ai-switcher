@@ -87,6 +87,9 @@ struct SessionDiagnosticsView: View {
             if let error = storageError, !account.effectiveAgent.supportsCodexQuota {
                 Text(error).font(theme.font(size: 11)).foregroundColor(palette.secondary)
             }
+            if account.effectiveAgent.usesProviderQuota, let error = model.quotaErrors[account.id] {
+                Text(error.localizedDescription).font(theme.font(size: 11)).foregroundColor(palette.secondary)
+            }
             if !account.effectiveAgent.supportsCodexQuota {
                 Text(account.effectiveAgent.supportDetail).font(theme.font(size: 11)).foregroundColor(palette.secondary)
                 if missingApplication {

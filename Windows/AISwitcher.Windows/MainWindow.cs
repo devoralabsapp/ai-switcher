@@ -95,7 +95,7 @@ internal sealed partial class MainWindow:Window {
         stack.Children.Add(Space(18));var open=Button(engine.DefaultTitle(a)+"  ↗",()=>_=engine.DefaultAsync(a));open.IsEnabled=!engine.StoppingAll&&!engine.Busy.Contains(a.Id);open.HorizontalAlignment=HorizontalAlignment.Stretch;stack.Children.Add(open);
         var panel=Panel(stack,T,ProfileColors.Pale(a.Color,T),true);panel.ContextMenu=AccountMenu(a);return panel;
     }
-    string Support(Account a)=>a.Agent.IsShared()?L["Opens the installed app with its own shared sign-in. Separate account switching and quota are not available."]:a.Agent==Agent.Claude?L["Separate Claude Desktop or browser sign-in for each profile. Quota and background connections are not available."]:L["Separate browser sign-in for each profile. Quota and background connections are not available for this agent."];
+    string Support(Account a)=>a.Agent.IsShared()?L["Antigravity quota uses the official CLI and shared application sign-in."]:a.Agent==Agent.Claude?L["Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate."]:L["Separate browser sign-in for each profile. Quota and background connections are not available for this agent."];
     ContextMenu AccountMenu(Account a){var menu=new ContextMenu();bool busy=engine.StoppingAll||engine.Busy.Contains(a.Id);
         void Item(string text,Action action,bool enabled=true){var item=new MenuItem{Header=text,IsEnabled=enabled};item.Click+=(_,_)=>action();menu.Items.Add(item);}
         Item(L.Format("Open %@",a.Agent.Name()),()=>_=engine.OpenAsync(a),!busy);
