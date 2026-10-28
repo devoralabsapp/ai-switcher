@@ -49,7 +49,8 @@ final class AIAgentTests: XCTestCase {
             XCTAssertFalse(account.usesCodexDesktop)
             XCTAssertFalse(account.usesSharedLocalWorkspace)
             XCTAssertFalse(account.automaticallyConnects)
-            XCTAssertEqual(model.defaultAction(for: account), .openDesktop)
+            XCTAssertEqual(model.defaultAction(for: account), account.effectiveAgent.usesProviderQuota ? .connectSession : .openDesktop)
+            if account.effectiveAgent.usesProviderQuota { continue }
             model.connectSession(account)
             model.connectQuota(account)
             model.refreshQuota(account)
@@ -120,16 +121,16 @@ final class AIAgentTests: XCTestCase {
         await model.shutdownQuota()
     }
 
-    func testUnsupportedAgentQuickMenuHasNoCodexOrCloseActionsEnabled() async throws {
+    func testProviderQuickMenusExposeQuotaAndConnectActions() async throws {
         let claude = Account(name: "Claude", agent: .claude)
         let shared = Account(name: "Antigravity", agent: .antigravity)
         let model = try model([claude, shared])
         for profile in [claude,shared] {
             let menu = AccountQuickMenu.make(account: profile, model: model, target: AppDelegate())
             let selectors = menu.items.compactMap { $0.action.map(NSStringFromSelector) }
-            XCTAssertFalse(selectors.contains("connectAccount:"))
-            XCTAssertFalse(selectors.contains("refreshAccountQuota:"))
-            XCTAssertFalse(selectors.contains("showAccountQuota:"))
+            XCTAssertTrue(selectors.contains("connectAccount:"))
+            XCTAssertTrue(selectors.contains("refreshAccountQuota:"))
+            XCTAssertTrue(selectors.contains("showAccountQuota:"))
         }
         await model.shutdownQuota()
     }

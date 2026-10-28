@@ -66,7 +66,6 @@
 "Codex quota" = "Quota Codex";
 "Codex quota connected" = "Đã kết nối quota Codex";
 "Codex quota…" = "Quota Codex…";
-"Codex reports a quota or workspace limit has been reached." = "Codex báo đã chạm hạn mức hoặc giới hạn workspace.";
 "Codex returned an invalid sign-in URL. The connection was stopped." = "Codex trả về đường dẫn đăng nhập không hợp lệ. App đã dừng kết nối.";
 "Codex sign-in did not finish. Try again or cancel the connection." = "Đăng nhập Codex chưa hoàn tất. Hãy thử lại hoặc hủy kết nối.";
 "Connect" = "Kết nối";
@@ -496,3 +495,39 @@
 "MERRY & BRIGHT" = "GIÁNG SINH AN LÀNH";
 "A LUCKY NEW START" = "CHÚC MỪNG NĂM MỚI";
 "BLACK FRIDAY EDITION" = "PHIÊN BẢN BLACK FRIDAY";
+
+"%@ quota" = "Hạn mức %@";
+
+"%@ remaining" = "Còn %@";
+
+"Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate." = "Hạn mức Claude dùng đăng nhập Claude Code riêng trong hồ sơ này. Phiên Desktop và trình duyệt vẫn tách biệt.";
+
+"Antigravity quota uses the official CLI and shared application sign-in." = "Hạn mức Antigravity dùng CLI chính thức và tài khoản đăng nhập chung của ứng dụng.";
+
+"Connect the official CLI session to read subscription quota. No model prompt is sent." = "Kết nối phiên CLI chính thức để đọc hạn mức gói đăng ký. Không gửi câu hỏi đến mô hình AI.";
+
+"Sign in with official CLI…" = "Đăng nhập bằng CLI chính thức…";
+
+"Install official CLI…" = "Cài CLI chính thức…";
+
+"Choose quota CLI…" = "Chọn CLI đọc hạn mức…";
+
+"Install Claude Code or Antigravity CLI, or select its executable in quota settings." = "Cài Claude Code hoặc Antigravity CLI, hoặc chọn tệp thực thi trong cài đặt hạn mức.";
+
+"Update the provider CLI to read quota without starting a model turn." = "Cập nhật CLI của nhà cung cấp để đọc hạn mức mà không tạo lượt hỏi AI.";
+
+"The provider session is signed out. Choose Sign in with official CLI, then connect again." = "Phiên đã đăng xuất. Chọn Đăng nhập bằng CLI chính thức, rồi kết nối lại.";
+
+"The provider has not returned subscription quota. Previous data is kept." = "Nhà cung cấp chưa trả về hạn mức gói đăng ký. Dữ liệu đã đọc được giữ lại.";
+
+"The provider quota response could not be verified. Previous data is kept." = "Không xác minh được dữ liệu hạn mức. Dữ liệu đã đọc được giữ lại.";
+
+"The provider account does not match this profile. Verify the email before reconnecting." = "Tài khoản nhà cung cấp không khớp hồ sơ này. Kiểm tra email trước khi kết nối lại.";
+
+"The provider quota request timed out. Try again." = "Yêu cầu đọc hạn mức đã hết thời gian chờ. Vui lòng thử lại.";
+
+"ChatGPT reads Codex quota from its Desktop session. Claude reads subscription limits through a separate Claude Code sign-in per profile. Antigravity reads quota through its official CLI with shared application sign-in. Connect reads quota without opening Desktop or sending a model prompt." = "ChatGPT đọc hạn mức Codex từ phiên Desktop. Claude đọc hạn mức gói đăng ký qua Claude Code với đăng nhập riêng từng hồ sơ. Antigravity dùng CLI chính thức với tài khoản đăng nhập chung. Kết nối đọc hạn mức không mở Desktop và không gửi câu hỏi AI.";
+
+"Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota uses a separate Claude Code sign-in." = "Mỗi hồ sơ Claude Desktop có dữ liệu ứng dụng riêng. Đăng nhập một lần trong cửa sổ riêng; đăng nhập trình duyệt vẫn ở trình duyệt. Hạn mức dùng đăng nhập Claude Code riêng.";
+
+"Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action." = "Chế độ chỉ xem hạn mức kết nối ChatGPT, Claude và Antigravity mà không mở Desktop. Các agent khác vẫn mở như bình thường.";

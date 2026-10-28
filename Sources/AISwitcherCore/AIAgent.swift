@@ -24,6 +24,8 @@ public enum AIAgent: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
     public var supportsCodexQuota: Bool { self == .chatgpt }
+    public var supportsQuota: Bool { supportsCodexQuota || self == .claude || self == .antigravity }
+    public var usesProviderQuota: Bool { self == .claude || self == .antigravity }
     public var isSharedApplication: Bool { self == .antigravity }
     public var webURL: URL {
         let value: String
@@ -40,8 +42,8 @@ public enum AIAgent: String, Codable, CaseIterable, Identifiable, Sendable {
     public var openTitle: String { L10n.format("Open %@", name) }
     public var supportDetail: String {
         if supportsCodexQuota { return L10n.text("Desktop sessions, browser profiles, and Codex quota") }
-        if self == .claude { return L10n.text("Separate Claude Desktop or browser sign-in for each profile. Quota and background connections are not available.") }
-        if isSharedApplication { return L10n.text("Opens the installed app with its own shared sign-in. Separate account switching and quota are not available.") }
+        if self == .claude { return L10n.text("Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate.") }
+        if isSharedApplication { return L10n.text("Antigravity quota uses the official CLI and shared application sign-in.") }
         return L10n.text("Separate browser sign-in for each profile. Quota and background connections are not available for this agent.")
     }
 }

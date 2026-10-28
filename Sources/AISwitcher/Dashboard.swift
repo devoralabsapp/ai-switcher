@@ -401,19 +401,22 @@ private struct AccountCard: View {
                 .buttonStyle(ThemedPlainButtonStyle()).help(account.isFavorite ? L10n.text("Remove from favorites") : L10n.text("Add to favorites"))
                 Menu {
                     Button(L10n.text("Edit profile…")) { model.editor = AccountEditor(account: account) }
-                    if account.effectiveAgent.supportsCodexQuota {
-                        Button(L10n.text("Codex quota…")) { model.quotaAccountID = account.id }
+                    if account.effectiveAgent.supportsQuota {
+                        Button(account.effectiveAgent.usesProviderQuota ? L10n.text("Details") : L10n.text("Codex quota…")) { model.quotaAccountID = account.id }
                     }
                     if account.effectiveLaunchMode == .browser {
                         Button(L10n.format("Open a new %@ window", account.effectiveAgent.name)) { model.open(account, newWindow: true) }
                     }
                     Divider()
+                    if account.effectiveAgent.usesProviderQuota {
+                        Button(L10n.text("Connect account session")) { model.connectSession(account) }.disabled(!model.canConnectSession(account))
+                    }
                     if account.usesCodexDesktop {
                         Button(L10n.text("Open ChatGPT Desktop")) { model.open(account) }
                         Button(L10n.text("Connect account session")) { model.connectSession(account) }
                             .disabled(!model.canConnectSession(account))
                     }
-                    Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled(account.effectiveAgent.isSharedApplication || !running || model.quotaBusyIDs.contains(account.id))
+                    Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled((account.effectiveAgent.isSharedApplication && !model.providerSessionIDs.contains(account.id)) || !running || model.quotaBusyIDs.contains(account.id))
                     Button(L10n.text("Delete local profile…"), role: .destructive) { model.accountToDelete = account }
                         .disabled(model.quotaBusyIDs.contains(account.id) || model.pendingConnections[account.id] != nil)
                 } label: { Image(systemName: "ellipsis").font(appearanceTheme.font(size: 13, weight: .medium)).frame(width: 18, height: 24) }
@@ -436,7 +439,7 @@ private struct AccountCard: View {
                 SessionStatusBadge(status: model.sessionStatus(for: account))
             }.font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
 
-            if account.effectiveAgent.supportsCodexQuota {
+            if account.effectiveAgent.supportsQuota {
                 QuotaSummaryView(model: model, account: account)
             } else {
                 Text(account.effectiveAgent.supportDetail)

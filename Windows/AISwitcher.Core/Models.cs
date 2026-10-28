@@ -17,7 +17,8 @@ public static class Json {
 }
 public static class Agents {
     public static string Name(this Agent value) => value switch { Agent.Chatgpt => "ChatGPT", Agent.Deepseek => "DeepSeek", _ => value.ToString() };
-    public static bool HasQuota(this Agent value) => value == Agent.Chatgpt;
+    public static bool HasQuota(this Agent value) => value is Agent.Chatgpt or Agent.Claude or Agent.Antigravity;
+    public static bool ProviderQuota(this Agent value)=>value is Agent.Claude or Agent.Antigravity;
     public static bool IsShared(this Agent value) => value == Agent.Antigravity;
     public static Uri Url(this Agent value) => new(value switch { Agent.Chatgpt => "https://chatgpt.com/", Agent.Claude => "https://claude.ai/", Agent.Gemini => "https://gemini.google.com/app", Agent.Perplexity => "https://www.perplexity.ai/", Agent.Deepseek => "https://chat.deepseek.com/", _ => "https://antigravity.google/" });
 }
@@ -37,9 +38,10 @@ public sealed record Account {
     public bool SharesLocalWorkspace { get; set; }
     public Connection? DesktopConnection { get; set; }
     public Connection? BrowserConnection { get; set; }
+    public Connection? ProviderConnection { get; set; }
     [JsonIgnore] public LaunchMode EffectiveMode => Agent is Agent.Chatgpt or Agent.Claude ? LaunchMode : Agent.IsShared() ? LaunchMode.Desktop : LaunchMode.Browser;
-    [JsonIgnore] public bool UsesCodexDesktop => Agent.HasQuota() && EffectiveMode == LaunchMode.Desktop;
-    [JsonIgnore] public Connection? Connection => !Agent.HasQuota() ? null : UsesCodexDesktop ? DesktopConnection : BrowserConnection;
+    [JsonIgnore] public bool UsesCodexDesktop => Agent == Agent.Chatgpt && EffectiveMode == LaunchMode.Desktop;
+    [JsonIgnore] public Connection? Connection => !Agent.HasQuota() ? null : Agent.ProviderQuota() ? ProviderConnection : UsesCodexDesktop ? DesktopConnection : BrowserConnection;
     public void Validate() {
         if (Id == Guid.Empty || Name.Trim().Length is < 1 or > 48 || EmailHint.Length > 160 || !ProfileColors.Names.Contains(Color) || !Enum.IsDefined(Agent) || !Enum.IsDefined(Browser) || !Enum.IsDefined(LaunchMode)) throw new AppError("Invalid profile data.");
     }

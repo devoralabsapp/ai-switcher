@@ -16,7 +16,8 @@ Do not run this app as Administrator and do not copy authentication directories 
 
 - ChatGPT and Claude Desktop profiles with separate user-data directories, exact executable/argument routing, focus/reopen, and normal targeted close.
 - Chrome, Edge and Brave profiles for ChatGPT, Claude, Gemini, Perplexity and DeepSeek.
-- Antigravity launcher with the application's existing shared sign-in; it has no per-account isolation, quota or close action.
+- Antigravity launcher with the application's existing shared sign-in; it has no per-account isolation or application close action. Its official CLI supplies shared-account quota.
+- Claude Code CLI subscription quota with a separate sign-in per profile; official Antigravity CLI quota with shared sign-in. Connect reads quota in the background without a model prompt. See [provider setup](../README.md#claude-and-antigravity-quota).
 - Agent sidebar filters, search, favorites, recents and per-profile colors.
 - Eleven palettes synchronized from macOS: Light, Dark, Terminal, Code, Dracula, Playful Retro Neo-Brutalism, Terminal Black, Halloween, Christmas, Tet Holiday, Black Friday. Matching English/Vietnamese catalogs are shared.
 - Quota-only beside Add account; disabling always returns to cards. Layout choice remains in Settings. Default per-profile actions and opt-in startup connections are retained.

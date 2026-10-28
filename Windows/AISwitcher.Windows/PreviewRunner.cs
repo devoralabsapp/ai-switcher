@@ -27,10 +27,22 @@ internal static class PreviewRunner {
             if(theme.Id=="terminalBlack"){Require(theme.Canvas=="#000000","Terminal Black canvas mismatch");engine.SetAgent(Agent.Claude);await CaptureDialog(window,()=>window.EditAccount(),Path.Combine(output,$"claude-editor-{language}.png"));await CaptureDialog(window,window.Settings,Path.Combine(output,$"settings-{language}.png"));}
             window.Exiting=true;window.Close();engine.Shutdown();
         }
-        if(smoke){await ScrollbarFixtureAsync();ReadOnlyPreferences(root);await ProcessRoutingAsync(Path.Combine(root,"processes"));await WorkspaceFixtureAsync(root);}
-        File.WriteAllText(Path.Combine(output,"ui-smoke-result.txt"),"PASS: 11 themes × 2 languages; account/filter/quota controls; cards/table transition; Claude editor and settings rendering; exact native Windows fixture process routing; private workspace junctions, custom database, metadata projection, SQLite path canonicalization and safe deletion.\n");
+        if(smoke){await ProviderFixtureAsync(root,Program.Argument(args,"--provider-cli-executable"));await ScrollbarFixtureAsync();ReadOnlyPreferences(root);await ProcessRoutingAsync(Path.Combine(root,"processes"));await WorkspaceFixtureAsync(root);}
+        File.WriteAllText(Path.Combine(output,"ui-smoke-result.txt"),"PASS: 11 themes × 2 languages; account/filter/quota controls; cards/table transition; Claude editor and settings rendering; real provider CLI fixture processes for connect/read/disconnect/reconnect, identity mismatch and metadata retention; exact native Windows fixture process routing; private workspace junctions, custom database, metadata projection, SQLite path canonicalization and safe deletion.\n");
         }catch(Exception error){code=1;File.AppendAllText(Path.Combine(output,backend?"backend-smoke-error.txt":"ui-smoke-error.txt"),error.ToString());}finally{app.Shutdown(code);}};
         app.Run();return code;
+    }
+    static async Task ProviderFixtureAsync(string root,string? executable){
+        Require(executable!=null&&File.Exists(executable),"Provider CLI test executable missing");
+        var data=Path.Combine(root,"provider-sessions");var repo=new Repository(data);var claude=new Account{Name="Claude fixture",Agent=Agent.Claude,EmailHint="fixture@example.test"};var agy=new Account{Name="Antigravity fixture",Agent=Agent.Antigravity};repo.Save(new(){Accounts=[claude,agy]});
+        var engine=new AppEngine(data);engine.Preferences.Executables["claudeCode"]=executable!;engine.Preferences.Executables["antigravityCli"]=executable!;
+        Require(engine.CanConnect(claude)&&engine.CanConnect(agy),"Provider Connect disabled before connection");
+        await engine.ConnectAsync(claude,false);Require(engine.Provider.Connected.Contains(claude.Id),"Claude control bridge did not connect");Require(!engine.CanConnect(claude),"Duplicate Claude Connect must be disabled");Require(engine.Snapshot.Accounts.First(x=>x.Id==claude.Id).Connection?.Quota?.Limits.Buckets.First().Value.Primary?.Remaining==0,"Claude 0% quota missing");
+        await engine.ConnectAsync(agy,false);Require(engine.Provider.Connected.Contains(agy.Id),"Antigravity usage bridge did not connect");Require(engine.Snapshot.Accounts.First(x=>x.Id==agy.Id).Connection?.Quota?.Limits.Buckets.First().Value.Primary?.Remaining==75,"Antigravity quota fraction is wrong");
+        var edited=engine.Snapshot.Accounts.First(x=>x.Id==claude.Id) with{Name="Edited fixture"};Require(engine.SaveAccount(edited),"Cannot edit connected provider metadata");Require(engine.Snapshot.Accounts.First(x=>x.Id==claude.Id).Connection?.Quota!=null,"Editing dropped provider quota");
+        await engine.CloseAsync(claude);await engine.CloseAsync(agy);Require(engine.CanConnect(claude)&&engine.CanConnect(agy),"Disconnect must restore Connect");
+        var mismatch=engine.Snapshot.Accounts.First(x=>x.Id==claude.Id) with{EmailHint="other@example.test"};Require(engine.SaveAccount(mismatch),"Cannot set identity fixture");await engine.ConnectAsync(mismatch,false);Require(!engine.Provider.Connected.Contains(claude.Id),"Mismatched Claude identity was accepted");Require(engine.Errors.ContainsKey(claude.Id),"Mismatched identity must be visible");Require(engine.Snapshot.Accounts.First(x=>x.Id==claude.Id).Connection?.Quota!=null,"Failed read must preserve old quota");
+        await engine.ShutdownAsync();
     }
     static async Task CaptureDialog(MainWindow owner,Action open,string path){
         _=owner.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(()=>{var dialog=Application.Current.Windows.Cast<Window>().FirstOrDefault(x=>x!=owner&&x.Owner==owner);if(dialog!=null){dialog.UpdateLayout();if(Find(dialog,"accountAgent") is ComboBox agent)Require(agent.SelectedItem is string text&&text=="Claude","Claude selector must display the agent name");Save(dialog,path);dialog.Close();}}));open();await Task.CompletedTask;

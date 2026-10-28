@@ -22,11 +22,13 @@ public struct CodexQuotaWindow: Codable, Equatable, Sendable {
     public let usedPercent: Double?
     public let windowDurationMins: Int?
     public let resetsAt: Int?
+    public let remainingAmount: Double?
 
-    public init(usedPercent: Double?, windowDurationMins: Int?, resetsAt: Int?) {
+    public init(usedPercent: Double?, windowDurationMins: Int?, resetsAt: Int?, remainingAmount: Double? = nil) {
         self.usedPercent = usedPercent
         self.windowDurationMins = windowDurationMins
         self.resetsAt = resetsAt
+        self.remainingAmount = remainingAmount
     }
 
     public var remainingPercent: Double? {

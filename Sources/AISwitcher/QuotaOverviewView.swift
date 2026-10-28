@@ -91,7 +91,7 @@ struct QuotaOverviewView: View {
         return HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 7) {
                 Button {
-                    if account.effectiveAgent.supportsCodexQuota { model.quotaAccountID = account.id }
+                    if account.effectiveAgent.supportsQuota { model.quotaAccountID = account.id }
                     else { model.open(account) }
                 } label: {
                     HStack(spacing: 7) {
@@ -111,13 +111,13 @@ struct QuotaOverviewView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let reset = summary.nextReset {
                     Text(reset, format: .dateTime.day().month().hour().minute())
-                } else { Text(account.effectiveAgent.supportsCodexQuota ? L10n.text("No data yet") : L10n.text("Not available")) }
+                } else { Text(account.effectiveAgent.supportsQuota ? L10n.text("No data yet") : L10n.text("Not available")) }
             }.font(theme.font(size: 10)).foregroundColor(palette.secondary).frame(width: widths[3], alignment: .leading)
             VStack(alignment: .leading, spacing: 6) {
                 if let read = summary.snapshot?.fetchedAt {
                     Text(read, format: .dateTime.day().month().hour().minute())
                     if summary.stale { Text(L10n.text("Stale data · refresh needed")).font(theme.font(size: 9, weight: .medium)) }
-                } else { Text(account.effectiveAgent.supportsCodexQuota ? L10n.text("No data yet") : L10n.text("Not available")) }
+                } else { Text(account.effectiveAgent.supportsQuota ? L10n.text("No data yet") : L10n.text("Not available")) }
             }.font(theme.font(size: 10)).foregroundColor(palette.secondary).frame(width: widths[4], alignment: .leading)
             actions(account).frame(width: widths[5], alignment: .leading)
         }
@@ -127,7 +127,7 @@ struct QuotaOverviewView: View {
     }
 
     @ViewBuilder private func quotaCell(_ account: Account, window: CodexQuotaWindow?, summary: AccountQuotaOverview) -> some View {
-        if account.effectiveAgent.supportsCodexQuota { windowCell(window, summary: summary) }
+        if account.effectiveAgent.supportsQuota { windowCell(window, summary: summary) }
         else { Text(L10n.text("Not available")).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
     }
 
@@ -137,6 +137,8 @@ struct QuotaOverviewView: View {
                 Text(L10n.format("%@%% remaining", percent.formatted(.number.precision(.fractionLength(0...1)).locale(L10n.locale))))
                     .font(theme.font(size: 11, weight: .semibold)).monospacedDigit()
                     .foregroundColor(summary.stale ? palette.secondary : palette.accent)
+            } else if let window, !window.resetHasPassed(at: summary.now), let amount = window.remainingAmount {
+                Text(L10n.format("%@ remaining", amount.formatted())).font(theme.font(size: 11, weight: .semibold))
             } else { Text(L10n.text("No data yet")).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
             if let window {
                 Text(window.durationLabel).font(theme.font(size: 9)).foregroundColor(palette.secondary)
@@ -149,16 +151,16 @@ struct QuotaOverviewView: View {
 
     private func actions(_ account: Account) -> some View {
         HStack(spacing: 8) {
-            Button(!account.effectiveAgent.supportsCodexQuota ? L10n.text("Open agent") : account.usesCodexDesktop ? (model.backendIDs.contains(account.id) ? L10n.text("Refresh") : L10n.text("Connect")) : L10n.text("Details")) {
-                if !account.effectiveAgent.supportsCodexQuota { model.open(account) }
-                else if account.usesCodexDesktop { model.refreshQuota(account) }
+            Button(!account.effectiveAgent.supportsQuota ? L10n.text("Open agent") : (account.usesCodexDesktop || account.effectiveAgent.usesProviderQuota) ? ((model.backendIDs.contains(account.id) || model.providerSessionIDs.contains(account.id)) ? L10n.text("Refresh") : L10n.text("Connect")) : L10n.text("Details")) {
+                if !account.effectiveAgent.supportsQuota { model.open(account) }
+                else if account.usesCodexDesktop || account.effectiveAgent.usesProviderQuota { model.refreshQuota(account) }
                 else { model.quotaAccountID = account.id }
             }
             .font(theme.font(size: 10, weight: .semibold)).buttonStyle(ThemedPlainButtonStyle())
             .foregroundColor(palette.accent)
             .disabled(model.launchingIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
             Menu {
-                if account.effectiveAgent.supportsCodexQuota { Button(L10n.text("Details")) { model.quotaAccountID = account.id } }
+                if account.effectiveAgent.supportsQuota { Button(L10n.text("Details")) { model.quotaAccountID = account.id } }
                 Button(account.effectiveAgent.openTitle) { model.open(account) }
                 Button(L10n.text("Edit profile…")) { model.editor = AccountEditor(account: account) }
                 Button(L10n.text("Close account session…")) { model.accountToClose = account }

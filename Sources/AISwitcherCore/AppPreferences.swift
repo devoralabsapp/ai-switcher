@@ -81,6 +81,7 @@ public struct ThemeColors: Equatable, Sendable {
 }
 
 public struct AppPreferences: Equatable, Sendable {
+    public var providerExecutables: [String: String] = [:]
     public var language: AppLanguage
     public var theme: AppTheme
     public var quotaOnlyMode: Bool
@@ -118,7 +119,7 @@ public struct AppPreferencesStore {
             defaults.removeObject(forKey: "ui.workspaceLayoutBeforeQuotaOnly")
             defaults.set(true, forKey: "ui.quotaOnlyCardsMigration")
         }
-        return AppPreferences(language: defaults.string(forKey: "ui.language").flatMap(AppLanguage.init(rawValue:)) ?? .vietnamese,
+        var loaded = AppPreferences(language: defaults.string(forKey: "ui.language").flatMap(AppLanguage.init(rawValue:)) ?? .vietnamese,
                        theme: defaults.string(forKey: "ui.theme").flatMap(AppTheme.init(rawValue:)) ?? .light,
                        quotaOnlyMode: defaults.bool(forKey: "ui.quotaOnlyMode"),
                        workspaceLayout: defaults.string(forKey: "ui.workspaceLayout").flatMap(WorkspaceLayout.init(rawValue:)) ?? .cards,
@@ -128,8 +129,11 @@ public struct AppPreferencesStore {
                            threshold: defaults.object(forKey: "quotaAlerts.threshold") as? Int ?? 20,
                            notifyRecovery: defaults.object(forKey: "quotaAlerts.recovery") as? Bool ?? true),
                        agentFilter: defaults.string(forKey: "ui.agentFilter").flatMap(AIAgent.init(rawValue:)))
+        loaded.providerExecutables = defaults.dictionary(forKey: "quota.providerExecutables") as? [String: String] ?? [:]
+        return loaded
     }
     public func save(_ value: AppPreferences) {
+        defaults.set(value.providerExecutables, forKey: "quota.providerExecutables")
         defaults.set(value.language.rawValue, forKey: "ui.language")
         defaults.set(value.theme.rawValue, forKey: "ui.theme")
         defaults.set(value.quotaOnlyMode, forKey: "ui.quotaOnlyMode")

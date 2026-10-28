@@ -55,6 +55,7 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var defaultAction: AccountAction?
     public var connectOnStartup: Bool?
     public var agent: AIAgent?
+    public var providerQuotaConnection: CodexConnection?
 
     public var effectiveAgent: AIAgent { agent ?? .chatgpt }
     public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent == .claude ? launchMode ?? .browser : effectiveAgent.isSharedApplication ? .desktop : .browser }
@@ -64,7 +65,7 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var effectiveDefaultAction: AccountAction { usesCodexDesktop ? defaultAction ?? .openDesktop : .openDesktop }
     public var automaticallyConnects: Bool { usesCodexDesktop && connectOnStartup == true }
     public var displayedCodexConnection: CodexConnection? {
-        effectiveAgent.supportsCodexQuota ? (effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection) : nil
+        effectiveAgent.supportsCodexQuota ? (effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection) : (effectiveAgent.usesProviderQuota ? providerQuotaConnection : nil)
     }
 
     public init(id: UUID = UUID(), name: String, emailHint: String = "", browser: BrowserKind = .chrome,

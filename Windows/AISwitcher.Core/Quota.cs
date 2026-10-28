@@ -4,7 +4,7 @@ namespace AISwitcher.Core;
 public sealed record Identity(string? Email, string? PlanType, string? AccountId = null) {
     public bool Matches(Identity other) => AccountId is { Length: >0 } ? AccountId == other.AccountId : !string.IsNullOrWhiteSpace(Email) && string.Equals(Email, other.Email, StringComparison.OrdinalIgnoreCase);
 }
-public sealed record QuotaWindow(double? UsedPercent, int? WindowDurationMins, long? ResetsAt) {
+public sealed record QuotaWindow(double? UsedPercent, int? WindowDurationMins, long? ResetsAt, double? RemainingAmount = null) {
     public double? Remaining => UsedPercent is double x && double.IsFinite(x) ? Math.Clamp(100 - x, 0, 100) : null;
     public DateTimeOffset? Reset => ResetsAt is long value && value is >= -62135596800 and <= 253402300799 ? DateTimeOffset.FromUnixTimeSeconds(value) : null;
     public bool Expired(DateTimeOffset now) => Reset.HasValue && Reset <= now;

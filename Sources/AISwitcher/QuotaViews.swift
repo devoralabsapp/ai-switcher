@@ -2,6 +2,57 @@ import SwiftUI
 import AISwitcherCore
 
 struct QuotaSummaryView: View {
+    @ObservedObject var model: AppModel
+    let account: Account
+    var body: some View {
+        if account.effectiveAgent.usesProviderQuota { ProviderQuotaSummaryView(model: model, account: account) }
+        else { CodexQuotaSummaryView(model: model, account: account) }
+    }
+}
+
+struct ProviderQuotaSummaryView: View {
+    @Environment(\.appTheme) private var theme
+    @ObservedObject var model: AppModel
+    let account: Account
+    var details = false
+    private var palette: ThemePalette { ThemePalette(theme: theme) }
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            VStack(alignment: .leading, spacing: 10) {
+                Label(L10n.format("%@ quota", account.effectiveAgent.name), systemImage: "gauge").font(theme.font(size: 12, weight: .semibold))
+                if let value = account.providerQuotaConnection, let quota = value.quota {
+                    Text(value.identity.email ?? L10n.text("Shared application sign-in")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
+                    ForEach(quota.limits.buckets, id: \.id) { bucket in
+                        Text(bucket.value.limitName ?? bucket.id).font(theme.font(size: 10, weight: .semibold))
+                        QuotaBucketView(bucket: bucket.value, now: context.date, compact: !details, stale: quota.isStale(at: context.date) || model.quotaErrors[account.id] != nil)
+                    }
+                    Text(model.quotaErrors[account.id] != nil ? L10n.text("Refresh failed · previously read data") : quota.isStale(at: context.date) ? L10n.text("Stale data · refresh needed") : L10n.format("Last read: %@", L10n.dateTime(quota.fetchedAt)))
+                        .font(theme.font(size: 9)).foregroundColor(palette.secondary)
+                } else {
+                    Text(L10n.text("Connect the official CLI session to read subscription quota. No model prompt is sent."))
+                        .font(theme.font(size: 11)).foregroundColor(palette.secondary)
+                }
+                if let error = model.quotaErrors[account.id] { Text(error.localizedDescription).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
+                if model.quotaBusyIDs.contains(account.id) {
+                    HStack { ProgressView().controlSize(.mini); Button(L10n.text("Cancel")) { model.cancelProviderConnection(account) }.buttonStyle(ThemedPlainButtonStyle()) }
+                } else {
+                    Button(model.providerSessionIDs.contains(account.id) ? L10n.text("Refresh quota") : L10n.text("Connect account session")) { model.providerSessionIDs.contains(account.id) ? model.refreshQuota(account) : model.connectSession(account) }
+                        .buttonStyle(PrimaryButtonStyle(compact: true))
+                }
+                if details || account.providerQuotaConnection == nil || model.quotaErrors[account.id] != nil {
+                    Button(L10n.text("Sign in with official CLI…")) { model.signInProvider(account) }.disabled(model.quotaBusyIDs.contains(account.id))
+                    Link(L10n.text("Install official CLI…"), destination: URL(string: account.effectiveAgent == .claude ? "https://code.claude.com/docs/en/quickstart" : "https://antigravity.google/docs/getting-started")!)
+                    Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }
+                    Text(account.effectiveAgent.supportDetail).font(theme.font(size: 10)).foregroundColor(palette.secondary)
+                }
+                if !details { Button(L10n.text("Details")) { model.quotaAccountID = account.id }.buttonStyle(ThemedPlainButtonStyle()) }
+                if model.providerSessionIDs.contains(account.id) { Button(L10n.text("Disconnect")) { model.closeSession(account) }.buttonStyle(ThemedPlainButtonStyle()) }
+            }.padding(12).background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: theme.radius(9)))
+        }
+    }
+}
+
+struct CodexQuotaSummaryView: View {
     @Environment(\.appTheme) private var appearanceTheme
     private var palette: ThemePalette { ThemePalette(theme: appearanceTheme) }
     @ObservedObject var model: AppModel
@@ -97,10 +148,7 @@ private struct QuotaBucketView: View {
             }
             if let window = bucket.primary { windowView(window) }
             if let window = bucket.secondary { windowView(window) }
-            if bucket.rateLimitReachedType != nil {
-                Text(L10n.text("Codex reports a quota or workspace limit has been reached."))
-                    .font(appearanceTheme.font(size: 10)).foregroundColor(.orange)
-            }
+
         }
     }
 
@@ -112,16 +160,16 @@ private struct QuotaBucketView: View {
             HStack {
                 Text(window.durationLabel).foregroundColor(palette.secondary)
                 Spacer()
-                Text(remaining.map { L10n.format("%@%% remaining", String(describing: $0.formatted(.number.precision(.fractionLength(0...1)).locale(L10n.locale)))) } ?? L10n.text("No data yet"))
+                Text(remaining.map { L10n.format("%@%% remaining", String(describing: $0.formatted(.number.precision(.fractionLength(0...1)).locale(L10n.locale)))) } ?? (!expired ? window.remainingAmount.map { L10n.format("%@ remaining", $0.formatted()) } : nil) ?? L10n.text("No data yet"))
                     .fontWeight(.semibold).foregroundColor(color)
             }.font(appearanceTheme.font(size: compact ? 10 : 12))
-            GeometryReader { geometry in
+            if remaining != nil { GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule().fill(appearanceTheme.isPlayfulRetro ? palette.surface : palette.line)
                     Capsule().fill(color).frame(width: geometry.size.width * CGFloat((remaining ?? 0) / 100))
                 }
             }.frame(height: appearanceTheme.isPlayfulRetro ? (compact ? 8 : 12) : (compact ? 4 : 6))
-                .retroOutline(radius: 100, shadow: false).accessibilityHidden(true)
+                .retroOutline(radius: 100, shadow: false).accessibilityHidden(true) }
             if expired {
                 Text(L10n.text("Reset time reached · refresh needed")).font(appearanceTheme.font(size: compact ? 9 : 11)).foregroundColor(.orange)
             } else if let date = window.resetDate {
@@ -153,7 +201,7 @@ struct QuotaDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(L10n.text("Codex quota")).font(appearanceTheme.font(size: 23, weight: .semibold))
+                    Text(account?.effectiveAgent.usesProviderQuota == true ? L10n.format("%@ quota", account!.effectiveAgent.name) : L10n.text("Codex quota")).font(appearanceTheme.font(size: 23, weight: .semibold))
                     Text(account?.name ?? L10n.text("Profile")).font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
                 }
                 Spacer()
@@ -163,6 +211,8 @@ struct QuotaDetailView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if let pending = model.pendingConnections[accountID] {
                         confirmation(pending)
+                    } else if let account, account.effectiveAgent.usesProviderQuota {
+                        ProviderQuotaSummaryView(model: model, account: account, details: true)
                     } else if let account, !account.effectiveAgent.supportsCodexQuota {
                         Text(account.effectiveAgent.supportDetail).font(appearanceTheme.font(size: 12)).foregroundColor(palette.secondary)
                         Button(account.effectiveAgent.openTitle) { model.open(account) }

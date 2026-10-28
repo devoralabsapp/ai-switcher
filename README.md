@@ -41,6 +41,15 @@ Download the standalone **Windows x64 EXE** (Intel/AMD) or **ARM64 EXE** from [R
 
 This is an independent, **experimental** utility. Desktop profiles rely on internal launch settings in the new ChatGPT app with Chat, Work, and Codex (`com.openai.codex`). ChatGPT Classic is not supported. OpenAI does not document this as a supported multi-account interface; an app update can break compatibility. AI Switcher checks for the required mechanisms and reports an error if they are absent. It never silently falls back to Chrome.
 
+## Claude and Antigravity quota
+
+Use **Connect account session** on an account card, its **⋯** menu, quota details, or the tray/menu bar. This reads subscription quota without opening Desktop. Connected providers refresh every five minutes; **Disconnect / Close account session** stops refresh and retains sign-in and the last snapshot. Disconnected cached data becomes stale. A missing or failed response never becomes a fake 100% quota.
+
+- **Claude:** requires Claude Code CLI **2.1.270+**. AI Switcher detects supported installed native CLIs; choose an executable in quota details (macOS) or Settings → Application executables → Claude Code CLI (Windows) when needed. Use **Sign in with official CLI…** once per profile, then Connect. The CLI's `auth login` opens its normal browser sign-in. This is separate from Claude Desktop/browser login; the profile email, when supplied, must match. Quota uses read-only `initialize` / `get_usage` control requests with `skip_behaviors`, no model prompt, hooks, MCP tools or transcript scanning. This newer CLI control interface is experimental and may require compatibility updates.
+- **Antigravity:** requires official Antigravity CLI **1.1.12+** (`agy` or `antigravity`), separately installed. Choose its executable when automatic discovery cannot find it. Its noninteractive `/usage` command returns subscription buckets without a model turn. Sign-in uses the CLI's normal interactive login and the shared application account. AI Switcher cannot verify its email from the quota response or isolate multiple Antigravity sign-ins. Only one shared entry is supported.
+
+CLI login opens a terminal explicitly when requested; background reads do not. API keys, costs, token totals and generated text are never substituted for subscription quota. Old CLI versions are rejected before requesting usage. Account names and notes stay user labels; Claude returns its verified email, while Antigravity is labeled **Shared application sign-in**. Errors preserve earlier data and mark it stale. Absolute remaining amounts are displayed without inventing a percentage. The redundant exhausted-quota sentence was removed; 0% and reset times remain visible.
+
 ## AI agents and sidebar filters
 
 Choose **AI agent** when adding an account. The agent is fixed after creation to keep stored sign-ins associated with the same service. Existing profiles without an agent field remain ChatGPT profiles.
@@ -48,13 +57,13 @@ Choose **AI agent** when adding an account. The agent is fixed after creation to
 | Agent | Launch and sign-in | Quota and background connection |
 | --- | --- | --- |
 | ChatGPT | Separate Desktop session or browser profile | Codex quota; Desktop background connections |
-| Claude | Separate Desktop or Chromium browser profile for each account | Unavailable |
+| Claude | Separate Desktop or Chromium browser profile for each account | Subscription limits via separate Claude Code CLI sign-in |
 | Gemini, Perplexity, DeepSeek | Separate Chromium browser profile for each account | Unavailable |
-| Antigravity | Installed app; its existing shared sign-in | Unavailable |
+| Antigravity | Installed app; its existing shared sign-in | Quota via official CLI; shared sign-in |
 
 Use **AI AGENTS** in the left sidebar to select an agent or **All agents**. Counts show saved entries, and the selected agent persists across relaunch. Favorites, recents, and search combine with the agent filter. Adding an account while filtered preselects that agent.
 
-For browser agents, install Chrome, Edge, or Brave, add a profile, then sign in directly on the service's website. Each profile keeps its own browser storage. Antigravity supports one launcher entry: AI Switcher does not isolate or switch its accounts, close the shared app, or read its quota. Agent capabilities are reflected consistently in cards, the quota overview, menu bar, and diagnostics. Quota-only mode and notifications apply to ChatGPT/Codex.
+For browser agents, install Chrome, Edge, or Brave, add a profile, then sign in directly on the service's website. Each profile keeps its own browser storage. Antigravity supports one launcher entry: AI Switcher does not isolate or switch its accounts, or close the shared app. Agent capabilities are reflected consistently in cards, the quota overview, menu bar, and diagnostics. Quota-only mode supports ChatGPT, Claude, and Antigravity. Notifications require a verified quota identity; Antigravity quota currently has no account identity in its response.
 
 ![AI agents with the Playful Retro theme and fictional profiles](docs/assets/ai-agents-en.png)
 
@@ -62,7 +71,7 @@ For browser agents, install Chrome, Edge, or Brave, add a profile, then sign in 
 
 Install the official Claude app in `/Applications/Claude.app` or `~/Applications/Claude.app`. Add a Claude profile and choose **Claude Desktop**. Each profile starts the unmodified installed app with its own `--user-data-dir` and a separate Claude Code configuration directory. Sign in directly inside each profile window. Opening the profile again focuses its exact process; **Close account session…** closes only that profile and keeps its data.
 
-Existing Claude browser profiles retain browser mode and their saved browser sign-in. To change one, close its session, choose **Edit profile → Claude Desktop**, then sign in once in the new Desktop window. Browser and Desktop logins remain separate, and switching back retains the browser data. Claude does not support quota, background connection, startup connection, or shared ChatGPT Work history in AI Switcher.
+Existing Claude browser profiles retain browser mode and their saved browser sign-in. To change one, close its session, choose **Edit profile → Claude Desktop**, then sign in once in the new Desktop window. Browser and Desktop logins remain separate, and switching back retains the browser data. Claude quota uses a separate Claude Code CLI sign-in in the same private profile. Startup connection and shared ChatGPT Work history remain ChatGPT features.
 
 <details>
 <summary>Claude Desktop profile setup (fictional data)</summary>

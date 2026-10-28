@@ -52,6 +52,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var connectingSessionIDs: Set<UUID> = []
     @Published private(set) var closingSessionIDs: Set<UUID> = []
     @Published private(set) var desktopWindowIDs: Set<UUID> = []
+    @Published private(set) var providerSessionIDs: Set<UUID> = []
+    private lazy var providerQuota = ProviderQuotaService(repository: repository)
     @Published private(set) var backendIDs: Set<UUID> = []
     @Published private(set) var runningIDs: Set<UUID> = []
     @Published private(set) var loadFailed = false
@@ -276,7 +278,7 @@ final class AppModel: ObservableObject {
     }
 
     func defaultAction(for account: Account) -> AccountAction {
-        account.usesCodexDesktop && preferences.quotaOnlyMode ? .connectSession : account.effectiveDefaultAction
+        (account.usesCodexDesktop || account.effectiveAgent.usesProviderQuota) && preferences.quotaOnlyMode ? .connectSession : account.effectiveDefaultAction
     }
 
     func performDefaultAction(_ account: Account) {
@@ -315,6 +317,8 @@ final class AppModel: ObservableObject {
         if connectingSessionIDs.contains(account.id) { return .connecting }
         if closingSessionIDs.contains(account.id) { return .closing }
         if launchingIDs.contains(account.id) { return .opening }
+        if providerSessionIDs.contains(account.id) && !desktopWindowIDs.contains(account.id) { return .background }
+        if (quotaErrors[account.id] as? ProviderQuotaError) == .signedOut { return .needsSignIn }
         if account.effectiveAgent.isSharedApplication {
             return agentApplications.isRunning(account.effectiveAgent) ? .applicationRunning : .disconnected
         }
@@ -388,6 +392,7 @@ final class AppModel: ObservableObject {
                     }
                     quotaErrors[account.id] = nil
                 }
+                edited.providerQuotaConnection = updated.accounts[index].providerQuotaConnection
                 edited.codexConnection = updated.accounts[index].codexConnection
                 edited.desktopCodexConnection = updated.accounts[index].desktopCodexConnection
                 edited.lastOpenedAt = updated.accounts[index].lastOpenedAt
@@ -431,13 +436,17 @@ final class AppModel: ObservableObject {
     }
 
     func canConnectSession(_ account: Account) -> Bool {
-        !shuttingDown && !loadFailed && account.usesCodexDesktop
+        if account.effectiveAgent.usesProviderQuota {
+            return !shuttingDown && !loadFailed && !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id) && !providerSessionIDs.contains(account.id) && accounts.contains(where: { $0.id == account.id })
+        }
+        return !shuttingDown && !loadFailed && account.usesCodexDesktop
             && accounts.contains(where: { $0.id == account.id })
             && !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id)
             && !hasRunningSession(account) && !desktopQuotaSource.hasDesktopWindow(account)
     }
 
     func connectSession(_ account: Account, reportFailure: Bool = true) {
+        if account.effectiveAgent.usesProviderQuota { refreshProviderQuota(account, connect: true); return }
         guard !shuttingDown, !loadFailed, let current = accounts.first(where: { $0.id == account.id }),
               canConnectSession(current) else { return }
         launchingIDs.insert(account.id)
@@ -463,6 +472,10 @@ final class AppModel: ObservableObject {
     }
 
     func closeSession(_ account: Account) {
+        if account.effectiveAgent.usesProviderQuota {
+            providerSessionIDs.remove(account.id);quotaTasks[account.id]?.cancel();Task { await providerQuota.stop(account.id) }
+            if account.effectiveAgent.isSharedApplication { refreshRunning(); return }
+        }
         guard !account.effectiveAgent.isSharedApplication else { return }
         guard !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
         launchingIDs.insert(account.id)
@@ -502,6 +515,7 @@ final class AppModel: ObservableObject {
     }
 
     func hasRunningSession(_ account: Account) -> Bool {
+        if providerSessionIDs.contains(account.id) { return true }
         if account.effectiveAgent.isSharedApplication { return false }
         return (account.effectiveAgent == .claude && claudeDesktopService.runningApplication(for: account) != nil)
             || browserService.runningApplication(for: account) != nil
@@ -540,6 +554,7 @@ final class AppModel: ObservableObject {
     }
 
     func connectQuota(_ account: Account) {
+        if account.effectiveAgent.usesProviderQuota { connectSession(account); return }
         guard account.effectiveAgent.supportsCodexQuota else { return }
         if account.effectiveLaunchMode == .desktop { connectSession(account); return }
         guard connectingID == nil, !quotaBusyIDs.contains(account.id), quotaCleanupTasks[account.id] == nil,
@@ -606,6 +621,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshQuota(_ account: Account) {
+        if account.effectiveAgent.usesProviderQuota { refreshProviderQuota(account); return }
         guard account.effectiveAgent.supportsCodexQuota else { return }
         guard !quotaBusyIDs.contains(account.id) else { return }
         if account.effectiveLaunchMode == .desktop {
@@ -624,6 +640,35 @@ final class AppModel: ObservableObject {
                 await notifyQuota(account.id)
             } catch {
                 quotaErrors[account.id] = error
+            }
+        }
+    }
+
+    func setProviderExecutable(_ agent: AIAgent) {
+        let picker = NSOpenPanel();picker.canChooseDirectories = false;picker.allowsMultipleSelection = false
+        if picker.runModal() == .OK, let url = picker.url {
+            var next = preferences;next.providerExecutables[agent.rawValue] = url.path;preferencesStore.save(next);preferences = next
+        }
+    }
+    func signInProvider(_ account: Account) {
+        do { try providerQuota.signIn(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]) }
+        catch { showError(error) }
+    }
+    func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();Task { await providerQuota.stop(account.id) } }
+    private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
+        guard !shuttingDown, !loadFailed, !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
+        if connect && !canConnectSession(account) { return }
+        quotaBusyIDs.insert(account.id);if connect { connectingSessionIDs.insert(account.id) };lastQuotaChecks[account.id] = Date()
+        quotaTasks[account.id] = Task {
+            defer { connectingSessionIDs.remove(account.id);finishQuotaOperation(account.id);refreshRunning() }
+            do {
+                let value = try await providerQuota.read(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]);try Task.checkCancellation()
+                guard let index = snapshot.accounts.firstIndex(where: { $0.id == account.id }) else { return }
+                var updated = snapshot;updated.accounts[index].providerQuotaConnection = value;try persist(updated)
+                providerSessionIDs.insert(account.id);quotaErrors[account.id] = nil;await notifyQuota(account.id)
+            } catch is CancellationError {} catch {
+                quotaErrors[account.id] = error
+                if (error as? ProviderQuotaError) == .identityChanged || (error as? ProviderQuotaError) == .signedOut { providerSessionIDs.remove(account.id) }
             }
         }
     }
@@ -684,6 +729,7 @@ final class AppModel: ObservableObject {
         guard quotaSweepTask == nil else { return }
         quotaSweepTask = Task {
             defer { quotaSweepTask = nil }
+            for account in accounts where providerSessionIDs.contains(account.id) { refreshProviderQuota(account) }
             for id in accounts.filter({ $0.effectiveAgent.supportsCodexQuota && ($0.usesCodexDesktop ? desktopQuotaSource.hasBackend($0.id) : $0.codexConnection != nil) }).map(\.id) {
                 if Task.isCancelled { return }
                 guard let account = accounts.first(where: { $0.id == id }) else { continue }
@@ -705,7 +751,9 @@ final class AppModel: ObservableObject {
         await startupTask?.value
         if let id = connectingID { cancelQuotaConnection(id) }
         for id in Array(pendingConnections.keys) { cancelQuotaConnection(id) }
-        for task in quotaTasks.values { task.cancel() }
+        let pendingQuotaTasks = Array(quotaTasks.values)
+        for task in pendingQuotaTasks { task.cancel() }
+        for task in pendingQuotaTasks { await task.value }
         for client in desktopQuotaClients.values { await client.stop() }
         await quotaService.stopAll()
         for task in quotaCleanupTasks.values { await task.value }

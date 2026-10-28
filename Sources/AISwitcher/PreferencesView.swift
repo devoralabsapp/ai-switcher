@@ -46,7 +46,7 @@ struct PreferencesView: View {
                 }.accessibilityIdentifier("workspaceLayout")
                 Toggle(L10n.text("Quota-only mode"), isOn: Binding(get: { model.preferences.quotaOnlyMode }, set: { model.setQuotaOnlyMode($0) }))
                     .toggleStyle(.switch).font(appearanceTheme.font(size: 13, weight: .semibold))
-                Text(L10n.text("Quota-only mode applies to ChatGPT Desktop profiles. Other agents keep their normal open action."))
+                Text(L10n.text("Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action."))
                     .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)
                 Text(L10n.text("Choose startup connections and the default action for each account in Edit profile."))
                     .font(appearanceTheme.font(size: 11)).foregroundColor(palette.secondary)

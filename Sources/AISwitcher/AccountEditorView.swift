@@ -124,7 +124,7 @@ struct AccountEditorView: View {
                             Text(L10n.text("Browser")).tag(LaunchMode.browser)
                         }.pickerStyle(.segmented).labelsHidden().disabled(modeLocked)
                             .accessibilityIdentifier("claudeLaunchMode")
-                        Text(L10n.text("Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota is not available."))
+                        Text(L10n.text("Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota uses a separate Claude Code sign-in."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                         if modeLocked {
                             Text(L10n.text("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."))

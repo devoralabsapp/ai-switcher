@@ -64,7 +64,7 @@ internal sealed class BackendService {
         try{await client.StartAsync(ct);return client;}catch{await client.DisposeAsync();throw;}
     }
     public async Task<Connection> ReadAsync(Account account,CancellationToken ct=default){
-        if(!account.Agent.HasQuota())throw new AppError("Quota is not available for this agent.");
+        if(account.Agent!=Agent.Chatgpt)throw new AppError("Quota is not available for this agent.");
         if(account.UsesCodexDesktop){
             if(!IsActive(account)&&platform.Owned(account)==null)await StartAsync(account,ct);
             if(sessions.TryGetValue(account.Id,out var session)&&session.Ready&&session.Transport.IsRunning&&session.Client.IsConnected)return await session.Client.ReadQuotaAsync(ct);

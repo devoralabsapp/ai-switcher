@@ -66,7 +66,6 @@
 "Codex quota" = "Codex quota";
 "Codex quota connected" = "Codex quota connected";
 "Codex quota…" = "Codex quota…";
-"Codex reports a quota or workspace limit has been reached." = "Codex reports a quota or workspace limit has been reached.";
 "Codex returned an invalid sign-in URL. The connection was stopped." = "Codex returned an invalid sign-in URL. The connection was stopped.";
 "Codex sign-in did not finish. Try again or cancel the connection." = "Codex sign-in did not finish. Try again or cancel the connection.";
 "Connect" = "Connect";
@@ -496,3 +495,39 @@
 "MERRY & BRIGHT" = "MERRY & BRIGHT";
 "A LUCKY NEW START" = "A LUCKY NEW START";
 "BLACK FRIDAY EDITION" = "BLACK FRIDAY EDITION";
+
+"%@ quota" = "%@ quota";
+
+"%@ remaining" = "%@ remaining";
+
+"Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate." = "Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate.";
+
+"Antigravity quota uses the official CLI and shared application sign-in." = "Antigravity quota uses the official CLI and shared application sign-in.";
+
+"Connect the official CLI session to read subscription quota. No model prompt is sent." = "Connect the official CLI session to read subscription quota. No model prompt is sent.";
+
+"Sign in with official CLI…" = "Sign in with official CLI…";
+
+"Install official CLI…" = "Install official CLI…";
+
+"Choose quota CLI…" = "Choose quota CLI…";
+
+"Install Claude Code or Antigravity CLI, or select its executable in quota settings." = "Install Claude Code or Antigravity CLI, or select its executable in quota settings.";
+
+"Update the provider CLI to read quota without starting a model turn." = "Update the provider CLI to read quota without starting a model turn.";
+
+"The provider session is signed out. Choose Sign in with official CLI, then connect again." = "The provider session is signed out. Choose Sign in with official CLI, then connect again.";
+
+"The provider has not returned subscription quota. Previous data is kept." = "The provider has not returned subscription quota. Previous data is kept.";
+
+"The provider quota response could not be verified. Previous data is kept." = "The provider quota response could not be verified. Previous data is kept.";
+
+"The provider account does not match this profile. Verify the email before reconnecting." = "The provider account does not match this profile. Verify the email before reconnecting.";
+
+"The provider quota request timed out. Try again." = "The provider quota request timed out. Try again.";
+
+"ChatGPT reads Codex quota from its Desktop session. Claude reads subscription limits through a separate Claude Code sign-in per profile. Antigravity reads quota through its official CLI with shared application sign-in. Connect reads quota without opening Desktop or sending a model prompt." = "ChatGPT reads Codex quota from its Desktop session. Claude reads subscription limits through a separate Claude Code sign-in per profile. Antigravity reads quota through its official CLI with shared application sign-in. Connect reads quota without opening Desktop or sending a model prompt.";
+
+"Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota uses a separate Claude Code sign-in." = "Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota uses a separate Claude Code sign-in.";
+
+"Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action." = "Quota-only mode connects ChatGPT, Claude, and Antigravity without opening Desktop. Other agents keep their normal open action.";

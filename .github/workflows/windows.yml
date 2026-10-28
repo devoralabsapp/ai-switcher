@@ -56,7 +56,9 @@ jobs:
           $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
           $output=Join-Path $PWD 'artifacts/previews'
           $app=Join-Path $PWD 'artifacts/win-x64/AISwitcher.exe'
-          $p=Start-Process $app -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$output`"",'--ui-smoke-test') -PassThru
+          $fixture=Join-Path $PWD 'AISwitcher.Tests/bin/Release/net10.0/provider-fixture.exe'
+          Copy-Item (Join-Path $PWD 'AISwitcher.Tests/bin/Release/net10.0/AISwitcher.Tests.exe') $fixture
+          $p=Start-Process $app -ArgumentList @('--provider-cli-executable',"`"$fixture`"",'--data-dir',"`"$root`"",'--output',"`"$output`"",'--ui-smoke-test') -PassThru
           if(-not $p.WaitForExit(180000)){$p.Kill();throw 'UI smoke timed out'}
           if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'ui-smoke-error.txt');throw 'UI smoke failed'}
           Get-Content (Join-Path $output 'ui-smoke-result.txt')

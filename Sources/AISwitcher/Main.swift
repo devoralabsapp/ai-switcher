@@ -167,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let account = account(from: sender) { model.refreshQuota(account) }
     }
     @objc func showAccountQuota(_ sender: NSMenuItem) {
-        guard let account = account(from: sender), account.effectiveAgent.supportsCodexQuota else { return }
+        guard let account = account(from: sender), account.effectiveAgent.supportsQuota else { return }
         showDashboard()
         model.quotaAccountID = account.id
     }

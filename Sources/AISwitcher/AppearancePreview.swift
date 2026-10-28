@@ -52,13 +52,15 @@ enum AppearancePreview {
                            to: output.appendingPathComponent("notifications-\(theme.rawValue)-\(L10n.language.rawValue).png"))
             if theme == .light || theme.isPlayfulRetro || theme == .terminalBlack {
                 let agentData = data.appendingPathComponent("agents")
-                let agentAccounts = [accounts[0],
+                var agentAccounts = [accounts[0],
                     Account(name: "Claude Work", emailHint: "work@example.test", color: .peach, isFavorite: true, launchMode: .desktop, agent: .claude),
                     Account(name: "Claude Personal", emailHint: "personal@example.test", color: .rose, agent: .claude),
                     Account(name: "Gemini Study", color: .blue, agent: .gemini),
                     Account(name: "Antigravity", color: .violet, agent: .antigravity),
                     Account(name: "Perplexity Research", color: .mint, agent: .perplexity),
                     Account(name: "DeepSeek Work", color: .gold, agent: .deepseek)]
+                agentAccounts[1].providerQuotaConnection = try ProviderQuotaParser.parse(Data(#"{"rate_limits":{"five_hour":{"utilization":100},"seven_day":{"utilization":35}}}"#.utf8), agent: .claude, identity: .init(email: "work@example.test", planType: nil))
+                agentAccounts[4].providerQuotaConnection = try ProviderQuotaParser.parse(Data(#"{"num_turns":0,"command":{"name":"usage","data":{"groups":[{"buckets":[{"id":"demo-pro","name":"Demo Pro","remaining_fraction":0.75}]}]}}}"#.utf8), agent: .antigravity, identity: .init(email: nil, planType: nil))
                 try ProfileRepository(root: agentData).save(.init(accounts: agentAccounts))
                 let agents = AppModel(root: agentData, preferences: .init(language: L10n.language, theme: theme), monitoring: false)
                 try renderView(Dashboard(model: agents), size: NSSize(width: 1120, height: 1000),
