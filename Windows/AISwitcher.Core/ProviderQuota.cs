@@ -11,6 +11,12 @@ public static class ProviderQuota {
         var match=Regex.Match(version,@"(?:^|\s)(\d+)\.(\d+)\.(\d+)(?:\s|$|[-+])");if(!match.Success)return false;
         return Version.TryParse($"{match.Groups[1]}.{match.Groups[2]}.{match.Groups[3]}",out var value)&&value >= (agent==Agent.Claude?new Version(2,1,270):new Version(1,1,12));
     }
+    public static string ControlRequest(string id,string subtype){
+        if(subtype is not ("initialize" or "get_usage"))throw new AppError(Invalid);
+        Dictionary<string,object> request=new(){{"subtype",subtype}};if(subtype=="get_usage")request["skip_behaviors"]=true;
+        // JSONL must stay compact on Windows too; stripping LF from pretty CRLF JSON leaves record separators.
+        return JsonSerializer.Serialize(new{type="control_request",request_id=id,request});
+    }
     public const string Unavailable="The provider has not returned subscription quota. Previous data is kept.";
     public const string Invalid="The provider quota response could not be verified. Previous data is kept.";
     public const string SignedOut="The provider session is signed out. Choose Sign in with official CLI, then connect again.";

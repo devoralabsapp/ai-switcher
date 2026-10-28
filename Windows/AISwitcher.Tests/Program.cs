@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using AISwitcher.Core;
 
-if(Path.GetFileNameWithoutExtension(Environment.ProcessPath)?.StartsWith("provider-fixture",StringComparison.Ordinal)==true){await ProviderFixture(args);return 0;}
+if(Path.GetFileNameWithoutExtension(Environment.ProcessPath)?.StartsWith("provider-fixture",StringComparison.Ordinal)==true){try{await ProviderFixture(args);}catch(Exception e){File.AppendAllText("provider-fixture-trace.txt",e.ToString()+Environment.NewLine);throw;}return 0;}
 if(args.FirstOrDefault()=="--rpc-fixture") { await Fixture(args.ElementAtOrDefault(1)??"normal");return 0; }
 var tests=new List<(string Name,Func<Task> Run)>();
 void Test(string name,Action action)=>tests.Add((name,()=>{action();return Task.CompletedTask;}));
@@ -71,6 +71,7 @@ Test("Claude token counters, nulls, booleans and unavailable responses cannot fa
 Test("Antigravity exact noninteractive usage envelope normalizes fractions and zero",()=>{var c=Provider("""{"num_turns":0,"command":{"name":"usage","data":{"groups":[{"buckets":[{"id":"pro","window":"weekly","remaining_fraction":0},{"id":"flash5","remaining_fraction":0.75}]}]}}}""",Agent.Antigravity);Equal(c.Quota!.Limits.Buckets.Count(),2);Equal(c.Quota.Limits.Buckets.First(x=>x.Key=="pro").Value.Primary!.Remaining,0d);Equal(c.Quota.Limits.Buckets.First(x=>x.Key=="flash5").Value.Primary!.WindowDurationMins,null);Equal(c.Identity.Email,null);});
 Test("Absolute remaining amounts never invent percentages",()=>{var c=Provider("""{"quota":{"images":{"remaining_amount":12,"reset_in_seconds":100},"off":{"disabled":true,"remaining_fraction":1}}}""",Agent.Antigravity);Equal(c.Quota!.Limits.Buckets.Count(),1);var w=c.Quota.Limits.Buckets.First().Value.Primary!;Equal(w.Remaining,null);Equal(w.RemainingAmount,12d);Equal(w.ResetsAt,now.ToUnixTimeSeconds()+100);});
 Test("Antigravity rejects model turns, raw text, invalid fractions and booleans",()=>{foreach(var json in new[]{"""{"quota":{"a":{"remaining_fraction":-1}}}""","""{"quota":{"a":{"remaining_fraction":1.1}}}""","""{"quota":{"a":{"remaining_fraction":true}}}""","""{"num_turns":1,"command":{"name":"usage","data":{"groups":[]}}}""","""{"response":"Remaining 90%"}"""})Throws(()=>Provider(json,Agent.Antigravity));});
+Test("Claude control requests are single-line JSON on every platform and cannot send prompts",()=>{foreach(var type in new[]{"initialize","get_usage"}){var text=ProviderQuota.ControlRequest("fixture",type);True(!text.Contains('\r')&&!text.Contains('\n'));var root=JsonDocument.Parse(text).RootElement;Equal(root.GetProperty("type").GetString(),"control_request");Equal(root.GetProperty("request").GetProperty("subtype").GetString(),type);if(type=="get_usage")True(root.GetProperty("request").GetProperty("skip_behaviors").GetBoolean());}Throws(()=>ProviderQuota.ControlRequest("fixture","user"));});
 Test("Old provider CLIs are blocked before sending quota slash commands",()=>{True(ProviderQuota.Accepts("2.1.295 (Claude Code)",Agent.Claude));True(!ProviderQuota.Accepts("2.1.269 (Claude Code)",Agent.Claude));True(!ProviderQuota.Accepts("Other CLI 2.1.295",Agent.Claude));True(ProviderQuota.Accepts("1.4.9\n",Agent.Antigravity));True(!ProviderQuota.Accepts("1.1.10",Agent.Antigravity));});
 Test("Provider quota persists separately and old metadata remains compatible",()=>{var repo=Repo("provider-metadata");var a=Profile(agent:Agent.Claude)with{ProviderConnection=Provider("""{"rate_limits":{"five_hour":{"utilization":23}}}""",Agent.Claude)};repo.Save(new(){Accounts=[a]});Equal(repo.Load().Accounts[0].Connection!.Quota!.Limits.Buckets.First().Value.Primary!.Remaining,77d);True(!a.UsesCodexDesktop);Equal(JsonSerializer.Deserialize<Account>("""{"name":"Old","agent":"claude"}""",Json.Options)!.ProviderConnection,null);});
 
@@ -84,6 +85,7 @@ static async Task Fixture(string mode){int identities=0;while(await Console.In.R
 }}
 
 static async Task ProviderFixture(string[] args){
+    File.AppendAllText("provider-fixture-trace.txt",string.Join(" ",args)+Environment.NewLine);
     var config=Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
     if(args.SequenceEqual(new[]{"--version"})){Console.WriteLine(config==null?"1.4.9":"2.1.295 (Claude Code)");return;}
     if(args.SequenceEqual(new[]{"auth","status"})){Console.WriteLine(JsonSerializer.Serialize(new{loggedIn=true,authMethod="claude.ai",email="fixture@example.test",configDirectory=config}));return;}

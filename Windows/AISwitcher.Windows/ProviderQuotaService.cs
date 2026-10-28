@@ -50,8 +50,8 @@ internal sealed class ProviderQuotaService {
         }finally{commands[a.Id].Remove(process);await StopProcess(process);}
     }
     async Task<JsonElement> Control(Process process,string subtype,CancellationToken ct){
-        var id=Guid.NewGuid().ToString("N");var request=new Dictionary<string,object>{{"subtype",subtype}};if(subtype=="get_usage")request["skip_behaviors"]=true;
-        await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(new{type="control_request",request_id=id,request},Json.Options).Replace("\n",""));await process.StandardInput.FlushAsync(ct);
+        var id=Guid.NewGuid().ToString("N");
+        await process.StandardInput.WriteLineAsync(ProviderQuota.ControlRequest(id,subtype));await process.StandardInput.FlushAsync(ct);
         for(var i=0;i<64;i++){
             var line=await process.StandardOutput.ReadLineAsync(ct);if(line==null||line.Length>1048576)throw new AppError(ProviderQuota.Invalid);
             using var doc=JsonDocument.Parse(line);var root=doc.RootElement;var response=ProviderQuota.Get(root,"response");
