@@ -644,6 +644,13 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func hasProviderCLI(_ account: Account) -> Bool {
+        // Signed-out sessions still have an installed CLI. Keep setup available for incompatible selections.
+        if let error = quotaErrors[account.id] as? ProviderQuotaError,
+           error == .cliOutdated || error == .invalidExecutable { return false }
+        return (try? providerQuota.executable(account.effectiveAgent, override: preferences.providerExecutables[account.effectiveAgent.rawValue])) != nil
+    }
+
     func setProviderExecutable(_ agent: AIAgent) {
         let picker = NSOpenPanel();picker.canChooseDirectories = false;picker.allowsMultipleSelection = false
         picker.treatsFilePackagesAsDirectories = true
@@ -651,6 +658,10 @@ final class AppModel: ObservableObject {
         if picker.runModal() == .OK, let url = picker.url {
             guard ProviderQuotaService.isCLIExecutable(url, agent: agent) else { showError(ProviderQuotaError.invalidExecutable);return }
             var next = preferences;next.providerExecutables[agent.rawValue] = url.path;preferencesStore.save(next);preferences = next
+            for account in accounts where account.effectiveAgent == agent {
+                if let error = quotaErrors[account.id] as? ProviderQuotaError,
+                   error == .cliMissing || error == .cliOutdated || error == .invalidExecutable { quotaErrors[account.id] = nil }
+            }
         }
     }
     func signInProvider(_ account: Account) {

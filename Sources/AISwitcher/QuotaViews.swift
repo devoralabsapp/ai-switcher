@@ -41,8 +41,10 @@ struct ProviderQuotaSummaryView: View {
                 }
                 if details || account.providerQuotaConnection == nil || model.quotaErrors[account.id] != nil {
                     Button(L10n.text("Sign in with official CLI…")) { model.signInProvider(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11)).disabled(model.quotaBusyIDs.contains(account.id))
-                    Link(L10n.text("Install official CLI…"), destination: URL(string: account.effectiveAgent == .claude ? "https://code.claude.com/docs/en/quickstart" : "https://antigravity.google/docs/getting-started")!).font(theme.font(size: 11))
-                    Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
+                    if !model.hasProviderCLI(account) {
+                        Link(L10n.text("Install official CLI…"), destination: URL(string: account.effectiveAgent == .claude ? "https://code.claude.com/docs/en/quickstart" : "https://antigravity.google/docs/getting-started")!).font(theme.font(size: 11))
+                        Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
+                    }
                     Text(account.effectiveAgent.supportDetail).font(theme.font(size: 10)).foregroundColor(palette.secondary)
                 }
                 if !details { Button(L10n.text("Details")) { model.quotaAccountID = account.id }.buttonStyle(ThemedPlainButtonStyle()) }
