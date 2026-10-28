@@ -92,3 +92,7 @@ The core suite also runs on macOS/Linux with .NET 10. The WPF app can be cross-c
 ### Seasonal themes
 
 Halloween, Christmas, Tet Holiday and Black Friday each have a distinct palette, original vector artwork in the dashboard banner and theme picker, sidebar identity and matching account-card ribbons. The shared artwork and palettes render on macOS and Windows. Decorations are static, ignore pointer input and keep all existing account actions and data unchanged. Select a theme in Appearance & Language; selections persist after relaunch.
+
+### Install missing Claude / Antigravity CLI
+
+Click **Install & connect** on the provider card or in Details. AI Switcher opens PowerShell and runs the official native installer with ordinary user permissions, then checks the CLI version and attempts to connect. The action is hidden when a CLI is already detected. No npm or app restart is needed. Install failures remain visible in PowerShell and the app. Background refresh never installs software; quitting the manager leaves the visible installer running. Installation and provider sign-in are separate steps.

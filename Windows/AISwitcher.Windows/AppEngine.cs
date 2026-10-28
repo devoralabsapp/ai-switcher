@@ -17,6 +17,9 @@ internal sealed class AppEngine {
     public Localizer L=>new(Preferences.Language);
     public Theme Theme=>Themes.Get(Preferences.Theme);
     public HashSet<Guid> Busy { get; }=[];
+    public HashSet<Agent> InstallingProviders { get; }=[];
+    public Dictionary<Agent,string> InstallationErrors { get; }=[];
+    readonly Dictionary<Agent,Task> installationTasks=[];
     public Dictionary<Guid,string> Errors { get; }=[];
     public Dictionary<Guid,DateTimeOffset> Checks { get; }=[];
     public bool ReadOnly { get; private set; }
@@ -49,7 +52,7 @@ internal sealed class AppEngine {
     }
     public string Message(Exception error)=>error is System.ComponentModel.Win32Exception native?L.Format("Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.",native.NativeErrorCode):error is UnauthorizedAccessException?L["Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions."]:L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
     public bool Running(Account a)=>Provider.Connected.Contains(a.Id)|| (a.Agent.IsShared()?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.Owned(a)!=null||Backend.IsActive(a));
-    public bool CanConnect(Account a)=>(a.UsesCodexDesktop||a.Agent.ProviderQuota())&&!ReadOnly&&!StoppingAll&&!Busy.Contains(a.Id)&&!(a.Agent.ProviderQuota()?Provider.Connected.Contains(a.Id):Running(a));
+    public bool CanConnect(Account a)=>(a.UsesCodexDesktop||a.Agent.ProviderQuota())&&!ReadOnly&&!StoppingAll&&!InstallingProviders.Contains(a.Agent)&&!Busy.Contains(a.Id)&&!(a.Agent.ProviderQuota()?Provider.Connected.Contains(a.Id):Running(a));
     public string Status(Account a)=>StoppingAll||Busy.Contains(a.Id)?L[Platform.PreparingRuntime.Contains(a.Id)?a.Agent==Agent.Claude?"Preparing Claude for the first launch…":"Preparing ChatGPT for the first launch…":"Working…"]:Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]?L["Sign-in required"]:Provider.Connected.Contains(a.Id)?L["Running in background"]:a.Agent.IsShared()?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Platform.Owned(a)!=null||Backend.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
     public bool DefaultConnect(Account a)=>(a.UsesCodexDesktop||a.Agent.ProviderQuota())&&(Preferences.QuotaOnlyMode||a.DefaultAction==DefaultAction.ConnectSession);
     public string DefaultTitle(Account a)=>DefaultConnect(a)?Running(a)?L["Refresh quota"]:L["Connect account session"]:L.Format("Open %@",a.Agent.Name());
@@ -75,7 +78,7 @@ internal sealed class AppEngine {
     public void ToggleFavorite(Account a)=>SaveAccount(a with{IsFavorite=!a.IsFavorite});
     Account Current(Account a)=>Snapshot.Accounts.First(x=>x.Id==a.Id);
     async Task Run(Account a,Func<CancellationToken,Task> action,bool report=true){
-        if(ReadOnly||StoppingAll||lifetime.IsCancellationRequested||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!Busy.Add(a.Id))return;
+        if(ReadOnly||StoppingAll||InstallingProviders.Contains(a.Agent)||lifetime.IsCancellationRequested||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!Busy.Add(a.Id))return;
         using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var operation=new Operation(cancellation,new(TaskCreationOptions.RunContinuationsAsynchronously));operations[a.Id]=operation;Notify();
         try{Errors.Remove(a.Id);await action(cancellation.Token);}catch(OperationCanceledException)when(!cancellation.IsCancellationRequested){Errors[a.Id]=L["The provider quota request timed out. Try again."];}catch(OperationCanceledException){}catch(Exception error){Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
         finally{Busy.Remove(a.Id);try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}operations.Remove(a.Id);operation.Completion.TrySetResult();Notify();}
@@ -87,6 +90,33 @@ internal sealed class AppEngine {
         if(backgroundError!=null)Errors[a.Id]=backgroundError;
     });
     public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;return Run(a,async ct=>{if(!a.Agent.ProviderQuota())await Backend.StartAsync(a,ct);await ReadAsync(a,ct);},report);}
+    public Task InstallProviderAsync(Account a){
+        if(!a.Agent.ProviderQuota()||ReadOnly||StoppingAll||lifetime.IsCancellationRequested||Busy.Contains(a.Id)||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!InstallingProviders.Add(a.Agent))return Task.CompletedTask;
+        InstallationErrors.Remove(a.Agent);Notify();
+        // Yield in the worker before completing so its task is registered before cleanup.
+        var task=Install();installationTasks[a.Agent]=task;return task;
+        async Task Install(){
+            await Task.Yield();
+            try{
+                var job=new ProviderCLIInstallation(a.Agent,Repository.Root);job.Prepare();
+                try{
+                    var shell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"WindowsPowerShell","v1.0","powershell.exe");
+                    var info=new System.Diagnostics.ProcessStartInfo(shell){UseShellExecute=true};
+                    foreach(var arg in new[]{"-NoProfile","-NoExit","-ExecutionPolicy","Bypass","-File",job.Launcher})info.ArgumentList.Add(arg);
+                    using var launched=System.Diagnostics.Process.Start(info)??throw new AppError(ProviderCLIInstallation.Failed);
+                    await job.WaitAsync(lifetime.Token);
+                    using var verification=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);verification.CancelAfter(TimeSpan.FromSeconds(30));
+                    var executable=await Provider.VerifyInstalledAsync(a,verification.Token);
+                    Preferences.Executables[ProviderQuotaService.Key(a.Agent)]=executable;Repository.SavePreferences(Preferences);
+                    foreach(var profile in Snapshot.Accounts.Where(x=>x.Agent==a.Agent))Errors.Remove(profile.Id);
+                    InstallingProviders.Remove(a.Agent);Notify();
+                    var current=Snapshot.Accounts.FirstOrDefault(x=>x.Id==a.Id);if(current!=null)await ConnectAsync(current);
+                }finally{job.CleanupIfFinished();}
+            }catch(OperationCanceledException)when(lifetime.IsCancellationRequested){}
+            catch(Exception error){InstallationErrors[a.Agent]=error is OperationCanceledException?L[ProviderCLIInstallation.Failed]:Message(error);}
+            finally{InstallingProviders.Remove(a.Agent);installationTasks.Remove(a.Agent);Notify();}
+        }
+    }
     public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,ct=>ReadAsync(a,ct),report);}
     async Task ReadAsync(Account a,CancellationToken ct){
         Checks[a.Id]=DateTimeOffset.UtcNow;
@@ -147,6 +177,6 @@ internal sealed class AppEngine {
             if(failed)Error?.Invoke(L["Some account processes could not be stopped. Check Session diagnostics and try again."]);
         }finally{StoppingAll=false;Backend.Suspended=false;try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}Notify();}
     }
-    public async Task ShutdownAsync(){lifetime.Cancel();await Backend.ShutdownAsync();foreach(var a in Snapshot.Accounts)await Provider.DisconnectAsync(a);}
+    public async Task ShutdownAsync(){lifetime.Cancel();await Task.WhenAll(installationTasks.Values.ToArray());await Backend.ShutdownAsync();foreach(var a in Snapshot.Accounts)await Provider.DisconnectAsync(a);}
     public void Shutdown(){_=ShutdownAsync();}
 }

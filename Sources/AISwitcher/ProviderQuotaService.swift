@@ -80,7 +80,7 @@ final class ProviderQuotaService {
             await c.stop();commands[account.id] = nil;return data
         } catch { await c.stop();commands[account.id] = nil;throw error }
     }
-    private func verifiedExecutable(_ account: Account, override: String?) async throws -> URL {
+    func verifiedExecutable(_ account: Account, override: String?) async throws -> URL {
         let exe = try executable(account.effectiveAgent, override: override)
         let version = String(decoding: try await run(account, exe: exe, arguments: ["--version"]), as: UTF8.self)
         guard ProviderCLIConfiguration.accepts(version: version, agent: account.effectiveAgent) else { throw ProviderQuotaError.cliOutdated }

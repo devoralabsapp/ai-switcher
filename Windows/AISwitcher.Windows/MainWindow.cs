@@ -105,7 +105,17 @@ internal sealed partial class MainWindow:Window {
         menu.Items.Add(new Separator());Item(L["Edit profile…"],()=>EditAccount(a),!busy);Item(L["Close account session…"],()=>Close(a),!busy&&(!a.Agent.IsShared()||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a));
         Item(L["Delete local profile…"],()=>Delete(a),!busy);return menu;
     }
-    StackPanel QuotaSummary(Account a,bool all){var stack=new StackPanel();var connection=a.Connection;var now=DateTimeOffset.UtcNow;
+    void AddProviderInstallation(StackPanel stack,Account a,Action? refresh=null){
+        if(engine.InstallingProviders.Contains(a.Agent)){
+            stack.Children.Add(Text(L.Format("Installing %@ CLI…",a.Agent.Name()),12,true));
+            stack.Children.Add(Text(L["Installation is running in PowerShell. This app will connect when it finishes."],11,false,T.Secondary));
+        }else if(!engine.Provider.HasExecutable(a.Agent)){
+            var install=Button(L["Install & connect"],async()=>{var pending=engine.InstallProviderAsync(a);refresh?.Invoke();await pending;refresh?.Invoke();},true,T);
+            install.IsEnabled=!engine.ReadOnly&&!engine.Busy.Contains(a.Id);stack.Children.Add(install);
+        }
+        if(engine.InstallationErrors.TryGetValue(a.Agent,out var message))stack.Children.Add(Text(message,11,false,T.Secondary));
+    }
+    StackPanel QuotaSummary(Account a,bool all){var stack=new StackPanel();if(!all&&a.Agent.ProviderQuota())AddProviderInstallation(stack,a);var connection=a.Connection;var now=DateTimeOffset.UtcNow;
         if(connection==null){stack.Children.Add(Text(L[a.Agent.ProviderQuota()?"Connect the official CLI session to read subscription quota. No model prompt is sent.":a.UsesCodexDesktop?"For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window.":"No data yet"],11,false,T.Secondary));if(a.UsesCodexDesktop||a.Agent.ProviderQuota()){var connect=Button(L["Connect account session"],()=>_=engine.ConnectAsync(a));connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);}return stack;}
         stack.Children.Add(Text("◉ "+(a.Agent.ProviderQuota()?L.Format("%@ quota",a.Agent.Name()):L["Codex quota"]),12,true));stack.Children.Add(Space(8));stack.Children.Add(Text(connection.Identity.Email??L[a.Agent.ProviderQuota()?"Shared application sign-in":"Verified Codex identity"],11,false,T.Secondary));
         if(connection.Quota is not { } quota){stack.Children.Add(Text(L["No data yet"]));return stack;}

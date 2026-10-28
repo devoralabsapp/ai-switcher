@@ -75,6 +75,36 @@ Test("Claude control requests are single-line JSON on every platform and cannot 
 Test("Old provider CLIs are blocked before sending quota slash commands",()=>{True(ProviderQuota.Accepts("2.1.295 (Claude Code)",Agent.Claude));True(!ProviderQuota.Accepts("2.1.269 (Claude Code)",Agent.Claude));True(!ProviderQuota.Accepts("Other CLI 2.1.295",Agent.Claude));True(ProviderQuota.Accepts("1.4.9\n",Agent.Antigravity));True(!ProviderQuota.Accepts("1.1.10",Agent.Antigravity));});
 Test("Provider quota persists separately and old metadata remains compatible",()=>{var repo=Repo("provider-metadata");var a=Profile(agent:Agent.Claude)with{ProviderConnection=Provider("""{"rate_limits":{"five_hour":{"utilization":23}}}""",Agent.Claude)};repo.Save(new(){Accounts=[a]});Equal(repo.Load().Accounts[0].Connection!.Quota!.Limits.Buckets.First().Value.Primary!.Remaining,77d);True(!a.UsesCodexDesktop);Equal(JsonSerializer.Deserialize<Account>("""{"name":"Old","agent":"claude"}""",Json.Options)!.ProviderConnection,null);});
 
+Test("CLI installation uses fixed official sources and quoted private launchers",()=>{
+    foreach(var agent in new[]{Agent.Claude,Agent.Antigravity}){
+        var job=new ProviderCLIInstallation(agent,Path.Combine(root,"Installer ' quoted"));job.Prepare();
+        Equal(job.InstallerUrl.AbsoluteUri,agent==Agent.Claude?"https://claude.ai/install.ps1":"https://antigravity.google/cli/install.ps1");
+        True(File.Exists(job.Launcher));True(job.Script.Contains("-NoProfile -NonInteractive"));True(!job.Script.Contains("-Verb RunAs"));True(!job.Script.Contains("npm install"));True(!job.Script.Contains("auth login"));
+    }
+    Throws(()=>new ProviderCLIInstallation(Agent.Chatgpt,root));
+});
+AsyncTest("CLI completion requires zero exit and cancellation preserves unfinished install",async()=>{
+    var job=new ProviderCLIInstallation(Agent.Claude,root);job.Prepare();
+    using(var ct=new CancellationTokenSource()){ct.Cancel();await Fails(()=>job.WaitAsync(ct.Token));}
+    job.CleanupIfFinished();True(File.Exists(job.Launcher));
+    foreach(var text in new[]{"27","bad",new string('0',33)}){File.WriteAllText(job.Result,text);await Fails(()=>job.WaitAsync(CancellationToken.None,TimeSpan.FromSeconds(1)));}
+    File.WriteAllText(job.Result,"0");await job.WaitAsync(CancellationToken.None);job.CleanupIfFinished();True(!Directory.Exists(job.DirectoryPath));
+});
+AsyncTest("PowerShell launcher records installer and download errors without installing real software",async()=>{
+    if(!OperatingSystem.IsWindows())return;
+    foreach(var scenario in new[]{"success","download-error","installer-error"}){
+        var job=new ProviderCLIInstallation(Agent.Antigravity,Path.Combine(root,"Installer ' quoted"));job.Prepare();
+        var fixture=Path.Combine(job.DirectoryPath,"fixture.ps1");File.WriteAllText(fixture,scenario=="installer-error"?"exit 27":"exit 0");
+        static string Literal(string value)=>"'"+value.Replace("'","''")+"'";
+        var lines=job.Script.Split('\n').Select(line=>line.Contains("Invoke-WebRequest -UseBasicParsing")?scenario=="download-error"?"throw 'Fixture download error'":"Copy-Item -LiteralPath "+Literal(fixture)+" -Destination "+Literal(Path.Combine(job.DirectoryPath,"official-installer.ps1")):line);
+        File.WriteAllText(job.Launcher,string.Join('\n',lines),new System.Text.UTF8Encoding(true));
+        var shell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"WindowsPowerShell","v1.0","powershell.exe");
+        var info=new ProcessStartInfo(shell){UseShellExecute=false,CreateNoWindow=true};foreach(var arg in new[]{"-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",job.Launcher})info.ArgumentList.Add(arg);
+        using var process=Process.Start(info)!;using var ct=new CancellationTokenSource(TimeSpan.FromSeconds(30));await process.WaitForExitAsync(ct.Token);
+        if(scenario=="success")await job.WaitAsync(ct.Token);else await Fails(()=>job.WaitAsync(ct.Token));job.CleanupIfFinished();
+    }
+});
+
 var failures=0;try{foreach(var test in tests){try{await test.Run();Console.WriteLine("PASS "+test.Name);}catch(Exception e){failures++;Console.Error.WriteLine("FAIL "+test.Name+": "+e);}}}finally{Repository.DeleteTree(root);}Console.WriteLine($"{tests.Count-failures}/{tests.Count} tests passed");return failures==0?0:1;
 
 static async Task Fixture(string mode){int identities=0;while(await Console.In.ReadLineAsync() is string line){var data=JsonDocument.Parse(line).RootElement;var method=data.GetProperty("method").GetString();if(!data.TryGetProperty("id",out var id))continue;object? result=new{};

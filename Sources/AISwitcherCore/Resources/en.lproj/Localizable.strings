@@ -555,3 +555,13 @@
 "Sign in — %@" = "Sign in — %@";
 
 "The background connection will close. Your login is kept." = "The background connection will close. Your login is kept.";
+
+// Official CLI installation
+"Install & connect" = "Install & connect";
+"Installing %@ CLI…" = "Installing %@ CLI…";
+"Installation is running in Terminal. This app will connect when it finishes." = "Installation is running in Terminal. This app will connect when it finishes.";
+"Installation is running in PowerShell. This app will connect when it finishes." = "Installation is running in PowerShell. This app will connect when it finishes.";
+"CLI installation failed. Check the installer window, then try again." = "CLI installation failed. Check the installer window, then try again.";
+"Installation is still running. Finish it in the installer window, then click Connect again." = "Installation is still running. Finish it in the installer window, then click Connect again.";
+"CLI installation is available for Claude and Antigravity." = "CLI installation is available for Claude and Antigravity.";
+"Installation finished. Return to AI Switcher." = "Installation finished. Return to AI Switcher.";

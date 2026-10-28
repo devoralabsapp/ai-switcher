@@ -26,7 +26,7 @@ struct ProviderQuotaSummaryView: View {
                     if busy { ProgressView().controlSize(.mini) }
                     else if account.providerQuotaConnection != nil || model.providerSessionIDs.contains(account.id) {
                         Button { model.providerSessionIDs.contains(account.id) ? model.refreshQuota(account) : model.connectSession(account) } label: { Image(systemName: "arrow.clockwise").font(theme.font(size: 11)) }
-                            .buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("Refresh quota"))
+                            .buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("Refresh quota")).disabled(model.installingProviderAgents.contains(account.effectiveAgent))
                     }
                 }
                 if let connection = account.providerQuotaConnection {
@@ -40,7 +40,7 @@ struct ProviderQuotaSummaryView: View {
                         Text(model.providerSignInIDs.contains(account.id) ? L10n.text("Waiting for sign-in…") : L10n.text("Connect to view quota."))
                             .font(theme.font(size: 10)).foregroundColor(palette.secondary)
                         Spacer()
-                        if !busy { Button(L10n.text("Connect")) { model.connectSession(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent) }
+                        if !busy && !model.installingProviderAgents.contains(account.effectiveAgent) { Button(L10n.text("Connect")) { model.connectSession(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent) }
                     }
                 }
                 if busy {
@@ -50,10 +50,14 @@ struct ProviderQuotaSummaryView: View {
                     }
                 }
                 if let error = model.quotaErrors[account.id] { Text(error.localizedDescription).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
-                if account.effectiveAgent != .claude && !model.hasProviderCLI(account) {
-                    Link(L10n.text("Install official CLI…"), destination: URL(string: "https://github.com/google-antigravity/antigravity-cli#installation")!).font(theme.font(size: 11))
+                if model.installingProviderAgents.contains(account.effectiveAgent) {
+                    HStack { ProgressView().controlSize(.mini);Text(L10n.format("Installing %@ CLI…", account.effectiveAgent.name)).font(theme.font(size: 11)) }
+                    Text(L10n.text("Installation is running in Terminal. This app will connect when it finishes.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
+                } else if !model.hasProviderCLI(account) {
+                    Button(L10n.text("Install & connect")) { model.installProviderCLI(account) }.buttonStyle(PrimaryButtonStyle(compact: true)).disabled(busy)
                     Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
                 }
+                if let message = model.providerInstallationErrors[account.effectiveAgent] { Text(message).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
             }.padding(12).background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: theme.radius(9)))
                 .retroOutline(radius: theme.radius(9), shadow: false)
         }

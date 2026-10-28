@@ -56,6 +56,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var providerSignInIDs: Set<UUID> = []
     private lazy var providerQuota = ProviderQuotaService(repository: repository)
     private lazy var claudeWeb = ClaudeWebAccountService(repository: repository)
+    @Published private(set) var installingProviderAgents: Set<AIAgent> = []
+    @Published private(set) var providerInstallationErrors: [AIAgent: String] = [:]
+    private var providerInstallationTasks: [AIAgent: Task<Void, Never>] = [:]
     private var webCleanupTasks: [UUID: Task<Void, Never>] = [:]
     @Published private(set) var backendIDs: Set<UUID> = []
     @Published private(set) var runningIDs: Set<UUID> = []
@@ -440,7 +443,7 @@ final class AppModel: ObservableObject {
 
     func canConnectSession(_ account: Account) -> Bool {
         if account.effectiveAgent.usesProviderQuota {
-            return !shuttingDown && !loadFailed && !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id) && !providerSessionIDs.contains(account.id) && accounts.contains(where: { $0.id == account.id })
+            return !shuttingDown && !loadFailed && !installingProviderAgents.contains(account.effectiveAgent) && !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id) && !providerSessionIDs.contains(account.id) && accounts.contains(where: { $0.id == account.id })
         }
         return !shuttingDown && !loadFailed && account.usesCodexDesktop
             && accounts.contains(where: { $0.id == account.id })
@@ -655,13 +658,41 @@ final class AppModel: ObservableObject {
         return (try? providerQuota.executable(account.effectiveAgent, override: preferences.providerExecutables[account.effectiveAgent.rawValue])) != nil
     }
 
+    func installProviderCLI(_ account: Account) {
+        let agent = account.effectiveAgent
+        guard agent.usesProviderQuota, !shuttingDown, !loadFailed, !installingProviderAgents.contains(agent),
+              !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
+        installingProviderAgents.insert(agent);providerInstallationErrors[agent] = nil
+        providerInstallationTasks[agent] = Task {
+            defer { installingProviderAgents.remove(agent);providerInstallationTasks[agent] = nil }
+            do {
+                let job = try ProviderCLIInstallation(agent: agent, root: repository.root)
+                try job.prepare()
+                defer { job.cleanupIfFinished() }
+                try Task.checkCancellation()
+                let config = NSWorkspace.OpenConfiguration();config.activates = true
+                _ = try await NSWorkspace.shared.open([job.launcher], withApplicationAt: URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"), configuration: config)
+                try await job.wait()
+                let cli = try await providerQuota.verifiedExecutable(account, override: nil)
+                try Task.checkCancellation()
+                guard !shuttingDown else { return }
+                var next = preferences;next.providerExecutables[agent.rawValue] = cli.path;preferencesStore.save(next);preferences = next
+                for profile in accounts where profile.effectiveAgent == agent { quotaErrors[profile.id] = nil }
+                installingProviderAgents.remove(agent)
+                if let current = accounts.first(where: { $0.id == account.id }) { connectSession(current) }
+            } catch is CancellationError {} catch {
+                providerInstallationErrors[agent] = error.localizedDescription
+            }
+        }
+    }
+
     func setProviderExecutable(_ agent: AIAgent) {
         let picker = NSOpenPanel();picker.canChooseDirectories = false;picker.allowsMultipleSelection = false
         picker.treatsFilePackagesAsDirectories = true
         picker.message = L10n.text("Choose the CLI executable, not the Desktop application.")
         if picker.runModal() == .OK, let url = picker.url {
             guard ProviderQuotaService.isCLIExecutable(url, agent: agent) else { showError(ProviderQuotaError.invalidExecutable);return }
-            var next = preferences;next.providerExecutables[agent.rawValue] = url.path;preferencesStore.save(next);preferences = next
+            var next = preferences;next.providerExecutables[agent.rawValue] = url.path;preferencesStore.save(next);preferences = next;providerInstallationErrors[agent] = nil
             for account in accounts where account.effectiveAgent == agent {
                 if let error = quotaErrors[account.id] as? ProviderQuotaError,
                    error == .cliMissing || error == .cliOutdated || error == .invalidExecutable { quotaErrors[account.id] = nil }
@@ -670,7 +701,7 @@ final class AppModel: ObservableObject {
     }
     func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id);Task { await providerQuota.stop(account.id) } }
     private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
-        guard !shuttingDown, !loadFailed, !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
+        guard !shuttingDown, !loadFailed, !installingProviderAgents.contains(account.effectiveAgent), !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
         if connect && !canConnectSession(account) { return }
         quotaBusyIDs.insert(account.id);if connect { connectingSessionIDs.insert(account.id) };lastQuotaChecks[account.id] = Date()
         quotaTasks[account.id] = Task {
@@ -793,6 +824,9 @@ final class AppModel: ObservableObject {
         await startupTask?.value
         if let id = connectingID { cancelQuotaConnection(id) }
         for id in Array(pendingConnections.keys) { cancelQuotaConnection(id) }
+        let installationTasks = Array(providerInstallationTasks.values)
+        for task in installationTasks { task.cancel() }
+        for task in installationTasks { await task.value }
         let pendingQuotaTasks = Array(quotaTasks.values)
         for task in pendingQuotaTasks { task.cancel() }
         claudeWeb.stopAll()

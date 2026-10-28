@@ -61,6 +61,12 @@ internal sealed class ProviderQuotaService {
         }
         throw new AppError(ProviderQuota.Invalid);
     }
+    public bool HasExecutable(Agent agent){try{_ = Executable(agent);return true;}catch(AppError){return false;}}
+    public async Task<string> VerifyInstalledAsync(Account account,CancellationToken ct){
+        var executable=Executable(account.Agent);var version=await Run(account,executable,["--version"],ct);
+        if(!ProviderQuota.Accepts(version,account.Agent))throw new AppError(ProviderQuota.Outdated);
+        return executable;
+    }
     public async Task<Connection> ReadAsync(Account account,CancellationToken ct){
         using var deadline=CancellationTokenSource.CreateLinkedTokenSource(ct);deadline.CancelAfter(TimeSpan.FromSeconds(45));ct=deadline.Token;
         var executable=Executable(account.Agent);var version=await Run(account,executable,["--version"],ct);

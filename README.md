@@ -56,6 +56,14 @@ On macOS, choose the CLI executable itself, not `Claude.app` or `Antigravity.app
 
 On macOS, Connect opens a terminal only when authentication is required, then reads quota after sign-in. Background reads never open login. API keys, costs, token totals and generated text are never substituted for subscription quota. Old CLI versions are rejected before requesting usage. Account names and notes stay user labels; Claude returns its verified email, while Antigravity shows its saved Google email when available, otherwise **Shared application sign-in**. Errors preserve earlier data and mark it stale. Absolute remaining amounts are displayed without inventing a percentage. The redundant exhausted-quota sentence was removed; 0% and reset times remain visible.
 
+## Install missing provider CLIs
+
+When Claude Code CLI or Antigravity CLI is missing, click **Install & connect** on its quota card or in Details. AI Switcher opens Terminal (macOS) or PowerShell (Windows) and automatically runs the vendor’s official native installer. No npm, Homebrew or administrator elevation is required by this flow. The app waits for a successful installer exit, rediscovers and checks the CLI version, then attempts the account connection without an app restart. The install action disappears once the CLI is found. Downloads and installer errors remain visible in that window; the app also shows failures instead of claiming the CLI is ready.
+
+Installation runs only after that button is clicked; background refresh/startup never installs software. Vendor installers may configure the user’s shell PATH and native auto-updater as part of their normal setup. The app keeps watching for up to ten minutes. Closing AI Switcher stops watching, while the visible installer may continue; reconnect after it finishes. A finished job’s launcher and exit marker are cleaned up. Installation does not sign in or change plans. Claude Free on macOS can keep using its separate web connection without installing Claude Code.
+
+Official sources: [Claude native installation](https://code.claude.com/docs/en/setup#install-claude-code), [Antigravity installation](https://github.com/google-antigravity/antigravity-cli#installation). macOS launches `https://claude.ai/install.sh` (latest channel) or `https://antigravity.google/cli/install.sh`; Windows uses the corresponding official `install.ps1`. No account secrets are embedded in the launchers.
+
 ## AI agents and sidebar filters
 
 Choose **AI agent** when adding an account. The agent is fixed after creation to keep stored sign-ins associated with the same service. Existing profiles without an agent field remain ChatGPT profiles.
