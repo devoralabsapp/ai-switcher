@@ -61,11 +61,14 @@ enum AppearancePreview {
                     Account(name: "DeepSeek Work", color: .gold, agent: .deepseek)]
                 agentAccounts[1].providerQuotaConnection = try ProviderQuotaParser.parse(Data(#"{"rate_limits":{"five_hour":{"utilization":100},"seven_day":{"utilization":35}}}"#.utf8), agent: .claude, identity: .init(email: "work@example.test", planType: nil))
                 agentAccounts[2].providerQuotaConnection = CodexConnection(identity: .init(email: "personal@example.test", planType: "free"), identityFetchedAt: Date(), providerSessionKind: "claudeWeb")
-                agentAccounts[4].providerQuotaConnection = try ProviderQuotaParser.parse(Data(#"{"num_turns":0,"command":{"name":"usage","data":{"groups":[{"name":"Gemini models","buckets":[{"id":"gemini-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.989}]},{"name":"Claude and ChatGPT models","buckets":[{"id":"3p-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.913}]}]}}}"#.utf8), agent: .antigravity, identity: .init(email: nil, planType: nil))
+                agentAccounts[4].providerQuotaConnection = try ProviderQuotaParser.parse(Data(#"{"num_turns":0,"command":{"name":"usage","data":{"groups":[{"name":"Gemini models","buckets":[{"id":"gemini-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.989}]},{"name":"Claude and ChatGPT models","buckets":[{"id":"3p-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.913}]}]}}}"#.utf8), agent: .antigravity, identity: .init(email: "gravity@example.test", planType: nil))
                 try ProfileRepository(root: agentData).save(.init(accounts: agentAccounts))
                 let agents = AppModel(root: agentData, preferences: .init(language: L10n.language, theme: theme), monitoring: false)
                 try renderView(Dashboard(model: agents), size: NSSize(width: 1120, height: 1000),
                                to: output.appendingPathComponent("agents-\(theme.rawValue)-\(L10n.language.rawValue).png"))
+                try renderView(QuotaDetailView(model: agents, accountID: agentAccounts[4].id).appAppearance(agents.preferences),
+                               size: NSSize(width: 530, height: 660),
+                               to: output.appendingPathComponent("antigravity-quota-\(theme.rawValue)-\(L10n.language.rawValue).png"))
                 let claude = AppModel(root: agentData, preferences: .init(language: L10n.language, theme: theme, agentFilter: .claude), monitoring: false)
                 try renderView(Dashboard(model: claude), size: NSSize(width: 900, height: 760),
                                to: output.appendingPathComponent("agent-filter-\(theme.rawValue)-\(L10n.language.rawValue).png"))

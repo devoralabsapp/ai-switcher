@@ -6,7 +6,11 @@ import AISwitcherCore
 final class ProviderQuotaService {
     let repository: ProfileRepository
     private var commands: [UUID: ProviderCLICommand] = [:]
-    init(repository: ProfileRepository) { self.repository = repository }
+    private let antigravityIdentityURL: URL
+    init(repository: ProfileRepository, antigravityIdentityURL: URL? = nil) {
+        self.repository = repository
+        self.antigravityIdentityURL = antigravityIdentityURL ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/jetski-standalone-oauth-token")
+    }
     /// App bundles and directories can have execute permission on macOS, but are not CLI files.
     static func isCLIExecutable(_ url: URL, agent: AIAgent) -> Bool {
         let path = url.resolvingSymlinksInPath().standardizedFileURL
@@ -106,8 +110,11 @@ final class ProviderQuotaService {
             let after = try await identity();guard before.matches(after) else { throw ProviderQuotaError.identityChanged }
             return try ProviderQuotaParser.parse(data, agent: .claude, identity: after)
         }
+        let before = AntigravityAccountMetadata.read(at: antigravityIdentityURL)
         let data = try await run(account, exe: exe, arguments: ProviderCLIConfiguration.antigravityArguments, detectSignOut: true)
-        return try ProviderQuotaParser.parse(data, agent: .antigravity, identity: CodexIdentity(email: nil, planType: nil))
+        let after = AntigravityAccountMetadata.read(at: antigravityIdentityURL)
+        let identity = try AntigravityAccountMetadata.consistentIdentity(before: before, after: after, emailHint: account.emailHint)
+        return try ProviderQuotaParser.parse(data, agent: .antigravity, identity: identity)
     }
     func prepareSignInScript(_ account: Account, override: String?) async throws -> URL {
         let exe = try await verifiedExecutable(account, override: override)
