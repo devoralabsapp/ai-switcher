@@ -105,6 +105,7 @@ internal sealed class AppEngine {
                     foreach(var arg in new[]{"-NoProfile","-NoExit","-ExecutionPolicy","Bypass","-File",job.Launcher})info.ArgumentList.Add(arg);
                     using var launched=System.Diagnostics.Process.Start(info)??throw new AppError(ProviderCLIInstallation.Failed);
                     await job.WaitAsync(lifetime.Token);
+                    if(!Snapshot.Accounts.Any(x=>x.Id==a.Id))return;
                     using var verification=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);verification.CancelAfter(TimeSpan.FromSeconds(30));
                     var executable=await Provider.VerifyInstalledAsync(a,verification.Token);
                     Preferences.Executables[ProviderQuotaService.Key(a.Agent)]=executable;Repository.SavePreferences(Preferences);

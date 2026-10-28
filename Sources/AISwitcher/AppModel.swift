@@ -673,7 +673,8 @@ final class AppModel: ObservableObject {
                 let config = NSWorkspace.OpenConfiguration();config.activates = true
                 _ = try await NSWorkspace.shared.open([job.launcher], withApplicationAt: URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"), configuration: config)
                 try await job.wait()
-                let cli = try await providerQuota.verifiedExecutable(account, override: nil)
+                guard let current = accounts.first(where: { $0.id == account.id }) else { return }
+                let cli = try await providerQuota.verifiedExecutable(current, override: nil)
                 try Task.checkCancellation()
                 guard !shuttingDown else { return }
                 var next = preferences;next.providerExecutables[agent.rawValue] = cli.path;preferencesStore.save(next);preferences = next
