@@ -82,7 +82,7 @@ final class ProviderQuotaService {
         guard ProviderCLIConfiguration.accepts(version: version, agent: account.effectiveAgent) else { throw ProviderQuotaError.cliOutdated }
         return exe
     }
-    func read(_ account: Account, override: String?) async throws -> CodexConnection {
+    func read(_ account: Account, override: String?, onIdentity: ((CodexIdentity) throws -> Void)? = nil) async throws -> CodexConnection {
         let exe = try await verifiedExecutable(account, override: override)
         if account.effectiveAgent == .claude {
             func identity() async throws -> CodexIdentity {
@@ -94,6 +94,11 @@ final class ProviderQuotaService {
                 return CodexIdentity(email: email, planType: value["subscriptionType"] as? String)
             }
             let before = try await identity()
+            try onIdentity?(before)
+            if before.planType?.lowercased() == "free" {
+                let after = try await identity();guard before.matches(after) else { throw ProviderQuotaError.identityChanged }
+                return CodexConnection(identity: after, identityFetchedAt: Date())
+            }
             let c = try await command(account, executable: exe, arguments: ProviderCLIConfiguration.claudeArguments)
             let data: Data
             do { _ = try await c.claudeControl("initialize");data = try await c.claudeControl("get_usage");await c.stop();commands[account.id] = nil }

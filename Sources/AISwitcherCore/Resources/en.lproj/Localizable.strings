@@ -539,3 +539,19 @@
 "Connect to view quota." = "Connect to view quota.";
 
 "Sign-in required. Click Connect account session to continue." = "Sign-in required. Click Connect account session to continue.";
+
+"Gemini models" = "Gemini models";
+
+"Claude and ChatGPT models" = "Claude and ChatGPT models";
+
+"No quota data available for this account." = "No quota data available for this account.";
+
+"Sign-in source: Claude web" = "Sign-in source: Claude web";
+
+"Sign in to Claude — %@" = "Sign in to Claude — %@";
+
+"Sign in to Claude" = "Sign in to Claude";
+
+"Sign in — %@" = "Sign in — %@";
+
+"The background connection will close. Your login is kept." = "The background connection will close. Your login is kept.";

@@ -165,7 +165,7 @@ struct QuotaOverviewView: View {
                 Button(account.effectiveAgent.openTitle) { model.open(account) }
                 Button(L10n.text("Edit profile…")) { model.editor = AccountEditor(account: account) }
                 Button(L10n.text("Close account session…")) { model.accountToClose = account }
-                    .disabled(account.effectiveAgent.isSharedApplication || !model.runningIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
+                    .disabled((account.effectiveAgent.isSharedApplication && !model.providerSessionIDs.contains(account.id)) || !model.runningIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
             } label: { Image(systemName: "ellipsis").frame(width: 18, height: 20) }
                 .menuStyle(.borderlessButton).fixedSize().help(L10n.text("Profile options"))
                 .disabled(model.launchingIDs.contains(account.id))

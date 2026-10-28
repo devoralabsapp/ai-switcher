@@ -15,9 +15,29 @@ final class ProviderQuotaTests: XCTestCase {
         XCTAssertEqual(bucket?.primary?.resetsAt, 1893456000)
     }
     func testClaudeNeverTreatsCostTokensOrMissingWindowsAsQuota() {
-        for json in [#"{"session":{"total_cost_usd":10,"total_tokens":100}}"#, #"{"rate_limits_available":false,"rate_limits":{"five_hour":{"utilization":5}}}"#, #"{"rate_limits":{"five_hour":{"utilization":null},"seven_day":{"utilization":true}}}"#] {
+        for json in [#"{"session":{"total_cost_usd":10,"total_tokens":100}}"#, #"{"rate_limits":{"five_hour":{"utilization":null},"seven_day":{"utilization":true}}}"#] {
             XCTAssertThrowsError(try parse(json, .claude))
         }
+    }
+    func testVerifiedClaudeIdentityAndFreePlanSurviveUnavailableQuota() throws {
+        let value = try parse(#"{"subscription_type":"free","rate_limits_available":false,"rate_limits":{"five_hour":{"utilization":5}}}"#, .claude)
+        XCTAssertEqual(value.identity.email, "fixture@example.test")
+        XCTAssertEqual(value.identity.planType, "free")
+        XCTAssertNil(value.quota)
+        XCTAssertNotNil(value.identityFetchedAt)
+        let unknown = try parse(#"{"subscription_type":null,"rate_limits_available":false}"#, .claude)
+        XCTAssertNil(unknown.identity.planType, "Missing plan must never be guessed as Free")
+        XCTAssertThrowsError(try ProviderQuotaParser.parse(Data(#"{"rate_limits_available":false}"#.utf8), agent: .claude, identity: .init(email: nil, planType: nil)))
+    }
+    func testAntigravityKeepsGroupLabelsAndIndependentPercentages() throws {
+        let value = try parse(#"{"num_turns":0,"command":{"name":"usage","data":{"groups":[{"name":"Gemini models","description":"Gemini model family","buckets":[{"id":"gemini-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.989}]},{"name":"Claude and ChatGPT models","description":"Claude and GPT model family","buckets":[{"id":"3p-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.913}]}]}}}"#, .antigravity)
+        let groups = try XCTUnwrap(value.quota?.limits.rateLimitsByLimitId)
+        XCTAssertEqual(groups["gemini-weekly"]?.limitName, "Gemini models")
+        XCTAssertEqual(groups["3p-weekly"]?.limitName, "Claude and ChatGPT models")
+        XCTAssertEqual(groups["gemini-weekly"]?.limitDescription, "Gemini model family")
+        XCTAssertEqual(try XCTUnwrap(groups["gemini-weekly"]?.primary?.remainingPercent), 98.9, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(groups["3p-weekly"]?.primary?.remainingPercent), 91.3, accuracy: 0.001)
+        XCTAssertNotEqual(ProviderQuotaParser.antigravityDisplayTitle(id: "3p-weekly", name: "Weekly Limit Remaining"), ProviderQuotaParser.antigravityDisplayTitle(id: "gemini-weekly", name: "Weekly Limit Remaining"))
     }
     func testAntigravityRealUsageEnvelopeAndZeroRemaining() throws {
         let value = try parse(#"{"num_turns":0,"usage":{"total_tokens":0},"command":{"name":"usage","data":{"groups":[{"name":"Models","buckets":[{"id":"model-five","name":"Pro","window":"weekly","remaining_fraction":0,"reset_time":"2030-01-01T00:00:00Z"},{"id":"flash","name":"Flash","remaining_fraction":0.75}]}]}}}"#, .antigravity)

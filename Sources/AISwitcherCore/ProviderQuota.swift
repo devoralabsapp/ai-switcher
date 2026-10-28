@@ -19,10 +19,23 @@ public enum ProviderQuotaError: LocalizedError, Equatable {
 
 /// Only subscription limits are accepted. Token/cost counters and model text are never quota.
 public enum ProviderQuotaParser {
+    public static func antigravityGroupTitle(_ id: String) -> String? {
+        if id.hasPrefix("gemini-") { return L10n.text("Gemini models") }
+        if id.hasPrefix("3p-") { return L10n.text("Claude and ChatGPT models") }
+        return nil
+    }
+    public static func antigravityDisplayTitle(id: String, name: String?) -> String {
+        if name == nil || name?.lowercased() == "weekly limit remaining" || name == id {
+            return antigravityGroupTitle(id) ?? name ?? id
+        }
+        return name ?? id
+    }
     public static func parse(_ data: Data, agent: AIAgent, identity: CodexIdentity, now: Date = Date()) throws -> CodexConnection {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ProviderQuotaError.invalidResponse }
         let payload = (root["data"] as? [String: Any]) ?? root
         var buckets: [String: Any] = [:]
+        let reportedPlan = (payload["subscription_type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let verifiedIdentity = CodexIdentity(email: identity.email, planType: reportedPlan?.isEmpty == false ? reportedPlan : identity.planType, accountId: identity.accountId)
         func number(_ x: Any?) -> Double? {
             guard let n = x as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.doubleValue.isFinite else { return nil }
             return n.doubleValue
@@ -50,7 +63,11 @@ public enum ProviderQuotaParser {
             return value
         }
         if agent == .claude {
-            guard payload["rate_limits_available"] as? Bool != false, let limits = payload["rate_limits"] as? [String: Any] else { throw ProviderQuotaError.unavailable }
+            if payload["rate_limits_available"] as? Bool == false {
+                guard let email = verifiedIdentity.email, !email.isEmpty else { throw ProviderQuotaError.unavailable }
+                return CodexConnection(identity: verifiedIdentity, identityFetchedAt: now)
+            }
+            guard let limits = payload["rate_limits"] as? [String: Any] else { throw ProviderQuotaError.unavailable }
             var main: [String: Any] = ["limitId": "claude", "limitName": "Claude"]
             if let raw = limits["five_hour"] as? [String: Any], let w = window(raw, minutes: 300) { main["primary"] = w }
             if let raw = limits["seven_day"] as? [String: Any], let w = window(raw, minutes: 10080) { main["secondary"] = w }
@@ -62,28 +79,32 @@ public enum ProviderQuotaParser {
                 if let w = window(raw, minutes: nil) { let id = "claude-model-\(i)"; buckets[id] = ["limitId": id, "limitName": raw["display_name"] as? String ?? id, "primary": w] }
             }
         } else if agent == .antigravity {
-            var rows: [(String, [String: Any])] = []
+            var rows: [(String, [String: Any], String?, String?)] = []
             if let command = root["command"] as? [String: Any] {
                 guard command["name"] as? String == "usage", (root["num_turns"] as? Int ?? 0) == 0,
                       let body = command["data"] as? [String: Any], let groups = body["groups"] as? [[String: Any]] else { throw ProviderQuotaError.invalidResponse }
                 for group in groups { for raw in group["buckets"] as? [[String: Any]] ?? [] {
-                    if let id = raw["id"] as? String { rows.append((id, raw)) }
+                    if let id = raw["id"] as? String { rows.append((id, raw, group["name"] as? String, group["description"] as? String)) }
                 }}
             } else if let quotas = payload["quota"] as? [String: Any] {
-                rows = quotas.compactMap { key, value in (value as? [String: Any]).map { (key, $0) } }
+                rows = quotas.compactMap { key, value in (value as? [String: Any]).map { (key, $0, nil, nil) } }
             } else { throw ProviderQuotaError.unavailable }
-            for (id, raw) in rows {
+            for (id, raw, groupName, groupDescription) in rows {
                 guard id.count <= 160, raw["disabled"] as? Bool != true else { continue }
                 let label = raw["window"] as? String ?? id
                 let duration = label.lowercased().contains("week") || label == "7d" ? 10080 : ["5h", "5 hours", "five_hour"].contains(label.lowercased()) ? 300 : nil
                 guard let w = window(raw, minutes: duration, fraction: true) else { continue }
                 guard buckets[id] == nil else { throw ProviderQuotaError.invalidResponse }
-                buckets[id] = ["limitId": id, "limitName": raw["name"] as? String ?? id.replacingOccurrences(of: "-", with: " "), "primary": w]
+                let group = groupName?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = group?.isEmpty == false ? group! : antigravityDisplayTitle(id: id, name: raw["name"] as? String)
+                var bucket: [String: Any] = ["limitId": id, "limitName": name, "primary": w]
+                if let description = groupDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty { bucket["limitDescription"] = String(description.prefix(600)) }
+                buckets[id] = bucket
             }
         } else { throw ProviderQuotaError.invalidResponse }
         guard !buckets.isEmpty else { throw ProviderQuotaError.unavailable }
         let normalized = try JSONSerialization.data(withJSONObject: ["rateLimitsByLimitId": buckets])
         let limits = try JSONDecoder().decode(CodexRateLimits.self, from: normalized)
-        return CodexConnection(identity: identity, quota: CodexQuotaSnapshot(limits: limits, fetchedAt: now))
+        return CodexConnection(identity: verifiedIdentity, quota: CodexQuotaSnapshot(limits: limits, fetchedAt: now), identityFetchedAt: now)
     }
 }

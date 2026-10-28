@@ -24,7 +24,7 @@ enum AccountQuickMenu {
             let stale = quota.isStale(at: Date()) || model.quotaErrors[account.id] != nil
             if stale { info(L10n.text("Stale data · refresh needed")) }
             for bucket in quota.limits.buckets {
-                info(bucket.value.limitName ?? bucket.id)
+                info(account.effectiveAgent == .antigravity ? ProviderQuotaParser.antigravityDisplayTitle(id: bucket.id, name: bucket.value.limitName) : bucket.value.limitName ?? bucket.id)
                 for window in [bucket.value.primary, bucket.value.secondary].compactMap({ $0 }) {
                     let percent = !window.resetHasPassed(at: Date()) ? window.remainingPercent : nil
                     let value = percent.map { L10n.format("%@%% remaining", $0.formatted(.number.precision(.fractionLength(0...1)).locale(L10n.locale))) } ?? (!window.resetHasPassed(at: Date()) ? window.remainingAmount.map { L10n.format("%@ remaining", $0.formatted()) } : nil) ?? L10n.text("No data yet")

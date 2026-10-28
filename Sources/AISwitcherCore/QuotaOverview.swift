@@ -58,7 +58,7 @@ public struct AccountQuotaOverview {
         self.snapshot = snapshot
         let buckets = snapshot?.limits.buckets ?? []
         self.bucket = buckets.first?.value
-        self.bucketName = buckets.first.map { $0.value.limitName ?? $0.id }
+        self.bucketName = buckets.first.map { account.effectiveAgent == .antigravity ? ProviderQuotaParser.antigravityDisplayTitle(id: $0.id, name: $0.value.limitName) : $0.value.limitName ?? $0.id }
         self.bucketCount = buckets.count
         self.stale = snapshot.map { readFailed || $0.isStale(at: now) } ?? false
         self.now = now

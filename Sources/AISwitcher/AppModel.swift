@@ -55,6 +55,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var providerSessionIDs: Set<UUID> = []
     @Published private(set) var providerSignInIDs: Set<UUID> = []
     private lazy var providerQuota = ProviderQuotaService(repository: repository)
+    private lazy var claudeWeb = ClaudeWebAccountService(repository: repository)
+    private var webCleanupTasks: [UUID: Task<Void, Never>] = [:]
     @Published private(set) var backendIDs: Set<UUID> = []
     @Published private(set) var runningIDs: Set<UUID> = []
     @Published private(set) var loadFailed = false
@@ -474,7 +476,7 @@ final class AppModel: ObservableObject {
 
     func closeSession(_ account: Account) {
         if account.effectiveAgent.usesProviderQuota {
-            providerSessionIDs.remove(account.id);quotaTasks[account.id]?.cancel();Task { await providerQuota.stop(account.id) }
+            providerSessionIDs.remove(account.id);quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id);Task { await providerQuota.stop(account.id) }
             if account.effectiveAgent.isSharedApplication { refreshRunning(); return }
         }
         guard !account.effectiveAgent.isSharedApplication else { return }
@@ -498,6 +500,7 @@ final class AppModel: ObservableObject {
         do {
             guard !hasRunningSession(account) else { throw DesktopProfileError.profileRunning }
             snapshot = try repository.remove(account.id, from: snapshot)
+            if account.effectiveAgent == .claude { webCleanupTasks[account.id] = Task { await claudeWeb.remove(account);webCleanupTasks[account.id] = nil } }
             lastAction = L10n.format("Deleted local profile %@", String(describing: account.name))
         } catch {
             reload()
@@ -665,7 +668,7 @@ final class AppModel: ObservableObject {
             }
         }
     }
-    func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();Task { await providerQuota.stop(account.id) } }
+    func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id);Task { await providerQuota.stop(account.id) } }
     private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
         guard !shuttingDown, !loadFailed, !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
         if connect && !canConnectSession(account) { return }
@@ -673,13 +676,31 @@ final class AppModel: ObservableObject {
         quotaTasks[account.id] = Task {
             defer { providerSignInIDs.remove(account.id);connectingSessionIDs.remove(account.id);finishQuotaOperation(account.id);refreshRunning() }
             do {
-                let read = { [self] in try await providerQuota.read(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue]) }
+                let storeIdentity: (CodexIdentity, String?) throws -> Void = { [self] identity, kind in
+                    try Task.checkCancellation()
+                    guard let index = snapshot.accounts.firstIndex(where: { $0.id == account.id }) else { throw ProfileError.invalidSelection }
+                    var updated = snapshot
+                    let old = updated.accounts[index].providerQuotaConnection
+                    let keepQuota = old?.identity.matches(identity) == true && old?.identity.planType == identity.planType && identity.planType != "free"
+                    updated.accounts[index].providerQuotaConnection = CodexConnection(identity: identity, quota: keepQuota ? old?.quota : nil, identityFetchedAt: Date(), providerSessionKind: kind)
+                    try persist(updated);providerSessionIDs.insert(account.id)
+                }
+                let usesWeb = account.effectiveAgent == .claude && account.providerQuotaConnection?.providerSessionKind == "claudeWeb"
+                let read = { [self] in
+                    if usesWeb { return try await claudeWeb.read(account, onIdentity: { try storeIdentity($0, "claudeWeb") }) }
+                    return try await providerQuota.read(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue], onIdentity: { try storeIdentity($0, nil) })
+                }
                 let value: CodexConnection
-                if connect {
+                if connect && account.effectiveAgent == .claude {
+                    do { value = try await read() }
+                    catch let error as ProviderQuotaError where [.signedOut, .cliMissing, .cliOutdated].contains(error) {
+                        value = try await claudeWeb.read(account, interactive: true, onSignIn: { [self] in
+                            quotaErrors[account.id] = nil;providerSignInIDs.insert(account.id)
+                        }, onIdentity: { try storeIdentity($0, "claudeWeb") })
+                    }
+                } else if connect {
                     value = try await ProviderSessionConnector.connect(read: read, signIn: { [self] in
-                        providerSessionIDs.remove(account.id)
-                        quotaErrors[account.id] = nil
-                        providerSignInIDs.insert(account.id)
+                        providerSessionIDs.remove(account.id);quotaErrors[account.id] = nil;providerSignInIDs.insert(account.id)
                         try await providerQuota.signIn(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue])
                     })
                 } else { value = try await read() }
@@ -774,10 +795,12 @@ final class AppModel: ObservableObject {
         for id in Array(pendingConnections.keys) { cancelQuotaConnection(id) }
         let pendingQuotaTasks = Array(quotaTasks.values)
         for task in pendingQuotaTasks { task.cancel() }
+        claudeWeb.stopAll()
         for task in pendingQuotaTasks { await task.value }
         for client in desktopQuotaClients.values { await client.stop() }
         await quotaService.stopAll()
         for task in quotaCleanupTasks.values { await task.value }
+        for task in Array(webCleanupTasks.values) { await task.value }
     }
 
     private func finishQuotaOperation(_ id: UUID) {

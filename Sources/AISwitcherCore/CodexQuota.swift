@@ -55,6 +55,7 @@ public struct CodexQuotaWindow: Codable, Equatable, Sendable {
 public struct CodexQuotaBucket: Codable, Equatable, Sendable {
     public let limitId: String?
     public let limitName: String?
+    public let limitDescription: String?
     public let primary: CodexQuotaWindow?
     public let secondary: CodexQuotaWindow?
     public let planType: String?
@@ -97,10 +98,14 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
 public struct CodexConnection: Codable, Equatable, Sendable {
     public let identity: CodexIdentity
     public var quota: CodexQuotaSnapshot?
+    public let identityFetchedAt: Date?
+    public let providerSessionKind: String?
 
-    public init(identity: CodexIdentity, quota: CodexQuotaSnapshot? = nil) {
+    public init(identity: CodexIdentity, quota: CodexQuotaSnapshot? = nil, identityFetchedAt: Date? = nil, providerSessionKind: String? = nil) {
         self.identity = identity
         self.quota = quota
+        self.identityFetchedAt = identityFetchedAt
+        self.providerSessionKind = providerSessionKind
     }
 }
 

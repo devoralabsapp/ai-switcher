@@ -59,7 +59,7 @@ struct Dashboard: View {
             Button(L10n.text("Cancel"), role: .cancel) { model.accountToClose = nil }
             Button(L10n.text("Close session")) { model.closeSession(account); model.accountToClose = nil }
         } message: { account in
-            Text(L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", String(describing: account.name)))
+            Text(account.effectiveAgent.isSharedApplication ? L10n.text("The background connection will close. Your login is kept.") : L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", String(describing: account.name)))
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusAccountSearch)) { _ in searchFocused = true }
         .appAppearance(model.preferences)

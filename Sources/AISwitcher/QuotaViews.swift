@@ -16,36 +16,69 @@ struct ProviderQuotaSummaryView: View {
     let account: Account
     var details = false
     private var palette: ThemePalette { ThemePalette(theme: theme) }
+    private var busy: Bool { model.quotaBusyIDs.contains(account.id) }
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            VStack(alignment: .leading, spacing: 10) {
-                Label(L10n.format("%@ quota", account.effectiveAgent.name), systemImage: "gauge").font(theme.font(size: 12, weight: .semibold))
-                if let value = account.providerQuotaConnection, let quota = value.quota {
-                    Text(value.identity.email ?? L10n.text("Shared application sign-in")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
-                    ForEach(quota.limits.buckets, id: \.id) { bucket in
-                        Text(bucket.value.limitName ?? bucket.id).font(theme.font(size: 10, weight: .semibold))
-                        QuotaBucketView(bucket: bucket.value, now: context.date, compact: !details, stale: quota.isStale(at: context.date) || model.quotaErrors[account.id] != nil)
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Label(L10n.format("%@ quota", account.effectiveAgent.name), systemImage: "gauge").font(theme.font(size: 11, weight: .semibold))
+                    Spacer()
+                    if busy { ProgressView().controlSize(.mini) }
+                    else if account.providerQuotaConnection != nil || model.providerSessionIDs.contains(account.id) {
+                        Button { model.providerSessionIDs.contains(account.id) ? model.refreshQuota(account) : model.connectSession(account) } label: { Image(systemName: "arrow.clockwise").font(theme.font(size: 11)) }
+                            .buttonStyle(ThemedPlainButtonStyle()).help(L10n.text("Refresh quota"))
                     }
-                    Text(model.quotaErrors[account.id] != nil ? L10n.text("Refresh failed · previously read data") : quota.isStale(at: context.date) ? L10n.text("Stale data · refresh needed") : L10n.format("Last read: %@", L10n.dateTime(quota.fetchedAt)))
-                        .font(theme.font(size: 9)).foregroundColor(palette.secondary)
+                }
+                if let connection = account.providerQuotaConnection {
+                    if details { connectionContent(connection, now: context.date) }
+                    else {
+                        Button { model.quotaAccountID = account.id } label: { connectionContent(connection, now: context.date).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
+                            .buttonStyle(ThemedPlainButtonStyle())
+                    }
                 } else {
-                    Text(L10n.text("Connect to view quota."))
-                        .font(theme.font(size: 11)).foregroundColor(palette.secondary)
+                    HStack {
+                        Text(model.providerSignInIDs.contains(account.id) ? L10n.text("Waiting for sign-in…") : L10n.text("Connect to view quota."))
+                            .font(theme.font(size: 10)).foregroundColor(palette.secondary)
+                        Spacer()
+                        if !busy { Button(L10n.text("Connect")) { model.connectSession(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent) }
+                    }
+                }
+                if busy {
+                    HStack {
+                        if model.providerSignInIDs.contains(account.id) { Text(L10n.text("Waiting for sign-in…")).font(theme.font(size: 10)) }
+                        Button(L10n.text("Cancel")) { model.cancelProviderConnection(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 10))
+                    }
                 }
                 if let error = model.quotaErrors[account.id] { Text(error.localizedDescription).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
-                if model.quotaBusyIDs.contains(account.id) {
-                    HStack { ProgressView().controlSize(.mini); if model.providerSignInIDs.contains(account.id) { Text(L10n.text("Waiting for sign-in…")).font(theme.font(size: 10)) }; Button(L10n.text("Cancel")) { model.cancelProviderConnection(account) }.buttonStyle(ThemedPlainButtonStyle()) }
-                } else {
-                    Button(model.providerSessionIDs.contains(account.id) ? L10n.text("Refresh quota") : L10n.text("Connect account session")) { model.providerSessionIDs.contains(account.id) ? model.refreshQuota(account) : model.connectSession(account) }
-                        .buttonStyle(PrimaryButtonStyle(compact: true))
-                }
-                if !model.hasProviderCLI(account) {
-                    Link(L10n.text("Install official CLI…"), destination: URL(string: account.effectiveAgent == .claude ? "https://code.claude.com/docs/en/quickstart" : "https://antigravity.google/docs/getting-started")!).font(theme.font(size: 11))
+                if account.effectiveAgent != .claude && !model.hasProviderCLI(account) {
+                    Link(L10n.text("Install official CLI…"), destination: URL(string: "https://github.com/google-antigravity/antigravity-cli#installation")!).font(theme.font(size: 11))
                     Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
                 }
-                if !details { Button(L10n.text("Details")) { model.quotaAccountID = account.id }.buttonStyle(ThemedPlainButtonStyle()) }
-                if model.providerSessionIDs.contains(account.id) { Button(L10n.text("Disconnect")) { model.closeSession(account) }.buttonStyle(ThemedPlainButtonStyle()) }
             }.padding(12).background(palette.canvas).clipShape(RoundedRectangle(cornerRadius: theme.radius(9)))
+                .retroOutline(radius: theme.radius(9), shadow: false)
+        }
+    }
+    private func connectionContent(_ value: CodexConnection, now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(value.identity.email ?? L10n.text("Shared application sign-in")).font(theme.font(size: 9)).lineLimit(1).foregroundColor(palette.secondary)
+            if let plan = value.identity.planType {
+                Text(L10n.format("Plan: %@", plan.prefix(1).uppercased() + String(plan.dropFirst()))).font(theme.font(size: 10, weight: .semibold)).foregroundColor(palette.ink)
+            }
+            if let quota = value.quota {
+                ForEach(quota.limits.buckets, id: \.id) { bucket in
+                    Text(account.effectiveAgent == .antigravity ? ProviderQuotaParser.antigravityDisplayTitle(id: bucket.id, name: bucket.value.limitName) : bucket.value.limitName ?? bucket.id)
+                        .font(theme.font(size: 10, weight: .semibold)).foregroundColor(palette.ink)
+                    if details, let description = bucket.value.limitDescription { Text(description).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
+                    QuotaBucketView(bucket: bucket.value, now: now, compact: !details, stale: quota.isStale(at: now) || model.quotaErrors[account.id] != nil)
+                }
+            } else {
+                Text(L10n.text("No quota data available for this account.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
+            }
+            if details && value.providerSessionKind == "claudeWeb" { Text(L10n.text("Sign-in source: Claude web")).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
+            let read = value.quota?.fetchedAt ?? value.identityFetchedAt
+            let stale = value.quota?.isStale(at: now) ?? read.map { now.timeIntervalSince($0) > 360 } ?? false
+            Text(model.quotaErrors[account.id] != nil ? L10n.text("Refresh failed · previously read data") : stale ? L10n.text("Stale data · refresh needed") : read.map { details ? L10n.format("Last read: %@", L10n.dateTime($0)) : L10n.format("Read at %@ · Details ↗", L10n.time($0)) } ?? L10n.text("Details"))
+                .font(theme.font(size: 9)).foregroundColor(palette.secondary)
         }
     }
 }

@@ -175,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let account = account(from: sender) else { return }
         let alert = NSAlert()
         alert.messageText = L10n.text("Close this account session?")
-        alert.informativeText = L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", account.name)
+        alert.informativeText = account.effectiveAgent.isSharedApplication ? L10n.text("The background connection will close. Your login is kept.") : L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", account.name)
         alert.addButton(withTitle: L10n.text("Cancel"))
         alert.addButton(withTitle: L10n.text("Close session"))
         NSApp.activate(ignoringOtherApps: true)
