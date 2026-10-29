@@ -22,9 +22,12 @@ internal static partial class PreviewRunner {
         foreach(var account in new[]{a,b}){repo.PrepareQuota(account);repo.PrepareProfile(account);}
         await SharedWorkspace.PrepareAsync(a,repo,prefs);
         using var mock=new HandoffResponses();await using(var first=await HandoffRpc.Create(cli,repo,a,prefs,mock.Url,"one")){
+            var linked=await first.Call("project/create",new{idempotencyKey="fixture-local-project",name="Project A",roots=new[]{new{path=project}},metadata=new Dictionary<string,string>{{"codex.localProjectId","fixture-local-project"},{"codex.chatGptBacking","{\"accountId\":\"fixture-account-one\",\"userId\":\"fixture-user-one\",\"projectId\":\"g-p-fixture\"}"},{"fixture.keep","preserved"}}});
+            File.WriteAllText(Path.Combine(root,"source-project-id"),linked.GetProperty("project").GetProperty("id").GetString());
             var started=await first.Call("thread/start",new{model="fixture-model",cwd=project});var id=started.GetProperty("thread").GetProperty("id").GetString()!;
             await first.Call("turn/start",new{threadId=id,input=new[]{new{type="text",text="Fictional account handoff regression. Reply with fixture text only."}}});
             var completed=await first.WaitTurn();Require(completed.GetProperty("turn").GetProperty("status").GetString()=="failed","Fixture account 1 did not hit its simulated quota");
+            await first.Call("thread/metadata/update",new{threadId=id,projectId=linked.GetProperty("project").GetProperty("id").GetString()});
             await first.Call("account/logout",null);File.WriteAllText(Path.Combine(root,"source-thread-id"),id);
         }
         SharedWorkspace.Archive(a,repo);
@@ -35,17 +38,20 @@ internal static partial class PreviewRunner {
             // Avoid account/read here: native routing discovery requires an HTTPS
             // service origin, whereas this fixture must stay entirely on loopback.
             var original=await second.Call("thread/read",new{threadId=thread});var oldSession=original.GetProperty("thread").GetProperty("sessionId").GetString();
-            var fork=await second.Call("thread/fork",new{threadId=thread,excludeTurns=true,ephemeral=false,cwd=project});var newThread=fork.GetProperty("thread").GetProperty("id").GetString()!;
-            Require(newThread!=thread&&fork.GetProperty("thread").GetProperty("sessionId").GetString()!=oldSession,"Fork reused the old conversation or service session");
-            Require(NativePlatform.SamePath(fork.GetProperty("cwd").GetString()!,project),"Handoff changed the project working directory");
-            await second.Call("turn/start",new{threadId=newThread,input=new[]{new{type="text",text="Continue the fictional project using this account."}}});
-            var completed=await second.WaitTurn();Require(completed.GetProperty("turn").GetProperty("status").GetString()=="completed","Account 2 could not continue the forked conversation against loopback Responses");
-            var history=await second.Call("thread/turns/list",new{threadId=newThread,itemsView="full",limit=10});Require(history.GetProperty("data").GetArrayLength()>=2,"Previous conversation history was lost");
+            var projectId=File.ReadAllText(Path.Combine(root,"source-project-id"));var localProject=(await second.Call("project/read",new{projectId})).GetProperty("project");
+            Require(localProject.GetProperty("id").GetString()==projectId&&localProject.GetProperty("metadata").GetProperty("fixture.keep").GetString()=="preserved"&&!localProject.GetProperty("metadata").TryGetProperty("codex.chatGptBacking",out _),"Local project account binding was retained or unrelated metadata changed");
+            var resumed=await second.Call("thread/resume",new{threadId=thread,excludeTurns=true});
+            Require(resumed.GetProperty("thread").GetProperty("id").GetString()==thread&&resumed.GetProperty("thread").GetProperty("sessionId").GetString()==oldSession,"The original conversation or session ID changed");
+            Require(resumed.GetProperty("thread").GetProperty("projectId").GetString()==projectId,"The conversation left its original project");
+            Require(NativePlatform.SamePath(resumed.GetProperty("cwd").GetString()!,project),"Handoff changed the project working directory");
+            await second.Call("turn/start",new{threadId=thread,input=new[]{new{type="text",text="Continue the fictional project using this account."}}});
+            var completed=await second.WaitTurn();Require(completed.GetProperty("turn").GetProperty("status").GetString()=="completed","Account 2 could not continue the original conversation against loopback Responses");
+            var history=await second.Call("thread/turns/list",new{threadId=thread,itemsView="full",limit=10});Require(history.GetProperty("data").GetArrayLength()>=2,"Previous conversation history was lost");
             var preserved=await second.Call("thread/read",new{threadId=thread});Require(preserved.GetProperty("thread").GetProperty("id").GetString()==thread&&preserved.GetProperty("thread").GetProperty("sessionId").GetString()==oldSession,"The original conversation was replaced");
         }
         Require(mock.FirstAccountRejected&&mock.SecondAccountAccepted,"The real CLI did not send each turn with the correct fictional account");
         SharedWorkspace.Archive(b,repo);
-        File.WriteAllText(Path.Combine(output,"account-handoff-result.txt"),"PASS: real native Windows Codex; two private fictional ChatGPT identities; loopback-only quota failure for account 1; logout and close account 1; fork the old history into a NEW conversation/service session with the same project directory under account 2; original conversation ID/session preserved; subsequent Responses request authenticates as account 2 and completes; source/target authentication stays separate. No real account or external model call.\n");
+        File.WriteAllText(Path.Combine(output,"account-handoff-result.txt"),"PASS: real native Windows Codex; two private fictional ChatGPT identities; loopback-only quota failure for account 1; logout and close account 1; detach native local project account metadata automatically; resume the SAME conversation/project/session ID under account 2 without selecting or forking; subsequent Responses request authenticates as account 2 and completes; source/target authentication stays separate. No real account or external model call.\n");
     }
     sealed class HandoffRpc:IAsyncDisposable {
         readonly StdioTransport transport;readonly Queue<JsonElement> notifications=[];int id;

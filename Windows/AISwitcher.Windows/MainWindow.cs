@@ -101,7 +101,6 @@ internal sealed partial class MainWindow:Window {
         Item(L.Format("Open %@",a.Agent.Name()),()=>_=engine.OpenAsync(a),!busy);
         if(a.Agent.ProviderQuota()){Item(L["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));Item(L["Refresh quota"],()=>_=engine.RefreshAsync(a),!busy);}
         if(a.UsesCodexDesktop){Item(L["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));Item(L["Refresh quota"],()=>_=engine.RefreshAsync(a),!busy);Item(L["Restart session…"],()=>Restart(a),!busy);}
-        if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)Item(L["Continue chat with this account…"],()=>ContinueChat(a),!busy&&!engine.ReadOnly);
         if(a.Agent.HasQuota())Item(L[a.Agent.ProviderQuota()?"Details":"Codex quota…"],()=>QuotaDetails(a));
         menu.Items.Add(new Separator());Item(L["Edit profile…"],()=>EditAccount(a),!busy);Item(L["Close account session…"],()=>Close(a),!busy&&(!a.Agent.IsShared()||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a));
         Item(L["Delete local profile…"],()=>Delete(a),!busy);return menu;

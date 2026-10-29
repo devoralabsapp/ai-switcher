@@ -79,12 +79,9 @@ public sealed class LocalSocketTransport : IRpcTransport {
     }
     public ValueTask DisposeAsync(){socket.Abort();socket.Dispose();invoker?.Dispose();return ValueTask.CompletedTask;}
 }
-public sealed record LocalChat(string Id,string Title,string Cwd,string? SessionId);
-public sealed record LocalChatPage(IReadOnlyList<LocalChat> Chats,string? NextCursor);
 public sealed class RpcClient : IAsyncDisposable {
     readonly IRpcTransport transport;
     readonly TimeSpan timeout;
-    readonly bool experimental;
     readonly CancellationTokenSource lifetime=new();
     readonly ConcurrentDictionary<int,TaskCompletionSource<JsonElement>> pending=new();
     readonly ConcurrentDictionary<string,TaskCompletionSource<bool>> logins=new();
@@ -92,10 +89,10 @@ public sealed class RpcClient : IAsyncDisposable {
     readonly SemaphoreSlim sendLock=new(1,1);
     Task? pump;int nextId;int disposed;
     public bool IsConnected=>disposed==0&&pump!=null&&!pump.IsCompleted&&!lifetime.IsCancellationRequested;
-    public RpcClient(IRpcTransport transport,TimeSpan? timeout=null,bool experimental=false){this.transport=transport;this.timeout=timeout??TimeSpan.FromSeconds(20);this.experimental=experimental;}
+    public RpcClient(IRpcTransport transport,TimeSpan? timeout=null){this.transport=transport;this.timeout=timeout??TimeSpan.FromSeconds(20);}
     public async Task StartAsync(CancellationToken ct=default) {
         pump=PumpAsync();
-        await RequestAsync("initialize",new{clientInfo=new{name="ai_switcher",title="AI Switcher",version="1.4.0"},capabilities=new{experimentalApi=experimental}},ct);
+        await RequestAsync("initialize",new{clientInfo=new{name="ai_switcher",title="AI Switcher",version="1.4.0"}},ct);
         await SendAsync(new{method="initialized"},ct);
     }
     async Task SendAsync(object message,CancellationToken ct){await sendLock.WaitAsync(ct);try{await transport.SendAsync(JsonSerializer.Serialize(message,new JsonSerializerOptions(Json.Options){WriteIndented=false}),ct);}finally{sendLock.Release();}}
@@ -126,21 +123,6 @@ public sealed class RpcClient : IAsyncDisposable {
     public async Task<Connection> ReadQuotaAsync(CancellationToken ct=default){var before=await ReadIdentityAsync(ct);var result=await RequestAsync("account/rateLimits/read",null,ct);var limits=result.Deserialize<Limits>(Json.Options)??throw new AppError("Could not read the Codex response. Update Codex CLI and try again.");var after=await ReadIdentityAsync(ct);
         if(!before.Matches(after)||(before.AccountId!=null&&limits.AccountId!=null&&before.AccountId!=limits.AccountId))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
         return new(after,new(limits,DateTimeOffset.UtcNow));}
-    async Task<JsonElement> ContinuationRequestAsync(string method,object parameters,CancellationToken ct){
-        try{return await RequestAsync(method,parameters,ct);}catch(AppError){throw new AppError("Could not prepare the local conversation. Update Codex CLI and try again. The original was preserved.");}
-    }
-    public async Task<LocalChatPage> ListLocalChatsAsync(string? cursor=null,CancellationToken ct=default){
-        var result=await ContinuationRequestAsync("thread/list",new{cursor,limit=100,sortKey="updated_at",sourceKinds=new[]{"appServer","cli","vscode","unknown"},modelProviders=Array.Empty<string>()},ct);
-        var chats=result.GetProperty("data").EnumerateArray().Where(x=>Guid.TryParse(Text(x,"id"),out _)&&Text(x,"cwd") is string cwd&&Path.IsPathFullyQualified(cwd)).Select(x=>new LocalChat(Text(x,"id")!,Text(x,"name")??Text(x,"id")!,Text(x,"cwd")!,Text(x,"sessionId"))).ToArray();
-        return new(chats,Text(result,"nextCursor"));
-    }
-    public async Task<LocalChat> ForkLocalChatAsync(LocalChat original,CancellationToken ct=default){
-        if(!Guid.TryParse(original.Id,out _)||!Path.IsPathFullyQualified(original.Cwd))throw new AppError("The local conversation could not be verified. The original was preserved.");
-        var result=await ContinuationRequestAsync("thread/fork",new{threadId=original.Id,excludeTurns=true,ephemeral=false,cwd=original.Cwd},ct);var chat=result.GetProperty("thread");
-        var id=Text(chat,"id");var session=Text(chat,"sessionId");var cwd=Text(chat,"cwd");
-        if(!Guid.TryParse(id,out _)||id==original.Id||session==null||session==original.SessionId||cwd==null||!Path.GetFullPath(cwd).TrimEnd(Path.DirectorySeparatorChar).Equals(Path.GetFullPath(original.Cwd).TrimEnd(Path.DirectorySeparatorChar),OperatingSystem.IsWindows()?StringComparison.OrdinalIgnoreCase:StringComparison.Ordinal))throw new AppError("The local conversation could not be verified. The original was preserved.");
-        return new(id,Text(chat,"name")??original.Title,cwd,session);
-    }
     public async Task<(string Id,Uri Url)> StartLoginAsync(CancellationToken ct=default){var result=await RequestAsync("account/login/start",new{type="chatgpt"},ct);var id=result.GetProperty("loginId").GetString()!;var url=ValidateLoginUrl(result.GetProperty("authUrl").GetString()!);return(id,url);}
     public async Task WaitForLoginAsync(string id,CancellationToken ct=default){
         var waiter=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);logins[id]=waiter;

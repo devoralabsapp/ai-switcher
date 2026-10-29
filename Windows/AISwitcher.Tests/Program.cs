@@ -65,12 +65,28 @@ AsyncTest("Request timeout completes without hanging",async()=>{await using var 
 AsyncTest("Cancellation completes pending requests",async()=>{await using var client=Client("timeout");await client.StartAsync();using var ct=new CancellationTokenSource(50);await Fails(()=>client.ReadQuotaAsync(ct.Token));});
 AsyncTest("Raw RPC errors never reach user messages",async()=>{await using var client=Client("error");await client.StartAsync();try{await client.ReadQuotaAsync();throw new Exception("Expected RPC failure");}catch(AppError error){True(!error.Message.Contains("private-detail"));}});
 AsyncTest("Process exit clears connection liveness and repeated disposal is safe",async()=>{var client=Client("exit");try{await client.StartAsync();True(client.IsConnected);await Fails(()=>client.ReadQuotaAsync());for(var i=0;i<20&&client.IsConnected;i++)await Task.Delay(20);True(!client.IsConnected,"Exited backend still appeared connected");}finally{await client.DisposeAsync();await client.DisposeAsync();}True(!client.IsConnected);});
-AsyncTest("Local continuation lists metadata and forks into a new service session without sending a turn",async()=>{
-    await using var client=Client("handoff");await client.StartAsync();var page=await client.ListLocalChatsAsync();Equal(page.Chats.Count,1);Equal(page.NextCursor,"fixture-next");
-    var source=page.Chats[0];var fork=await client.ForkLocalChatAsync(source);True(fork.Id!=source.Id);True(fork.SessionId!=source.SessionId);Equal(fork.Cwd,source.Cwd);
+Test("Shared local project projection removes only account association and retains IDs, folders and history placement",()=>{
+    var folder=Path.Combine(root,"Project A");
+    var state=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(new Dictionary<string,object>{
+        ["local-projects"]=new Dictionary<string,object>{["local-a"]=new{id="local-a",name="A",rootPaths=new[]{folder},chatGptBacking=new{accountId="one",userId="user-one",projectId="g-p-old"},chatGptBackingCreation=new{accountId="one"},retiredChatGptBacking=new{accountId="one"},chatGptBackingRecoveryPending=true}},
+        ["thread-project-assignments"]=new Dictionary<string,object>{["same-chat"]=new{projectKind="local",projectId="local-a",projectOrigin="chatgpt"}},["unrelated-ui"]=42
+    }))!.AsObject();
+    var before=state.DeepClone();var saved=SharedLocalProjects.DetachState(state);True(saved.Count>0);var project=state["local-projects"]!["local-a"]!;
+    foreach(var key in new[]{"chatGptBacking","chatGptBackingCreation","retiredChatGptBacking","chatGptBackingRecoveryPending"})True(project[key]==null);
+    Equal(project["id"]!.GetValue<string>(),"local-a");Equal(project["rootPaths"]![0]!.GetValue<string>(),folder);Equal(state["unrelated-ui"]!.GetValue<int>(),42);
+    Equal(state["thread-project-assignments"]!["same-chat"]!["projectId"]!.GetValue<string>(),"local-a");True(state["thread-project-assignments"]!["same-chat"]!["projectOrigin"]==null);
+    True(saved["local-a"]!.ToJsonString()==before["local-projects"]!["local-a"]!.ToJsonString());Equal(SharedLocalProjects.DetachState(state).Count,0);
 });
-AsyncTest("Continuation rejects reused conversation/service IDs and changed project folders",async()=>{
-    foreach(var mode in new[]{"handoff-same-id","handoff-same-session","handoff-wrong-cwd","handoff-invalid-id"}){await using var client=Client(mode);await client.StartAsync();var source=(await client.ListLocalChatsAsync()).Chats.Single();await Fails(()=>client.ForkLocalChatAsync(source));}
+Test("Cloud mirrors, managed ChatGPT folders and remote assignments retain account ownership",()=>{
+    var mirror=Path.Combine(root,".chatgpt-projects","g-p-cloud");var folder=Path.Combine(root,"Project A");
+    foreach(var pair in new[]{("g-p-cloud",folder),("local-mirror",mirror),("no-folder","")}){
+        var metadata=System.Text.Json.Nodes.JsonNode.Parse("{\"codex.chatGptBacking\":\"keep\",\"appearance.color\":\"mint\"}")!.AsObject();True(SharedLocalProjects.DetachedMetadata(pair.Item1,metadata,new[]{pair.Item2})==null);Equal(metadata["codex.chatGptBacking"]!.GetValue<string>(),"keep");
+        var state=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(new Dictionary<string,object>{["local-projects"]=new Dictionary<string,object>{[pair.Item1]=new{id=pair.Item1,rootPaths=new[]{pair.Item2},chatGptBacking=new{accountId="one"}}},["thread-project-assignments"]=new{remote=new{projectKind="remote",projectId=pair.Item1,projectOrigin="chatgpt"}}}))!.AsObject();var original=state.ToJsonString();Equal(SharedLocalProjects.DetachState(state).Count,0);Equal(state.ToJsonString(),original);
+    }
+});
+Test("Native project metadata detachment preserves non-account metadata and is idempotent",()=>{
+    var metadata=System.Text.Json.Nodes.JsonNode.Parse("{\"codex.localProjectId\":\"local-a\",\"codex.chatGptBacking\":\"owner\",\"codex.chatGptBackingCreation\":\"owner\",\"codex.retiredChatGptBacking\":\"owner\",\"appearance.color\":\"mint\",\"custom\":\"keep\"}")!.AsObject();
+    var changed=SharedLocalProjects.DetachedMetadata("native-id",metadata,new[]{root})??throw new Exception("Native project was not detached");Equal(changed["codex.localProjectId"]!.GetValue<string>(),"local-a");Equal(changed["appearance.color"]!.GetValue<string>(),"mint");Equal(changed["custom"]!.GetValue<string>(),"keep");True(metadata.ContainsKey("codex.chatGptBacking"));True(SharedLocalProjects.DetachedMetadata("native-id",changed,new[]{root})==null);
 });
 Connection Provider(string json,Agent agent)=>ProviderQuota.Parse(JsonDocument.Parse(json).RootElement,agent,new(agent==Agent.Claude?"fixture@example.test":null,null),now);
 Test("Claude subscription quota keeps zero percent, reset and model buckets",()=>{var c=Provider("""{"rate_limits_available":true,"rate_limits":{"five_hour":{"utilization":100,"resets_at":"2030-01-01T00:00:00Z"},"seven_day":{"utilization":35},"model_scoped":[{"display_name":"Sonnet","utilization":12}],"extra_usage":{"utilization":50}}}""",Agent.Claude);Equal(c.Quota!.Limits.Buckets.Count(),2);var b=c.Quota.Limits.Buckets.First(x=>x.Key=="claude").Value;Equal(b.Primary!.Remaining,0d);Equal(b.Secondary!.Remaining,65d);Equal(b.Primary.ResetsAt,1893456000L);});
@@ -115,15 +131,6 @@ AsyncTest("PowerShell launcher records installer and download errors without ins
 var failures=0;try{foreach(var test in tests){try{await test.Run();Console.WriteLine("PASS "+test.Name);}catch(Exception e){failures++;Console.Error.WriteLine("FAIL "+test.Name+": "+e);}}}finally{Repository.DeleteTree(root);}Console.WriteLine($"{tests.Count-failures}/{tests.Count} tests passed");return failures==0?0:1;
 
 static async Task Fixture(string mode){int identities=0;while(await Console.In.ReadLineAsync() is string line){var data=JsonDocument.Parse(line).RootElement;var method=data.GetProperty("method").GetString();if(!data.TryGetProperty("id",out var id))continue;object? result=new{};
-    if(mode.StartsWith("handoff",StringComparison.Ordinal)){
-        const string source="aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",fork="bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb";var cwd=Directory.GetCurrentDirectory();
-        if(method=="turn/start"||method=="account/login/start"||method=="account/logout")throw new Exception("Continuation must not send messages or change authentication");
-        if(method=="thread/list")result=new{data=new[]{new{id=source,name="Project conversation",cwd,sessionId=source}},nextCursor="fixture-next"};
-        if(method=="thread/fork"){
-            var parameters=data.GetProperty("params");if(parameters.GetProperty("threadId").GetString()!=source||parameters.GetProperty("cwd").GetString()!=cwd||parameters.GetProperty("ephemeral").GetBoolean()||!parameters.GetProperty("excludeTurns").GetBoolean())throw new Exception("Invalid fork request");
-            result=new{thread=new{id=mode=="handoff-same-id"?source:mode=="handoff-invalid-id"?"invalid":fork,name="Project branch",cwd=mode=="handoff-wrong-cwd"?Path.GetPathRoot(cwd):cwd,sessionId=mode=="handoff-same-session"?source:fork}};
-        }
-    }
     if(method=="account/read"){identities++;result=new{account=mode=="unauthed"?null:new{type="chatgpt",email=mode=="change"&&identities>1?"changed@example.test":"fixture@example.test",planType="plus"}};}
     if(method=="account/rateLimits/read"){if(mode=="timeout")continue;if(mode=="exit")return;if(mode=="error"){Console.WriteLine(JsonSerializer.Serialize(new{id=id.GetInt32(),error=new{code=-32001,message="private-detail-do-not-display"}}));continue;}result=new{rateLimits=new{primary=new{usedPercent=23,windowDurationMins=300,resetsAt=2000000000}}};}
     if(method=="account/login/start"){Console.WriteLine(JsonSerializer.Serialize(new{method="account/login/completed",@params=new{loginId="fixture",success=true}}));result=new{loginId="fixture",authUrl="https://auth.openai.com/fixture"};}

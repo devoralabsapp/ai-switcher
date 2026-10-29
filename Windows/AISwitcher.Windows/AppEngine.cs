@@ -132,24 +132,6 @@ internal sealed class AppEngine {
             if(a.UsesCodexDesktop){Current(a).DesktopConnection=null;Repository.Save(Snapshot);}throw;
         }
     }
-    public Task ContinueChatAsync(Account a,Func<Identity,Func<string?,Task<LocalChatPage>>,Task<LocalChat?>> choose)=>Run(a,async ct=>{
-        if(!a.UsesCodexDesktop||!a.SharesLocalWorkspace)return;
-        await Platform.RefreshProcessesAsync();
-        if(Snapshot.Accounts.Any(x=>x.UsesCodexDesktop&&x.SharesLocalWorkspace&&Platform.Owned(x)!=null))throw new AppError("Close shared ChatGPT Desktop windows before continuing a conversation with this account.");
-        Repository.PrepareQuota(a);Repository.PrepareProfile(a);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);
-        LocalChat? fork=null;
-        await using(var client=await Backend.StdioClientAsync(a,ct,experimental:true)){
-            var identity=await client.ReadIdentityAsync(ct);
-            if(a.Connection is {} known&&!known.Identity.Matches(identity))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
-            var source=await choose(identity,cursor=>client.ListLocalChatsAsync(cursor,ct));if(source==null)return;
-            ct.ThrowIfCancellationRequested();var before=await client.ReadIdentityAsync(ct);if(!identity.Matches(before))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
-            fork=await client.ForkLocalChatAsync(source,ct);
-            SharedWorkspace.CopyChatPlacement(a,Repository,source.Id,fork.Id);
-            if(!identity.Matches(await client.ReadIdentityAsync(ct)))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
-        }
-        await Platform.OpenAsync(a,new Uri("codex://threads/"+fork.Id+"?hostId=local"),Backend.UsesLocalDaemon(a),ct);
-        Current(a).LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
-    });
     public Task CloseAsync(Account a)=>Run(a,async ct=>{if(a.Agent.ProviderQuota())await Provider.DisconnectAsync(a);if(a.Agent.IsShared())return;await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);});
     public Task RestartAsync(Account a){if(!a.UsesCodexDesktop)return Task.CompletedTask;return Run(a,async ct=>{await Platform.CloseAsync(a);await Backend.StopAsync(a);await Backend.StartAsync(a,ct);await ReadAsync(a,ct);});}
     public Task DeleteAsync(Account a)=>Run(a,async ct=>{await Platform.RefreshProcessesAsync();if(Running(a)&&!a.Agent.IsShared())throw new AppError("Close this session before deleting its profile.");if(a.UsesCodexDesktop)SharedWorkspace.Archive(a,Repository);Snapshot=Repository.Remove(a,Snapshot);});

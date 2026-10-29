@@ -55,7 +55,6 @@ internal sealed class Program:Application {
             item.DropDownItems.Add(new Forms.ToolStripSeparator());Action(engine.DefaultTitle(a),()=>_=engine.DefaultAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id));
             if(a.Agent.ProviderQuota()){Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
             if(a.UsesCodexDesktop){Action(l["Open ChatGPT Desktop"],()=>_=engine.OpenAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id));Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
-            if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)Action(l["Continue chat with this account…"],()=>manager.ContinueChat(a),!engine.ReadOnly&&!engine.StoppingAll&&!engine.Busy.Contains(a.Id));
             if(a.Agent.HasQuota()){Action(l["Refresh quota"],()=>_=engine.RefreshAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id)&&(a.Agent.ProviderQuota()||a.UsesCodexDesktop||a.BrowserConnection!=null));Action(l["Details"],()=>manager.QuotaDetails(a));}
             Action(l["Close account session…"],()=>manager.Close(a),(!a.Agent.IsShared()||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a)&&!engine.StoppingAll&&!engine.Busy.Contains(a.Id));menu.Items.Add(item);
         }

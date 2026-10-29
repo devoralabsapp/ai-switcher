@@ -7,7 +7,7 @@ using AISwitcher.Core;
 
 namespace AISwitcher.Windows;
 /// Uses Windows' SQLite library and an ordinary transaction; never copies live DB/WAL files.
-internal static class WorkspaceIndex {
+internal static partial class WorkspaceIndex {
     public static bool ContainsHistory(string home){
         foreach(var path in Directory.EnumerateFiles(home,"state_*.sqlite")){Repository.RejectLinks(path);IntPtr db=IntPtr.Zero;IntPtr statement=IntPtr.Zero;
             try{if(Open(path,out db,1,IntPtr.Zero)!=0||Prepare(db,"SELECT EXISTS(SELECT 1 FROM threads LIMIT 1)",-1,out statement,IntPtr.Zero)!=0)throw new AppError("The shared workspace database could not be updated. Its data was preserved.");if(Step(statement)!=100)throw new AppError("The shared workspace database could not be updated. Its data was preserved.");if(ColumnInt(statement,0)!=0)return true;}
@@ -17,7 +17,7 @@ internal static class WorkspaceIndex {
     }
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_column_int",CallingConvention=CallingConvention.Cdecl)]static extern int ColumnInt(IntPtr statement,int column);
     public static void Canonicalize(string databaseHome,string profileHome,string source)=>RewriteRolloutPaths(databaseHome,profileHome,source);
-    // Codex validates fork source paths against its current CODEX_HOME. Keep the
+    // Keep the shared rollout paths valid inside the current CODEX_HOME. Keep the
     // shared bytes where they are, but expose canonical paths through this profile's
     // verified sessions junctions before its client reads an existing conversation.
     public static void ProjectToProfile(string databaseHome,string source,string profileHome)=>RewriteRolloutPaths(databaseHome,source,profileHome);
