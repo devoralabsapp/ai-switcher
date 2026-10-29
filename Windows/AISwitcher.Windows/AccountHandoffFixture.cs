@@ -100,6 +100,10 @@ internal static partial class PreviewRunner {
                 text+="event: response.output_item.done\ndata: "+JsonSerializer.Serialize(new{type="response.output_item.done",output_index=0,item})+"\n\n";
                 text+="event: response.completed\ndata: "+JsonSerializer.Serialize(new{type="response.completed",response=new{id="resp_fixture",status="completed",output=new[]{item},usage=new{input_tokens=10,output_tokens=5,total_tokens=15}}})+"\n\n";
             }else if(responseRequest){status="401 Unauthorized";text="{\"error\":{\"message\":\"Fixture rejected unexpected identity\"}}";}
+            else if(lines[0].Contains("accounts/check",StringComparison.Ordinal)){
+                var accounts=new[]{"one","two"}.Select(which=>new{id="fixture-account-"+which,account_id="fixture-account-"+which,plan_type="plus",workspace_backend_origin=Url,account_routing_override="NO_CONSTRAINT",name="Fixture "+which}).ToArray();
+                text=JsonSerializer.Serialize(new{accounts});
+            }
             else{text="{\"data\":[],\"models\":[],\"plan_type\":\"plus\",\"rate_limit\":{\"allowed\":true,\"limit_reached\":false,\"primary_window\":{\"used_percent\":0,\"limit_window_seconds\":18000,\"reset_at\":2000000000}}}";}
             var payload=Encoding.UTF8.GetBytes(text);var prefix=Encoding.ASCII.GetBytes("HTTP/1.1 "+status+"\r\nContent-Type: "+contentType+"\r\nContent-Length: "+payload.Length+"\r\nConnection: close\r\n\r\n");
             await stream.WriteAsync(prefix,lifetime.Token);await stream.WriteAsync(payload,lifetime.Token);await stream.FlushAsync(lifetime.Token);

@@ -15,7 +15,8 @@ internal static class SharedWorkspace {
         var marker=Path.Combine(repo.QuotaHome(account),"ai-switcher-workspace.json");Repository.RejectLinks(marker);
         if(!account.SharesLocalWorkspace)return !File.Exists(marker);
         if(!File.Exists(marker))return false;var data=JsonNode.Parse(File.ReadAllText(marker))!.AsObject();
-        return data["source"]?.GetValue<string>()==Path.GetFullPath(Source(prefs))&&data["database"]?.GetValue<string>()==Database(prefs)&&data["artifacts"]?.GetValue<string>()==prefs.Executables.GetValueOrDefault("artifacts");
+        static bool Matches(string? left,string? right)=>string.IsNullOrWhiteSpace(left)||string.IsNullOrWhiteSpace(right)?string.IsNullOrWhiteSpace(left)&&string.IsNullOrWhiteSpace(right):NativePlatform.SamePath(left,right);
+        return Matches(data["source"]?.GetValue<string>(),Source(prefs))&&Matches(data["database"]?.GetValue<string>(),Database(prefs))&&Matches(data["artifacts"]?.GetValue<string>(),prefs.Executables.GetValueOrDefault("artifacts"));
     }
     public static string BoundDatabase(Account account,Repository repo,Preferences prefs){var marker=Path.Combine(repo.QuotaHome(account),"ai-switcher-workspace.json");Repository.RejectLinks(marker);return File.Exists(marker)?JsonNode.Parse(File.ReadAllText(marker))!["database"]!.GetValue<string>():Database(prefs);}
     public static string Database(Preferences prefs){

@@ -41,6 +41,7 @@ jobs:
       - name: Verify shared themes and translations
         run: |
           python ../scripts/sync-windows-assets.py
+          if($LASTEXITCODE -ne 0){throw 'Could not synchronize shared resources'}
           git diff --exit-code -- AISwitcher.Core/Assets AISwitcher.Windows/AppIcon.ico
           if($LASTEXITCODE -ne 0){throw 'Shared Windows resources are out of date'}
       - name: Test portable core and real RPC subprocess fixtures
