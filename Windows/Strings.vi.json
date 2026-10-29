@@ -64,5 +64,13 @@
   "Force stop all account processes?": "Dừng cưỡng bức mọi tiến trình tài khoản?",
   "Force stop all": "Dừng tất cả",
   "This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept.": "Thao tác này dừng ngay cửa sổ Desktop, trình duyệt và kết nối nền thuộc các tài khoản AI Switcher. Bản nháp chưa lưu có thể bị mất. Ứng dụng mở riêng và dữ liệu đăng nhập được giữ nguyên.",
-  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Một số tiến trình tài khoản chưa dừng được. Kiểm tra Chẩn đoán phiên rồi thử lại."
+  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Một số tiến trình tài khoản chưa dừng được. Kiểm tra Chẩn đoán phiên rồi thử lại.",
+  "Continue chat with this account…": "Tiếp tục hội thoại bằng account này…",
+  "Choose a local chat. Codex creates a new branch with this account and keeps the original history. No message is sent automatically.": "Chọn hội thoại Local. Codex tạo nhánh mới bằng account này và giữ nguyên lịch sử gốc. Ứng dụng không tự gửi tin nhắn.",
+  "Load more": "Tải thêm",
+  "Search loaded conversations": "Tìm trong các hội thoại đã tải",
+  "No local conversations found.": "Chưa tìm thấy hội thoại Local.",
+  "The local conversation could not be verified. The original was preserved.": "Không thể xác minh hội thoại Local. Hội thoại gốc được giữ nguyên.",
+  "Close shared ChatGPT Desktop windows before continuing a conversation with this account.": "Đóng các cửa sổ ChatGPT Desktop dùng chung lịch sử trước khi tiếp tục hội thoại bằng account này.",
+  "Could not prepare the local conversation. Update Codex CLI and try again. The original was preserved.": "Không thể chuẩn bị hội thoại Local. Cập nhật Codex CLI rồi thử lại. Hội thoại gốc được giữ nguyên."
 }

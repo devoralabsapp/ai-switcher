@@ -481,5 +481,13 @@
   "Force stop all account processes?": "Force stop all account processes?",
   "Force stop all": "Force stop all",
   "This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept.": "This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept.",
-  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Some account processes could not be stopped. Check Session diagnostics and try again."
+  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Some account processes could not be stopped. Check Session diagnostics and try again.",
+  "Continue chat with this account…": "Continue chat with this account…",
+  "Choose a local chat. Codex creates a new branch with this account and keeps the original history. No message is sent automatically.": "Choose a local chat. Codex creates a new branch with this account and keeps the original history. No message is sent automatically.",
+  "Load more": "Load more",
+  "Search loaded conversations": "Search loaded conversations",
+  "No local conversations found.": "No local conversations found.",
+  "The local conversation could not be verified. The original was preserved.": "The local conversation could not be verified. The original was preserved.",
+  "Close shared ChatGPT Desktop windows before continuing a conversation with this account.": "Close shared ChatGPT Desktop windows before continuing a conversation with this account.",
+  "Could not prepare the local conversation. Update Codex CLI and try again. The original was preserved.": "Could not prepare the local conversation. Update Codex CLI and try again. The original was preserved."
 }

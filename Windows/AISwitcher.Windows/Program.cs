@@ -22,7 +22,7 @@ internal sealed class Program:Application {
     FileStream? lease;SilentTrayIcon? tray;DispatcherTimer? timer;AppEngine? engine;MainWindow? manager;Guid? notificationAccount;
     [STAThread]public static int Main(string[] args){
         if(args.Contains("--process-fixture")){RunFixture(args);return 0;}
-        if(args.Contains("--render-previews")||args.Contains("--ui-smoke-test")||args.Contains("--backend-smoke-test")||args.Contains("--stdio-smoke-test")||args.Contains("--store-runtime-smoke-test")||args.Contains("--store-runtime-reopen-smoke-test"))return PreviewRunner.Run(args);
+        if(args.Contains("--account-handoff-smoke-test")||args.Contains("--render-previews")||args.Contains("--ui-smoke-test")||args.Contains("--backend-smoke-test")||args.Contains("--stdio-smoke-test")||args.Contains("--store-runtime-smoke-test")||args.Contains("--store-runtime-reopen-smoke-test"))return PreviewRunner.Run(args);
         var app=new Program();app.Run();return 0;
     }
     protected override void OnStartup(StartupEventArgs e){base.OnStartup(e);ShutdownMode=ShutdownMode.OnExplicitShutdown;
@@ -55,6 +55,7 @@ internal sealed class Program:Application {
             item.DropDownItems.Add(new Forms.ToolStripSeparator());Action(engine.DefaultTitle(a),()=>_=engine.DefaultAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id));
             if(a.Agent.ProviderQuota()){Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
             if(a.UsesCodexDesktop){Action(l["Open ChatGPT Desktop"],()=>_=engine.OpenAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id));Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
+            if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)Action(l["Continue chat with this account…"],()=>manager.ContinueChat(a),!engine.ReadOnly&&!engine.StoppingAll&&!engine.Busy.Contains(a.Id));
             if(a.Agent.HasQuota()){Action(l["Refresh quota"],()=>_=engine.RefreshAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id)&&(a.Agent.ProviderQuota()||a.UsesCodexDesktop||a.BrowserConnection!=null));Action(l["Details"],()=>manager.QuotaDetails(a));}
             Action(l["Close account session…"],()=>manager.Close(a),(!a.Agent.IsShared()||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a)&&!engine.StoppingAll&&!engine.Busy.Contains(a.Id));menu.Items.Add(item);
         }

@@ -75,6 +75,28 @@ internal static class SharedWorkspace {
         }
         foreach(var incoming in MetadataSources(account,repo,source))foreach(var key in Keys.Where(incoming.ContainsKey))state[key]=Merge(state[key],incoming[key]);
         File.WriteAllText(statePath,state.ToJsonString());
+        RefreshRolloutPaths(account,repo,prefs);
+    }
+    public static void RefreshRolloutPaths(Account account,Repository repo,Preferences prefs){
+        if(!account.UsesCodexDesktop||!account.SharesLocalWorkspace)return;
+        var home=repo.QuotaHome(account);repo.ValidateOwned(home,account.Id);
+        if(!BindingMatches(account,repo,prefs))throw new AppError("The local workspace paths could not be verified.");
+        var source=Path.GetFullPath(Source(prefs));Repository.RejectLinks(source);
+        foreach(var name in new[]{"sessions","archived_sessions"}){
+            var link=Path.Combine(home,name);
+            if(!Directory.Exists(link)||(File.GetAttributes(link)&FileAttributes.ReparsePoint)==0||!NativePlatform.SamePath(new DirectoryInfo(link).ResolveLinkTarget(true)!.FullName,Path.Combine(source,name)))throw new AppError("The local workspace paths could not be verified.");
+        }
+        WorkspaceIndex.ProjectToProfile(BoundDatabase(account,repo,prefs),source,home);
+    }
+    public static void CopyChatPlacement(Account account,Repository repo,string original,string fork){
+        repo.ValidateOwned(repo.QuotaHome(account),account.Id);
+        var path=Path.Combine(repo.QuotaHome(account),".codex-global-state.json");Repository.RejectLinks(path);
+        if(!File.Exists(path))return;var state=JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        // Native local forks do not carry the Desktop's sidebar assignment. Copy only
+        // a local project placement, never a cloud project's account binding.
+        if(state["thread-project-assignments"] is not JsonObject assignments||assignments[original] is not JsonObject assignment||assignment["projectKind"]?.GetValue<string>()!="local")return;
+        assignments[fork]=assignment.DeepClone();
+        var temporary=path+".ai-switcher.tmp";Repository.RejectLinks(temporary);File.WriteAllText(temporary,state.ToJsonString());File.Move(temporary,path,true);
     }
     static JsonNode? Merge(JsonNode? current,JsonNode? incoming){
         if(current is JsonObject oldObject&&incoming is JsonObject newObject){var merged=oldObject.DeepClone().AsObject();foreach(var pair in newObject)merged[pair.Key]=Merge(merged[pair.Key],pair.Value);return merged;}

@@ -56,9 +56,9 @@ internal sealed class BackendService {
         var cli=await platform.FindExecutableAsync("codex")??throw new AppError("A runnable Codex CLI was not found. Open ChatGPT from the Windows Start menu once, then try again. You can also choose an installed Codex CLI in Settings.");
         return ChildEnvironment.StartInfo(cli,new[]{"app-server","--listen","stdio://","-c","cli_auth_credentials_store=\"file\"","-c","analytics.enabled=false"},EnvironmentFor(account),repository.QuotaHome(account));
     }
-    public async Task<RpcClient> StdioClientAsync(Account account,CancellationToken ct=default){
+    public async Task<RpcClient> StdioClientAsync(Account account,CancellationToken ct=default,bool experimental=false){
         var info=await StdioInfoAsync(account);ct.ThrowIfCancellationRequested();
-        var transport=new StdioTransport(info);var client=new RpcClient(transport);
+        var transport=new StdioTransport(info);var client=new RpcClient(transport,TimeSpan.FromMinutes(2),experimental);
         if(!requests.TryGetValue(account.Id,out var owned))requests[account.Id]=owned=[];
         owned.RemoveAll(request=>!request.Transport.IsRunning);owned.Add(new(transport,client));
         try{await client.StartAsync(ct);return client;}catch{await client.DisposeAsync();throw;}

@@ -167,6 +167,10 @@ internal sealed class NativePlatform {
         if(account.Agent==Agent.Claude&&account.EffectiveMode==LaunchMode.Desktop)env["CLAUDE_CONFIG_DIR"]=repository.CodeConfig(account);
         var arguments=new List<string>{"--user-data-dir="+repository.DataPath(account)};
         if(account.EffectiveMode==LaunchMode.Browser)arguments.AddRange(["--no-first-run","--no-default-browser-check","--disable-background-mode","--app="+(url??account.Agent.Url()).AbsoluteUri]);
+        if(account.UsesCodexDesktop&&url!=null){
+            if(url.Scheme!="codex"||url.Host!="threads"||!Guid.TryParse(url.AbsolutePath.Trim('/'),out _)||url.Query!="?hostId=local")throw new AppError("The local conversation could not be verified. The original was preserved.");
+            arguments.Add(url.AbsoluteUri);
+        }
         ct.ThrowIfCancellationRequested();
         using var child=Process.Start(ChildEnvironment.StartInfo(exe,arguments,env,repository.ProfilePath(account)))??throw new AppError("Could not open the AI agent window. Try again or check the browser.");
         FixtureStarted?.Invoke(child.Id);

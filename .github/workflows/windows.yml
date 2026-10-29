@@ -79,6 +79,12 @@ jobs:
           if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'backend-smoke-error.txt');throw 'Native Codex RPC smoke failed'}
           Get-Content (Join-Path $output 'backend-smoke-result.txt')
           Remove-Item -Recurse -Force $root
+          $handoff=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
+          $p=Start-Process $app -ArgumentList @('--data-dir',"`"$handoff`"",'--output',"`"$output`"",'--account-handoff-smoke-test','--codex-executable',"`"$($cli.FullName)`"") -PassThru
+          if(-not $p.WaitForExit(180000)){$p.Kill();throw 'Account handoff smoke timed out'}
+          if($p.ExitCode -ne 0){Get-Content (Join-Path $output 'account-handoff-error.txt');throw 'Account handoff smoke failed'}
+          Get-Content (Join-Path $output 'account-handoff-result.txt')
+          Remove-Item -Recurse -Force $handoff
           if('${{ inputs.daemon_probe }}' -eq 'true'){../scripts/test-windows-backend.ps1 -App $app -Tools $tools -Output $output}
           Remove-Item -Recurse -Force $tools
       - name: Exercise real ChatGPT Store profiles, cache reuse and manager restart

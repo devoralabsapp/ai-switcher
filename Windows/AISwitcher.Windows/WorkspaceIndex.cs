@@ -16,7 +16,12 @@ internal static class WorkspaceIndex {
         return false;
     }
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_column_int",CallingConvention=CallingConvention.Cdecl)]static extern int ColumnInt(IntPtr statement,int column);
-    public static void Canonicalize(string databaseHome,string profileHome,string source){
+    public static void Canonicalize(string databaseHome,string profileHome,string source)=>RewriteRolloutPaths(databaseHome,profileHome,source);
+    // Codex validates fork source paths against its current CODEX_HOME. Keep the
+    // shared bytes where they are, but expose canonical paths through this profile's
+    // verified sessions junctions before its client reads an existing conversation.
+    public static void ProjectToProfile(string databaseHome,string source,string profileHome)=>RewriteRolloutPaths(databaseHome,source,profileHome);
+    static void RewriteRolloutPaths(string databaseHome,string fromHome,string toHome){
         Repository.RejectLinks(databaseHome);
         foreach(var path in Directory.EnumerateFiles(databaseHome,"*.sqlite")){
             Repository.RejectLinks(path);IntPtr db=IntPtr.Zero;
@@ -25,7 +30,7 @@ internal static class WorkspaceIndex {
                 if(!HasRolloutColumn(db))continue;
                 if(Exec(db,"BEGIN IMMEDIATE",IntPtr.Zero,IntPtr.Zero,IntPtr.Zero)!=0)throw new AppError("The shared workspace database could not be updated. Its data was preserved.");
                 try{foreach(var name in new[]{"sessions","archived_sessions"})foreach(var separator in new[]{'\\','/'}){
-                    var old=Path.Combine(profileHome,name).Replace('\\',separator)+separator;var target=Path.Combine(source,name).Replace('\\',separator)+separator;IntPtr statement=IntPtr.Zero;
+                    var old=Path.Combine(fromHome,name).Replace('\\',separator)+separator;var target=Path.Combine(toHome,name).Replace('\\',separator)+separator;IntPtr statement=IntPtr.Zero;
                     try{var sql="UPDATE threads SET rollout_path = ?1 || substr(rollout_path, length(?2) + 1) WHERE substr(rollout_path, 1, length(?2)) = ?2 COLLATE NOCASE";
                         if(Prepare(db,sql,-1,out statement,IntPtr.Zero)!=0||BindText(statement,1,target,-1,new IntPtr(-1))!=0||BindText(statement,2,old,-1,new IntPtr(-1))!=0||Step(statement)!=101)throw new AppError("The shared workspace database could not be updated. Its data was preserved.");
                     }finally{if(statement!=IntPtr.Zero)FinalizeStatement(statement);}
