@@ -31,7 +31,9 @@ internal static partial class PreviewRunner {
         var thread=File.ReadAllText(Path.Combine(root,"source-thread-id"));
         await SharedWorkspace.PrepareAsync(b,repo,prefs);
         await using(var second=await HandoffRpc.Create(cli,repo,b,prefs,mock.Url,"two")){
-            var identity=await second.Call("account/read",new{refreshToken=false});Require(identity.GetProperty("account").GetProperty("email").GetString()=="fixture-two@example.test","Target client did not use account 2");
+            // The loopback Responses server checks the real outgoing account header.
+            // Avoid account/read here: native routing discovery requires an HTTPS
+            // service origin, whereas this fixture must stay entirely on loopback.
             var original=await second.Call("thread/read",new{threadId=thread});var oldSession=original.GetProperty("thread").GetProperty("sessionId").GetString();
             var fork=await second.Call("thread/fork",new{threadId=thread,excludeTurns=true,ephemeral=false,cwd=project});var newThread=fork.GetProperty("thread").GetProperty("id").GetString()!;
             Require(newThread!=thread&&fork.GetProperty("thread").GetProperty("sessionId").GetString()!=oldSession,"Fork reused the old conversation or service session");
@@ -40,7 +42,6 @@ internal static partial class PreviewRunner {
             var completed=await second.WaitTurn();Require(completed.GetProperty("turn").GetProperty("status").GetString()=="completed","Account 2 could not continue the forked conversation against loopback Responses");
             var history=await second.Call("thread/turns/list",new{threadId=newThread,itemsView="full",limit=10});Require(history.GetProperty("data").GetArrayLength()>=2,"Previous conversation history was lost");
             var preserved=await second.Call("thread/read",new{threadId=thread});Require(preserved.GetProperty("thread").GetProperty("id").GetString()==thread&&preserved.GetProperty("thread").GetProperty("sessionId").GetString()==oldSession,"The original conversation was replaced");
-            var again=await second.Call("account/read",new{refreshToken=false});Require(again.GetProperty("account").GetProperty("email").GetString()=="fixture-two@example.test","Continuing the thread changed authentication");
         }
         Require(mock.FirstAccountRejected&&mock.SecondAccountAccepted,"The real CLI did not send each turn with the correct fictional account");
         SharedWorkspace.Archive(b,repo);
@@ -100,10 +101,6 @@ internal static partial class PreviewRunner {
                 text+="event: response.output_item.done\ndata: "+JsonSerializer.Serialize(new{type="response.output_item.done",output_index=0,item})+"\n\n";
                 text+="event: response.completed\ndata: "+JsonSerializer.Serialize(new{type="response.completed",response=new{id="resp_fixture",status="completed",output=new[]{item},usage=new{input_tokens=10,output_tokens=5,total_tokens=15}}})+"\n\n";
             }else if(responseRequest){status="401 Unauthorized";text="{\"error\":{\"message\":\"Fixture rejected unexpected identity\"}}";}
-            else if(lines[0].Contains("accounts/check",StringComparison.Ordinal)){
-                var accounts=new[]{"one","two"}.Select(which=>new{id="fixture-account-"+which,account_id="fixture-account-"+which,plan_type="plus",workspace_backend_origin=Url,account_routing_override="NO_CONSTRAINT",name="Fixture "+which}).ToArray();
-                text=JsonSerializer.Serialize(new{accounts});
-            }
             else{text="{\"data\":[],\"models\":[],\"plan_type\":\"plus\",\"rate_limit\":{\"allowed\":true,\"limit_reached\":false,\"primary_window\":{\"used_percent\":0,\"limit_window_seconds\":18000,\"reset_at\":2000000000}}}";}
             var payload=Encoding.UTF8.GetBytes(text);var prefix=Encoding.ASCII.GetBytes("HTTP/1.1 "+status+"\r\nContent-Type: "+contentType+"\r\nContent-Length: "+payload.Length+"\r\nConnection: close\r\n\r\n");
             await stream.WriteAsync(prefix,lifetime.Token);await stream.WriteAsync(payload,lifetime.Token);await stream.FlushAsync(lifetime.Token);
