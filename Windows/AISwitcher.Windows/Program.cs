@@ -64,14 +64,21 @@ internal sealed class Program:Application {
     protected override void OnExit(ExitEventArgs e){timer?.Stop();engine?.Shutdown();tray?.Dispose();lease?.Dispose();base.OnExit(e);}
     public static string? Argument(string[] args,string key){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:null;}
     static void RunFixture(string[] args){var root=Argument(args,"--data-dir");var profile=args.FirstOrDefault(x=>x.StartsWith("--user-data-dir=",StringComparison.Ordinal));
-        if(root==null||!Path.GetFileName(root).StartsWith("ai-switcher-smoke.",StringComparison.Ordinal)||profile==null||!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))return;
+        if(root==null||!Path.GetFileName(root).StartsWith("ai-switcher-smoke.",StringComparison.Ordinal)||!Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()),StringComparison.OrdinalIgnoreCase))return;
+        if(args.Contains("--headless-child-fixture")){System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);return;}
+        if(profile==null)return;
+        void SpawnHeadless(){
+            var childInfo=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false,CreateNoWindow=true};foreach(var argument in new[]{"--process-fixture","--headless-child-fixture","--data-dir",root})childInfo.ArgumentList.Add(argument);
+            using var backend=Process.Start(childInfo)??throw new InvalidOperationException("Could not create headless fixture");var marker=Path.Combine(root,"fixture-headless-"+Environment.ProcessId+".pid");File.WriteAllText(marker,backend.Id.ToString());File.WriteAllText(marker+".created",backend.StartTime.ToUniversalTime().ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        if(args.Contains("--spawn-headless-fixture"))SpawnHeadless();
         if(args.Contains("--spawn-child-fixture")){
             var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};
             foreach(var argument in new[]{"--process-fixture","--data-dir",root,profile+"-child"})info.ArgumentList.Add(argument);
             using var child=Process.Start(info)??throw new InvalidOperationException("Could not create disposable child fixture");
             File.WriteAllText(Path.Combine(root,"fixture-child.pid"),child.Id.ToString());
         }
-        var app=new Application{ShutdownMode=args.Contains("--hide-on-close-fixture")?ShutdownMode.OnExplicitShutdown:ShutdownMode.OnLastWindowClose};var window=new Window{Title="AI Switcher disposable profile fixture",Width=400,Height=250,Content=new System.Windows.Controls.TextBlock{Text="Disposable Windows process fixture",Margin=new Thickness(25)}};window.Closing+=(_,e)=>{if(args.Contains("--hide-on-close-fixture")){e.Cancel=true;window.Hide();}};app.Run(window);
+        var app=new Application{ShutdownMode=args.Contains("--hide-on-close-fixture")?ShutdownMode.OnExplicitShutdown:ShutdownMode.OnLastWindowClose};var window=new Window{Title="AI Switcher disposable profile fixture",Width=400,Height=250,Content=new System.Windows.Controls.TextBlock{Text="Disposable Windows process fixture",Margin=new Thickness(25)}};window.Closing+=(_,e)=>{if(args.Contains("--hide-on-close-fixture")){e.Cancel=true;window.Hide();}};if(args.Contains("--spawn-headless-on-exit-fixture"))app.Exit+=(_,_)=>SpawnHeadless();app.Run(window);
     }
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern uint RegisterWindowMessage(string value);
     [DllImport("user32.dll")]static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr wParam,IntPtr lParam);

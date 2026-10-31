@@ -16,7 +16,7 @@ using AISwitcher.Core;
 namespace AISwitcher.Windows;
 
 internal sealed record OwnedProcess(int Id,string Executable,string[] Arguments,bool HasWindow,long Created,int ParentId=0);
-internal sealed class NativePlatform {
+internal sealed partial class NativePlatform {
     readonly Repository repository;readonly Preferences preferences;
     List<OwnedProcess> processes=[];
     readonly Dictionary<Guid,Dictionary<(int,long),OwnedProcess>> tracked=[];
@@ -41,16 +41,16 @@ internal sealed class NativePlatform {
             List<OwnedProcess> result=[];
             using var searcher=new ManagementObjectSearcher("SELECT ProcessId, ParentProcessId, ExecutablePath, CommandLine, CreationDate FROM Win32_Process");
             foreach(ManagementObject value in searcher.Get())using(value){
-                if(value["CommandLine"] is not string args)continue;
+                var args=value["CommandLine"] as string;
                 var pid=Convert.ToInt32(value["ProcessId"]);
-                try{using var process=Process.GetProcessById(pid);var exe=value["ExecutablePath"] as string??process.MainModule?.FileName;if(exe!=null){var created=process.StartTime.ToUniversalTime().ToFileTimeUtc();if(value["CreationDate"] is not string timestamp||ManagementDateTimeConverter.ToDateTime(timestamp).ToUniversalTime().ToFileTimeUtc()/10!=created/10)continue;result.Add(new(pid,exe,SplitArguments(args),process.MainWindowHandle!=IntPtr.Zero,created,Convert.ToInt32(value["ParentProcessId"])));}}catch(ArgumentException){}catch(InvalidOperationException){}catch(System.ComponentModel.Win32Exception){}
+                try{using var process=Process.GetProcessById(pid);var exe=value["ExecutablePath"] as string??process.MainModule?.FileName;if(exe!=null){var created=process.StartTime.ToUniversalTime().ToFileTimeUtc();if(value["CreationDate"] is not string timestamp||ManagementDateTimeConverter.ToDateTime(timestamp).ToUniversalTime().ToFileTimeUtc()/10!=created/10)continue;result.Add(new(pid,exe,args==null?[]:SplitArguments(args),process.MainWindowHandle!=IntPtr.Zero,created,Convert.ToInt32(value["ParentProcessId"])));}}catch(ArgumentException){}catch(InvalidOperationException){}catch(System.ComponentModel.Win32Exception){}
             }
             return result;
         });
     }
     public OwnedProcess? Owned(Account account){var path=repository.DataPath(account);
         var owned=processes.FirstOrDefault(p=>p.Arguments.Contains("--user-data-dir="+path,StringComparer.OrdinalIgnoreCase)&&!p.Arguments.Any(x=>x.StartsWith("--type=",StringComparison.OrdinalIgnoreCase))&&IsAgentExecutable(account,p.Executable));
-        if(owned!=null){if(!tracked.TryGetValue(account.Id,out var family))tracked[account.Id]=family=[];family[(owned.Id,owned.Created)]=owned;}
+        foreach(var scoped in processes.Where(p=>p.Arguments.Contains("--user-data-dir="+path,StringComparer.OrdinalIgnoreCase)&&IsAgentExecutable(account,p.Executable))){if(!tracked.TryGetValue(account.Id,out var family))tracked[account.Id]=family=[];family[(scoped.Id,scoped.Created)]=scoped;}
         TrackChildren(account.Id);return owned;
     }
     void TrackChildren(Guid id){
@@ -58,8 +58,8 @@ internal sealed class NativePlatform {
         bool added;
         do{added=false;foreach(var child in processes){
             if(child.Id==Environment.ProcessId||family.ContainsKey((child.Id,child.Created)))continue;
-            // Parent PID plus creation time must still identify a live, previously attributed process.
-            if(processes.Any(parent=>parent.Id==child.ParentId&&parent.Created<=child.Created&&family.ContainsKey((parent.Id,parent.Created)))){family[(child.Id,child.Created)]=child;added=true;}
+            // Match a verified live parent or a recorded, bounded lifetime; never PID alone.
+            if(processes.Any(parent=>parent.Id==child.ParentId&&parent.Created<=child.Created&&family.ContainsKey((parent.Id,parent.Created)))||exitedParents.Any(parent=>parent.Key.Id==child.ParentId&&family.ContainsKey(parent.Key)&&parent.Key.Created<=child.Created&&child.Created<=parent.Value)){family[(child.Id,child.Created)]=child;added=true;}
         }}while(added);
     }
     public async Task ForceStopAsync(Account account){
@@ -177,18 +177,24 @@ internal sealed class NativePlatform {
         throw new AppError("Could not open the AI agent window. Try again or check the browser.");
     }
     public async Task CloseAsync(Account account){
-        if(account.Agent.IsShared())return;await RefreshProcessesAsync();var owned=Owned(account);if(owned==null)return;
+        if(account.Agent.IsShared())return;await FindExecutableAsync(ExecutableKey(account));await RefreshProcessesAsync();var owned=Owned(account);
         repository.ValidateOwned(repository.ProfilePath(account),account.Id);
-        Process process;try{process=Process.GetProcessById(owned.Id);}catch(ArgumentException){await RefreshProcessesAsync();return;}
-        using(process){
-            if(process.HasExited)return;
-            if(process.StartTime.ToUniversalTime().ToFileTimeUtc()!=owned.Created)throw new AppError("The session process changed. Check its status before closing again.");
-            if(account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)){
-                try{await ProfileQuit.RequestAsync(owned.Id,owned.Created);}catch(AppError)when(process.HasExited){}
-            }else if(!process.CloseMainWindow())throw new AppError("This profile is still running. Save drafts and close its window before trying again.");
-            try{await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));}catch(TimeoutException){throw new AppError("This profile did not agree to quit. Finish any confirmation in its window or use its own tray Quit action, then retry.");}
+        if(owned!=null){
+            Process? process=null;try{process=Process.GetProcessById(owned.Id);}catch(ArgumentException){}
+            if(process!=null)using(process){
+                if(process.StartTime.ToUniversalTime().ToFileTimeUtc()!=owned.Created)throw new AppError("The session process changed. Check its status before closing again.");
+                if(!process.HasExited){
+                    if(account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)){
+                        try{await ProfileQuit.RequestAsync(owned.Id,owned.Created);}catch(AppError)when(process.HasExited){}
+                    }else if(!process.CloseMainWindow())throw new AppError("This profile is still running. Save drafts and close its window before trying again.");
+                    try{await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));}catch(TimeoutException){throw new AppError("This profile did not agree to quit. Finish any confirmation in its window or use its own tray Quit action, then retry.");}
+                }
+                // A helper created while the root was quitting may appear only after
+                // its parent has exited. Keep the exact parent's lifetime, not just PID.
+                exitedParents[(owned.Id,owned.Created)]=process.ExitTime.ToUniversalTime().ToFileTimeUtc();
+            }
         }
-        await RefreshProcessesAsync();
+        await CompleteCloseAsync(account);
     }
     static void Activate(int pid){using var process=Process.GetProcessById(pid);var window=process.MainWindowHandle;if(window!=IntPtr.Zero){ShowWindow(window,9);SetForegroundWindow(window);}}
     public static string[] SplitArguments(string command){var ptr=CommandLineToArgvW(command,out var count);if(ptr==IntPtr.Zero)return [];try{return Enumerable.Range(0,count).Select(i=>Marshal.PtrToStringUni(Marshal.ReadIntPtr(ptr,i*IntPtr.Size))??"").ToArray();}finally{LocalFree(ptr);}}

@@ -28,7 +28,7 @@ internal static partial class PreviewRunner {
             if(theme.Id=="terminalBlack"){Require(theme.Canvas=="#000000","Terminal Black canvas mismatch");engine.SetAgent(Agent.Claude);await CaptureDialog(window,()=>window.EditAccount(),Path.Combine(output,$"claude-editor-{language}.png"));await CaptureDialog(window,window.Settings,Path.Combine(output,$"settings-{language}.png"));}
             window.Exiting=true;window.Close();engine.Shutdown();
         }
-        if(smoke){await ProviderFixtureAsync(root,Program.Argument(args,"--provider-cli-executable"));await ScrollbarFixtureAsync();ReadOnlyPreferences(root);await ProcessRoutingAsync(Path.Combine(root,"processes"));await WorkspaceFixtureAsync(root);await ProjectDetachmentAsync(root);}
+        if(smoke){await ProviderFixtureAsync(root,Program.Argument(args,"--provider-cli-executable"));await ScrollbarFixtureAsync();ReadOnlyPreferences(root);await ProcessRoutingAsync(Path.Combine(root,"processes"));await WorkspaceFixtureAsync(root);await ProjectDetachmentAsync(root);await SessionCloseFixtureAsync(root);}
         File.WriteAllText(Path.Combine(output,"ui-smoke-result.txt"),"PASS: 11 themes × 2 languages; account/filter/quota controls; cards/table transition; Claude editor and settings rendering; real provider CLI fixture processes for connect/read/disconnect/reconnect, identity mismatch and metadata retention; exact native Windows fixture process routing; private workspace junctions, custom database, metadata projection, SQLite path canonicalization and safe deletion.\n");
         }catch(Exception error){code=1;File.AppendAllText(Path.Combine(output,backend?"backend-smoke-error.txt":"ui-smoke-error.txt"),error.ToString());}finally{app.Shutdown(code);}};
         app.Run();return code;
@@ -61,6 +61,7 @@ internal static partial class PreviewRunner {
     static async Task CloseStoreAsync(AppEngine engine,Account account){
         await engine.Platform.CloseAsync(account);
         if(account.UsesCodexDesktop)await engine.Backend.StopAsync(account);
+        await engine.Platform.VerifyClosedAsync(account);
     }
     static async Task RunStoreAsync(string root,string output,string[] args,bool reopen){
         var source=Program.Argument(args,"--store-executable")??throw new InvalidOperationException("Store executable required");

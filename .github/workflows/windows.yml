@@ -52,6 +52,7 @@ jobs:
         id: publish
         run: ../scripts/build-windows.ps1 -Runtime '${{ matrix.runtime }}'
       - name: Exercise native Windows UI and owned process lifecycle
+        id: ui
         if: matrix.runtime == 'win-x64'
         run: |
           $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
@@ -65,7 +66,7 @@ jobs:
           Get-Content (Join-Path $output 'ui-smoke-result.txt')
           Remove-Item -Recurse -Force $root
       - name: Verify standalone EXE with real native Codex RPC (signed out)
-        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' }}
         run: |
           $tools=Join-Path $env:TEMP ('ai-switcher-codex.'+[Guid]::NewGuid().ToString('N'))
           npm install --prefix $tools --no-audit --no-fund '@openai/codex@0.164.0'
@@ -89,13 +90,13 @@ jobs:
           if('${{ inputs.daemon_probe }}' -eq 'true'){../scripts/test-windows-backend.ps1 -App $app -Tools $tools -Output $output}
           Remove-Item -Recurse -Force $tools
       - name: Exercise real ChatGPT Store profiles, cache reuse and manager restart
-        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' }}
         run: |
           $output=Join-Path $PWD 'artifacts/previews'
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
           ../scripts/test-windows-store-runtime.ps1 -App $app -Output $output
       - name: Exercise real Claude Store profiles, cache reuse and manager restart
-        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' }}
         run: |
           $output=Join-Path $PWD 'artifacts/previews/claude'
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
