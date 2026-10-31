@@ -35,7 +35,7 @@ Download the standalone **Windows x64 EXE** (Intel/AMD) or **ARM64 EXE** from [R
 - Close a profile without deleting its login, or explicitly delete its local data after closing.
 - Open Claude with a separate Desktop profile or Chrome/Edge/Brave browser profile per account.
 - Open Gemini, Perplexity, and DeepSeek in separate Chrome/Edge/Brave browser profiles.
-- Open the installed Antigravity app using its shared application sign-in.
+- Open Antigravity on macOS with separate Desktop and CLI sign-ins for each new account; keep existing shared entries unchanged.
 - Filter agents from the sidebar, combined with search, favorites, and recents.
 - Run without an API key, a hosted service, or third-party Swift packages.
 
@@ -50,7 +50,7 @@ Quota cards use a header refresh icon and clickable **Read at… · Details** ar
 Use **Connect account session** on an account card, its **⋯** menu, quota details, or the tray/menu bar. This reads subscription quota without opening Desktop. Connected providers refresh every five minutes; **Disconnect / Close account session** stops refresh and retains sign-in and the last snapshot. Disconnected cached data becomes stale. A missing or failed response never becomes a fake 100% quota.
 
 - **Claude:** the optional CLI quota reader requires Claude Code CLI **2.1.270+**. macOS can instead use the isolated web sign-in described above, including Free accounts. AI Switcher detects supported installed native CLIs; the macOS reader uses automatic discovery, while Windows also supports Settings → Application executables → Claude Code CLI when needed. On macOS, **Connect account session** opens sign-in when needed and waits for authentication before reading quota. On Windows, use **Sign in with official CLI…** once per profile, then Connect. The CLI's `auth login` opens its normal browser sign-in. This is separate from Claude Desktop/browser login; the profile email, when supplied, must match. Quota uses read-only `initialize` / `get_usage` control requests with `skip_behaviors`, no model prompt, hooks, MCP tools or transcript scanning. This newer CLI control interface is experimental and may require compatibility updates.
-- **Antigravity:** requires official Antigravity CLI **1.1.12+** (`agy` or `antigravity`), separately installed. Choose its executable when automatic discovery cannot find it. Its noninteractive `/usage` command returns subscription buckets without a model turn. Sign-in uses the CLI's normal interactive login and the shared application account. On macOS, AI Switcher supplements the quota response with the email in Antigravity’s saved Google sign-in metadata, checking that this identity stays unchanged across the official CLI read. Missing or unsupported metadata leaves the shared sign-in label in place. This is saved profile metadata, not an independent token verification. Multiple Antigravity sign-ins cannot be isolated; only one shared entry is supported.
+- **Antigravity:** requires official Antigravity CLI **1.1.12+** (`agy` or `antigravity`), separately installed. Choose its executable when automatic discovery cannot find it. Its noninteractive `/usage` command returns subscription buckets without a model turn. Sign-in uses the CLI's normal interactive login. On macOS, new accounts share a private home between their Desktop app and CLI; older entries retain the original shared application account. On macOS, AI Switcher supplements the quota response with the email in Antigravity’s saved Google sign-in metadata, checking that this identity stays unchanged across the official CLI read. Missing or unsupported metadata leaves the email unavailable (or the shared sign-in label for legacy entries). This is saved profile metadata, not an independent token verification. On macOS, add more accounts normally: each new entry gets private Electron user data and a private home, including `.gemini` authentication, settings and history. No credentials are copied from the existing shared sign-in. The existing entry keeps its login and remains a shared launcher. Windows still supports one shared entry.
 
 On macOS, choose the CLI executable itself, not `Claude.app` or `Antigravity.app`. The CLI selector rejects Desktop bundles and folders. Previously saved invalid app selections recover through automatic CLI discovery. Login validates the CLI version before opening Terminal; the native Claude Code bundle shipped under Application Support is supported.
 
@@ -73,11 +73,11 @@ Choose **AI agent** when adding an account. The agent is fixed after creation to
 | ChatGPT | Separate Desktop session or browser profile | Codex quota; Desktop background connections |
 | Claude | Separate Desktop or Chromium browser profile for each account | Subscription limits via separate Claude Code CLI sign-in |
 | Gemini, Perplexity, DeepSeek | Separate Chromium browser profile for each account | Unavailable |
-| Antigravity | Installed app; its existing shared sign-in | Quota via official CLI; shared sign-in |
+| Antigravity | macOS: separate Desktop + CLI home per new account; legacy shared entry preserved | Quota via official CLI in that account’s home |
 
 Use **AI AGENTS** in the left sidebar to select an agent or **All agents**. Counts show saved entries, and the selected agent persists across relaunch. Favorites, recents, and search combine with the agent filter. Adding an account while filtered preselects that agent.
 
-For browser agents, install Chrome, Edge, or Brave, add a profile, then sign in directly on the service's website. Each profile keeps its own browser storage. Antigravity supports one launcher entry: AI Switcher does not isolate or switch its accounts, or close the shared app. Agent capabilities are reflected consistently in cards, the quota overview, menu bar, and diagnostics. Quota-only mode supports ChatGPT, Claude, and Antigravity. Notifications require a verified quota identity; Antigravity quota currently has no account identity in its response.
+For browser agents, install Chrome, Edge, or Brave, add a profile, then sign in directly on the service's website. Each profile keeps its own browser storage. On macOS, new Antigravity entries have isolated Desktop/CLI homes. **Close account session…** closes that profile’s app and stops quota refresh while preserving login; other profiles and the separately opened app remain running. Existing shared entries and Windows retain shared-launcher behavior; AI Switcher does not close the shared app. Agent capabilities are reflected consistently in cards, the quota overview, menu bar, and diagnostics. Quota-only mode supports ChatGPT, Claude, and Antigravity. Notifications require a verified quota identity; Antigravity quota currently has no account identity in its response.
 
 ![AI agents with the Playful Retro theme and fictional profiles](docs/assets/ai-agents-en.png)
 
@@ -202,7 +202,7 @@ Quota uses [`account/read` and `account/rateLimits/read`](https://learn.chatgpt.
 
 ## Privacy and storage
 
-AI Switcher does not read passwords, cookies, or conversations. On macOS, Antigravity email display reads only identity claims from the Google ID token in its local shared sign-in file; access/refresh tokens are never used or exported. These saved claims may outlive the ID token’s expiry and are attached only after a successful official quota read with matching identity metadata before and after it. ChatGPT and Codex manage their own authentication and usual network requests. AI Switcher reads identity and quota protocol responses and caches them in `accounts.json`. Child environments exclude inherited API keys and authentication/CLI overrides.
+AI Switcher does not read passwords, cookies, or conversations. On macOS, Antigravity email display reads only identity claims from the Google ID token in the selected profile’s local sign-in file (or the original shared file for legacy entries); access/refresh tokens are never used or exported. These saved claims may outlive the ID token’s expiry and are attached only after a successful official quota read with matching identity metadata before and after it. ChatGPT and Codex manage their own authentication and usual network requests. AI Switcher reads identity and quota protocol responses and caches them in `accounts.json`. Child environments exclude inherited API keys and authentication/CLI overrides.
 
 ```text
 ~/Library/Application Support/AI Switcher/
@@ -267,3 +267,9 @@ Released under the [MIT License](LICENSE). The icon is original geometric drawin
 ![Halloween, Christmas, Tet Holiday and Black Friday themes](docs/assets/seasonal-themes.png)
 
 Halloween, Christmas, Tet Holiday and Black Friday each have a distinct palette, original vector artwork in the dashboard banner and theme picker, sidebar identity and matching account-card ribbons. The shared artwork and palettes render on macOS and Windows. Decorations are static, ignore pointer input and keep all existing account actions and data unchanged. Select a theme in Appearance & Language; selections persist after relaunch.
+
+### Antigravity profile compatibility on macOS
+
+Separate profiles have been checked with Antigravity Hub 2.28.2. This experimental integration uses the installed, unmodified app with Electron user data and a private home; it does not patch the app, rotate tokens, or modify the original `.gemini` directory. Its shell environment is scoped to that home so the Desktop language server and CLI cannot inherit another profile’s sign-in. Global shell configuration, Git settings and SSH files are not copied into private homes; configure development tools there as needed. OAuth may open your regular browser: choose the intended Google account for each profile. App updates may require compatibility changes.
+
+Run `bash scripts/test.sh --antigravity` for an opt-in real-app smoke check using two disposable, signed-out profiles. It verifies the native language servers’ homes, distinct Desktop windows, focus/reopen/close isolation, persistence, and that official CLI usage cannot reuse the shared login. Normal tests use fictional identities and quota fixtures.

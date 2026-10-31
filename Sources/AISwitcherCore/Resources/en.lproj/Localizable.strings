@@ -438,6 +438,7 @@
 "The agent of an existing profile cannot change. Create a new profile instead." = "The agent of an existing profile cannot change. Create a new profile instead.";
 
 "Shared application sign-in" = "Shared application sign-in";
+"Account email unavailable" = "Account email unavailable";
 
 "Separate browser profile" = "Separate browser profile";
 
@@ -565,3 +566,17 @@
 "Installation is still running. Finish it in the installer window, then click Connect again." = "Installation is still running. Finish it in the installer window, then click Connect again.";
 "CLI installation is available for Claude and Antigravity." = "CLI installation is available for Claude and Antigravity.";
 "Installation finished. Return to AI Switcher." = "Installation finished. Return to AI Switcher.";
+
+"Separate Antigravity Desktop and CLI sign-in for each new profile." = "Separate Antigravity Desktop and CLI sign-in for each new profile.";
+
+"The Antigravity profile storage could not be verified. Its data has been preserved." = "The Antigravity profile storage could not be verified. Its data has been preserved.";
+
+"This Antigravity version could not be verified for separate profiles. Update Antigravity and try again." = "This Antigravity version could not be verified for separate profiles. Update Antigravity and try again.";
+
+"Could not open the separate Antigravity session. Try again or update Antigravity." = "Could not open the separate Antigravity session. Try again or update Antigravity.";
+
+"This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session." = "This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session.";
+
+"Each new Antigravity account has its own Desktop and CLI sign-in. Sign in once in that account's window or with Connect." = "Each new Antigravity account has its own Desktop and CLI sign-in. Sign in once in that account's window or with Connect.";
+
+"ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles keep Desktop and CLI sign-in in the same private home; existing shared entries keep their login. Connect reads quota without opening Desktop or sending a model prompt." = "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles keep Desktop and CLI sign-in in the same private home; existing shared entries keep their login. Connect reads quota without opening Desktop or sending a model prompt.";

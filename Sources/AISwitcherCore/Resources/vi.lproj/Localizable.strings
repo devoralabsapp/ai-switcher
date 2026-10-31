@@ -438,6 +438,7 @@
 "The agent of an existing profile cannot change. Create a new profile instead." = "Không thể đổi agent của hồ sơ hiện có. Hãy tạo hồ sơ mới.";
 
 "Shared application sign-in" = "Đăng nhập chung của ứng dụng";
+"Account email unavailable" = "Chưa có địa chỉ email tài khoản";
 
 "Separate browser profile" = "Hồ sơ trình duyệt riêng";
 
@@ -565,3 +566,17 @@
 "Installation is still running. Finish it in the installer window, then click Connect again." = "Quá trình cài đặt vẫn đang chạy. Hãy hoàn tất trong cửa sổ cài đặt rồi bấm Kết nối lại.";
 "CLI installation is available for Claude and Antigravity." = "Hỗ trợ cài CLI cho Claude và Antigravity.";
 "Installation finished. Return to AI Switcher." = "Đã cài xong. Hãy quay lại AI Switcher.";
+
+"Separate Antigravity Desktop and CLI sign-in for each new profile." = "Mỗi hồ sơ Antigravity mới có đăng nhập Desktop và CLI riêng.";
+
+"The Antigravity profile storage could not be verified. Its data has been preserved." = "Không thể xác minh thư mục hồ sơ Antigravity. Dữ liệu đã được giữ nguyên.";
+
+"This Antigravity version could not be verified for separate profiles. Update Antigravity and try again." = "Chưa xác minh được phiên bản Antigravity này có hỗ trợ hồ sơ riêng. Hãy cập nhật Antigravity rồi thử lại.";
+
+"Could not open the separate Antigravity session. Try again or update Antigravity." = "Không thể mở phiên Antigravity riêng. Hãy thử lại hoặc cập nhật Antigravity.";
+
+"This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session." = "Mục hiện có giữ nguyên đăng nhập Antigravity dùng chung. Thêm tài khoản mới để dùng phiên riêng.";
+
+"Each new Antigravity account has its own Desktop and CLI sign-in. Sign in once in that account's window or with Connect." = "Mỗi tài khoản Antigravity mới có đăng nhập Desktop và CLI riêng. Đăng nhập một lần trong cửa sổ tài khoản đó hoặc bằng nút Kết nối.";
+
+"ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles keep Desktop and CLI sign-in in the same private home; existing shared entries keep their login. Connect reads quota without opening Desktop or sending a model prompt." = "ChatGPT đọc hạn mức Codex từ phiên Desktop. Claude dùng đăng nhập xem hạn mức riêng từng hồ sơ. Hồ sơ Antigravity mới dùng chung một thư mục riêng cho đăng nhập Desktop và CLI; mục cũ giữ nguyên đăng nhập chung. Kết nối đọc hạn mức không mở Desktop và không gửi câu hỏi AI.";

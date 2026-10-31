@@ -144,10 +144,11 @@ public struct ProfileRepository: Sendable {
         let fm = FileManager.default
         try validateDesktopOwnership(for: id)
         try validateClaudeOwnership(for: id)
+        try validateAntigravityOwnership(for: id)
         try SharedDesktopWorkspace(repository: self).archiveMetadata(id)
         var moved: [(source: URL, staged: URL)] = []
         do {
-            for source in [profileURL(for: id), codexHomeURL(for: id), desktopProfileURL(for: id), desktopHomeURL(for: id), claudeProfileURL(for: id)] where fm.fileExists(atPath: source.path) {
+            for source in [profileURL(for: id), codexHomeURL(for: id), desktopProfileURL(for: id), desktopHomeURL(for: id), claudeProfileURL(for: id), antigravityProfileURL(for: id)] where fm.fileExists(atPath: source.path) {
                 let staged = source.deletingLastPathComponent().appendingPathComponent(".removed-\(UUID().uuidString)")
                 try fm.moveItem(at: source, to: staged)
                 moved.append((source, staged))

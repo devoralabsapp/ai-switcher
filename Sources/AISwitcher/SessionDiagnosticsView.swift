@@ -71,7 +71,7 @@ struct SessionDiagnosticsView: View {
         let storageError = model.diagnosticStorageErrors[account.id]
         let quota = account.displayedCodexConnection?.quota
         let missingBrowser = account.effectiveLaunchMode == .browser && model.browserService.applicationURL(for: account.browser) == nil
-        let missingApplication = (account.effectiveAgent.isSharedApplication && model.agentApplications.applicationURL(for: account.effectiveAgent) == nil)
+        let missingApplication = (account.effectiveAgent == .antigravity && model.agentApplications.applicationURL(for: account.effectiveAgent) == nil)
             || (account.usesClaudeDesktop && model.claudeDesktopService.applicationURL() == nil)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {

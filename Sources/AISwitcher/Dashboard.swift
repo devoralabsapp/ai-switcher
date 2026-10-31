@@ -59,7 +59,7 @@ struct Dashboard: View {
             Button(L10n.text("Cancel"), role: .cancel) { model.accountToClose = nil }
             Button(L10n.text("Close session")) { model.closeSession(account); model.accountToClose = nil }
         } message: { account in
-            Text(account.effectiveAgent.isSharedApplication ? L10n.text("The background connection will close. Your login is kept.") : L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", String(describing: account.name)))
+            Text(account.usesSharedApplication ? L10n.text("The background connection will close. Your login is kept.") : L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", String(describing: account.name)))
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusAccountSearch)) { _ in searchFocused = true }
         .appAppearance(model.preferences)
@@ -416,7 +416,7 @@ private struct AccountCard: View {
                         Button(L10n.text("Connect account session")) { model.connectSession(account) }
                             .disabled(!model.canConnectSession(account))
                     }
-                    Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled((account.effectiveAgent.isSharedApplication && !model.providerSessionIDs.contains(account.id)) || !running || model.quotaBusyIDs.contains(account.id))
+                    Button(L10n.text("Close account session…")) { model.accountToClose = account }.disabled((account.usesSharedApplication && !model.providerSessionIDs.contains(account.id)) || !running || model.quotaBusyIDs.contains(account.id))
                     Button(L10n.text("Delete local profile…"), role: .destructive) { model.accountToDelete = account }
                         .disabled(model.quotaBusyIDs.contains(account.id) || model.pendingConnections[account.id] != nil)
                 } label: { Image(systemName: "ellipsis").font(appearanceTheme.font(size: 13, weight: .medium)).frame(width: 18, height: 24) }

@@ -10,6 +10,7 @@ AISWITCHER_TEST_CODEX=0
 AISWITCHER_TEST_DESKTOP=0
 AISWITCHER_TEST_SESSION=0
 AISWITCHER_TEST_CLAUDE=0
+AISWITCHER_TEST_ANTIGRAVITY=0
 for option in "$@"; do
     case "$option" in
         --browser) AISWITCHER_TEST_BROWSER=1 ;;
@@ -17,15 +18,19 @@ for option in "$@"; do
         --desktop) AISWITCHER_TEST_DESKTOP=1 ;;
         --session) AISWITCHER_TEST_SESSION=1 ;;
         --claude) AISWITCHER_TEST_CLAUDE=1 ;;
+        --antigravity) AISWITCHER_TEST_ANTIGRAVITY=1 ;;
         *) printf 'Unknown test option: %s\n' "$option" >&2; exit 1 ;;
     esac
 done
 swift test --disable-sandbox --cache-path .build/cache
 
-if [[ "$AISWITCHER_TEST_BROWSER" == "1" || "$AISWITCHER_TEST_CODEX" == "1" || "$AISWITCHER_TEST_DESKTOP" == "1" || "$AISWITCHER_TEST_SESSION" == "1" || "$AISWITCHER_TEST_CLAUDE" == "1" ]]; then
+if [[ "$AISWITCHER_TEST_BROWSER" == "1" || "$AISWITCHER_TEST_CODEX" == "1" || "$AISWITCHER_TEST_DESKTOP" == "1" || "$AISWITCHER_TEST_SESSION" == "1" || "$AISWITCHER_TEST_CLAUDE" == "1" || "$AISWITCHER_TEST_ANTIGRAVITY" == "1" ]]; then
     TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-switcher-smoke.XXXXXX")"
     trap 'rm -rf "$TEST_ROOT"' EXIT
     BINARY="$(swift build --show-bin-path --disable-sandbox)/AISwitcher"
+    if [[ "$AISWITCHER_TEST_ANTIGRAVITY" == "1" ]]; then
+        "$BINARY" --data-dir "$TEST_ROOT" --antigravity-smoke-test
+    fi
     if [[ "$AISWITCHER_TEST_CLAUDE" == "1" ]]; then
         "$BINARY" --data-dir "$TEST_ROOT" --claude-smoke-test
     fi

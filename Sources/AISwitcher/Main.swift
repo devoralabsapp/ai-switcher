@@ -89,7 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.rebuildStatusMenu()
         }
 
-        if arguments.contains("--claude-smoke-test") {
+        if arguments.contains("--antigravity-smoke-test") {
+            Task { await AntigravitySmokeTest.run(repository: model.repository) }
+        } else if arguments.contains("--claude-smoke-test") {
             Task { await claudeSmokeTest(root: root) }
         } else if arguments.contains("--session-smoke-test") {
             Task { await sessionSmokeTest(root: root) }
@@ -175,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let account = account(from: sender) else { return }
         let alert = NSAlert()
         alert.messageText = L10n.text("Close this account session?")
-        alert.informativeText = account.effectiveAgent.isSharedApplication ? L10n.text("The background connection will close. Your login is kept.") : L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", account.name)
+        alert.informativeText = account.usesSharedApplication ? L10n.text("The background connection will close. Your login is kept.") : L10n.format("Windows for “%@” will close. Send or copy any drafts first. Your login is kept for next time.", account.name)
         alert.addButton(withTitle: L10n.text("Cancel"))
         alert.addButton(withTitle: L10n.text("Close session"))
         NSApp.activate(ignoringOtherApps: true)

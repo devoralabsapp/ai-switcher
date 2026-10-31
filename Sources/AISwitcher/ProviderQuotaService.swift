@@ -59,11 +59,15 @@ final class ProviderQuotaService {
         var env = CodexProcessConfiguration.environment(base: ProcessInfo.processInfo.environment, home: repository.root)
         for key in Array(env.keys) where key.hasPrefix("CLAUDE_") || key.hasPrefix("ANTHROPIC_") || key.hasPrefix("AGY_") || key.hasPrefix("GOOGLE_") || key.hasPrefix("GEMINI_") || key.hasPrefix("CODEX_") { env.removeValue(forKey: key) }
         if account.effectiveAgent == .claude { try repository.prepareClaudeProfile(for: account.id); env["CLAUDE_CONFIG_DIR"] = repository.claudeConfigURL(for: account.id).path }
+        if account.usesIsolatedAntigravity {
+            try repository.prepareAntigravityProfile(for: account.id)
+            env = AntigravityLaunch.environment(base: env, home: repository.antigravityHomeURL(for: account.id))
+        }
         return env
     }
     private func command(_ account: Account, executable: URL, arguments: [String], captureStandardError: Bool = false) async throws -> ProviderCLICommand {
         let command = ProviderCLICommand();commands[account.id] = command
-        do { try await command.start(executable: executable, arguments: arguments, environment: environment(account), directory: repository.root, captureStandardError: captureStandardError) }
+        do { try await command.start(executable: executable, arguments: arguments, environment: environment(account), directory: account.usesIsolatedAntigravity ? repository.antigravityHomeURL(for: account.id) : repository.root, captureStandardError: captureStandardError) }
         catch { await command.stop();commands[account.id] = nil;throw error }
         return command
     }
@@ -110,9 +114,12 @@ final class ProviderQuotaService {
             let after = try await identity();guard before.matches(after) else { throw ProviderQuotaError.identityChanged }
             return try ProviderQuotaParser.parse(data, agent: .claude, identity: after)
         }
-        let before = AntigravityAccountMetadata.read(at: antigravityIdentityURL)
+        let identityURL = account.usesIsolatedAntigravity ? repository.antigravityIdentityURL(for: account.id) : antigravityIdentityURL
+        if account.usesIsolatedAntigravity { try repository.validateAntigravityOwnership(for: account.id) }
+        let before = AntigravityAccountMetadata.read(at: identityURL)
         let data = try await run(account, exe: exe, arguments: ProviderCLIConfiguration.antigravityArguments, detectSignOut: true)
-        let after = AntigravityAccountMetadata.read(at: antigravityIdentityURL)
+        if account.usesIsolatedAntigravity { try repository.validateAntigravityOwnership(for: account.id) }
+        let after = AntigravityAccountMetadata.read(at: identityURL)
         let identity = try AntigravityAccountMetadata.consistentIdentity(before: before, after: after, emailHint: account.emailHint)
         return try ProviderQuotaParser.parse(data, agent: .antigravity, identity: identity)
     }
@@ -122,8 +129,19 @@ final class ProviderQuotaService {
         let script = repository.root.appendingPathComponent("provider-login-\(account.id.uuidString).command")
         var content = "#!/bin/sh\n"
         if account.effectiveAgent == .claude { content += "export CLAUDE_CONFIG_DIR=" + quote(repository.claudeConfigURL(for: account.id).path) + "\n" }
-        content += "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN GEMINI_API_KEY GOOGLE_API_KEY GOOGLE_APPLICATION_CREDENTIALS AGY_ADC_AUTH\n"
-        content += "exec " + quote(exe.path) + (account.effectiveAgent == .claude ? " auth login" : "") + "\n"
+        if account.usesIsolatedAntigravity {
+            let env = try environment(account)
+            // Terminal may inherit other credentials that AI Switcher never saw.
+            // Start with a minimal environment rather than serializing app secrets.
+            let keys = ["HOME", "CFFIXED_USER_HOME", "SHELL", "ZDOTDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "PATH", "LANG", "LC_ALL", "TERM", "TMPDIR", "USER", "LOGNAME"]
+            let assignments = keys.compactMap { key in env[key].map { quote(key + "=" + $0) } }.joined(separator: " ")
+            content += "cd " + quote(repository.antigravityHomeURL(for: account.id).path) + " || exit 1\n"
+            content += "exec /usr/bin/env -i " + assignments + " " + quote(exe.path) + "\n"
+        }
+        else {
+            content += "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN GEMINI_API_KEY GOOGLE_API_KEY GOOGLE_APPLICATION_CREDENTIALS AGY_ADC_AUTH\n"
+            content += "exec " + quote(exe.path) + (account.effectiveAgent == .claude ? " auth login" : "") + "\n"
+        }
         try Task.checkCancellation()
         try content.write(to: script, atomically: true, encoding: .utf8);try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
         return script

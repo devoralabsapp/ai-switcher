@@ -56,10 +56,14 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var connectOnStartup: Bool?
     public var agent: AIAgent?
     public var providerQuotaConnection: CodexConnection?
+    /// Nil keeps existing Antigravity entries on their original shared sign-in.
+    public var antigravityUsesPrivateHome: Bool?
 
     public var effectiveAgent: AIAgent { agent ?? .chatgpt }
     public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent == .claude ? launchMode ?? .browser : effectiveAgent.isSharedApplication ? .desktop : .browser }
     public var usesClaudeDesktop: Bool { effectiveAgent == .claude && effectiveLaunchMode == .desktop }
+    public var usesIsolatedAntigravity: Bool { effectiveAgent == .antigravity && antigravityUsesPrivateHome == true }
+    public var usesSharedApplication: Bool { effectiveAgent.isSharedApplication && !usesIsolatedAntigravity }
     public var usesCodexDesktop: Bool { effectiveAgent.supportsCodexQuota && effectiveLaunchMode == .desktop }
     public var usesSharedLocalWorkspace: Bool { usesCodexDesktop && sharesLocalWorkspace == true }
     public var effectiveDefaultAction: AccountAction { usesCodexDesktop ? defaultAction ?? .openDesktop : .openDesktop }
@@ -73,7 +77,7 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
                 lastOpenedAt: Date? = nil, codexConnection: CodexConnection? = nil,
                 launchMode: LaunchMode? = nil, desktopCodexConnection: CodexConnection? = nil,
                 sharesLocalWorkspace: Bool? = nil, defaultAction: AccountAction? = nil, connectOnStartup: Bool? = nil,
-                agent: AIAgent? = nil) {
+                agent: AIAgent? = nil, antigravityUsesPrivateHome: Bool? = nil) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.emailHint = emailHint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -89,6 +93,7 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
         self.defaultAction = defaultAction
         self.connectOnStartup = connectOnStartup
         self.agent = agent
+        self.antigravityUsesPrivateHome = antigravityUsesPrivateHome
     }
 
     public var initials: String {

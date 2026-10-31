@@ -75,7 +75,7 @@ final class AppModel: ObservableObject {
     let claudeDesktopService: ClaudeDesktopService
     let desktopService: DesktopService
     let quotaService: CodexQuotaService
-    let agentApplications = AgentApplicationService()
+    let agentApplications: AgentApplicationService
     private let desktopQuotaSource: any DesktopQuotaSource
     private var refreshTimer: AnyCancellable?
     private var quotaTimer: AnyCancellable?
@@ -101,6 +101,7 @@ final class AppModel: ObservableObject {
         quotaAlertTracker = preferencesStore.loadAlertTracker()
         self.preferences = preferences ?? preferencesStore.load()
         repository = ProfileRepository(root: root)
+        agentApplications = AgentApplicationService(repository: repository)
         browserService = BrowserService(repository: repository)
         desktopService = DesktopService(repository: repository)
         claudeDesktopService = ClaudeDesktopService(repository: repository)
@@ -250,6 +251,10 @@ final class AppModel: ObservableObject {
             do { try repository.validateClaudeOwnership(for: account.id) }
             catch { failures[account.id] = error.localizedDescription }
         }
+        for account in accounts where account.usesIsolatedAntigravity {
+            do { try repository.validateAntigravityOwnership(for: account.id) }
+            catch { failures[account.id] = error.localizedDescription }
+        }
         diagnosticStorageErrors = failures
     }
 
@@ -325,7 +330,7 @@ final class AppModel: ObservableObject {
         if launchingIDs.contains(account.id) { return .opening }
         if providerSessionIDs.contains(account.id) && !desktopWindowIDs.contains(account.id) { return .background }
         if (quotaErrors[account.id] as? ProviderQuotaError) == .signedOut { return .needsSignIn }
-        if account.effectiveAgent.isSharedApplication {
+        if account.usesSharedApplication {
             return agentApplications.isRunning(account.effectiveAgent) ? .applicationRunning : .disconnected
         }
         if (quotaErrors[account.id] as? CodexQuotaError) == .notSignedIn { return .needsSignIn }
@@ -333,6 +338,7 @@ final class AppModel: ObservableObject {
             return runningIDs.contains(account.id) ? .browserOpen : .disconnected
         }
         if desktopWindowIDs.contains(account.id) { return .desktopOpen }
+        if account.usesIsolatedAntigravity && runningIDs.contains(account.id) { return .background }
         if backendIDs.contains(account.id) { return .background }
         return quotaErrors[account.id] == nil ? .disconnected : .connectionFailed
     }
@@ -381,16 +387,22 @@ final class AppModel: ObservableObject {
     @discardableResult
     func saveAccount(_ account: Account) -> Bool {
         guard !loadFailed else { return false }
+        var account = account
+        if account.effectiveAgent == .antigravity, !accounts.contains(where: { $0.id == account.id }) {
+            account.antigravityUsesPrivateHome = true
+        }
         do {
             try account.validate()
-            if account.effectiveAgent.isSharedApplication,
-               accounts.contains(where: { $0.id != account.id && $0.effectiveAgent == account.effectiveAgent }) {
+            if account.usesSharedApplication,
+               accounts.contains(where: { $0.id != account.id && $0.usesSharedApplication }) {
                 throw AgentLaunchError.duplicateSharedApplication
             }
             var updated = snapshot
             if let index = updated.accounts.firstIndex(where: { $0.id == account.id }) {
                 guard account.effectiveAgent == updated.accounts[index].effectiveAgent else { throw AgentLaunchError.fixedAgent }
                 var edited = account
+                // Changing storage identity would silently switch the saved login.
+                edited.antigravityUsesPrivateHome = updated.accounts[index].antigravityUsesPrivateHome
                 if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode
                     || edited.usesSharedLocalWorkspace != updated.accounts[index].usesSharedLocalWorkspace {
                     guard !hasRunningSession(account), !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
@@ -419,12 +431,13 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ account: Account, newWindow: Bool = false) {
-        guard !launchingIDs.contains(account.id) else { return }
+        guard let account = accounts.first(where: { $0.id == account.id }), !launchingIDs.contains(account.id) else { return }
         launchingIDs.insert(account.id)
         Task {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
-                if account.effectiveAgent.isSharedApplication { try await agentApplications.open(account.effectiveAgent) }
+                if account.usesIsolatedAntigravity { try await agentApplications.open(account) }
+                else if account.usesSharedApplication { try await agentApplications.open(account.effectiveAgent) }
                 else if account.usesClaudeDesktop { try await claudeDesktopService.open(account) }
                 else if account.usesCodexDesktop { try await desktopService.open(account) }
                 else { try await browserService.open(account, forceNewWindow: newWindow) }
@@ -478,11 +491,12 @@ final class AppModel: ObservableObject {
     }
 
     func closeSession(_ account: Account) {
+        guard let account = accounts.first(where: { $0.id == account.id }) else { return }
         if account.effectiveAgent.usesProviderQuota {
             providerSessionIDs.remove(account.id);quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id);Task { await providerQuota.stop(account.id) }
-            if account.effectiveAgent.isSharedApplication { refreshRunning(); return }
+            if account.usesSharedApplication { refreshRunning(); return }
         }
-        guard !account.effectiveAgent.isSharedApplication else { return }
+        guard !account.usesSharedApplication else { return }
         guard !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id) else { return }
         launchingIDs.insert(account.id)
         closingSessionIDs.insert(account.id)
@@ -490,6 +504,7 @@ final class AppModel: ObservableObject {
             defer { launchingIDs.remove(account.id); closingSessionIDs.remove(account.id); refreshRunning() }
             do {
                 if account.effectiveAgent == .claude { try await claudeDesktopService.close(account) }
+                if account.usesIsolatedAntigravity { try await agentApplications.close(account) }
                 try await browserService.close(account)
                 if account.effectiveAgent.supportsCodexQuota { try await desktopQuotaSource.closeSession(account) }
                 quotaErrors[account.id] = nil
@@ -515,7 +530,7 @@ final class AppModel: ObservableObject {
     func refreshRunning() {
         let ids = Set(accounts.filter { hasRunningSession($0) }.map(\.id))
         if ids != runningIDs { runningIDs = ids }
-        let windows = Set(accounts.filter { ($0.usesCodexDesktop && desktopQuotaSource.hasDesktopWindow($0)) || ($0.usesClaudeDesktop && claudeDesktopService.hasWindow($0)) }.map(\.id))
+        let windows = Set(accounts.filter { ($0.usesCodexDesktop && desktopQuotaSource.hasDesktopWindow($0)) || ($0.usesClaudeDesktop && claudeDesktopService.hasWindow($0)) || ($0.usesIsolatedAntigravity && agentApplications.hasWindow($0)) }.map(\.id))
         if windows != desktopWindowIDs { desktopWindowIDs = windows }
         let backends = Set(accounts.filter { $0.usesCodexDesktop && desktopQuotaSource.hasBackend($0.id) }.map(\.id))
         if backends != backendIDs { backendIDs = backends }
@@ -523,7 +538,8 @@ final class AppModel: ObservableObject {
 
     func hasRunningSession(_ account: Account) -> Bool {
         if providerSessionIDs.contains(account.id) { return true }
-        if account.effectiveAgent.isSharedApplication { return false }
+        if account.usesSharedApplication { return false }
+        if account.usesIsolatedAntigravity { return agentApplications.runningApplication(for: account) != nil }
         return (account.effectiveAgent == .claude && claudeDesktopService.runningApplication(for: account) != nil)
             || browserService.runningApplication(for: account) != nil
             || (account.effectiveAgent.supportsCodexQuota && desktopService.runningApplication(for: account) != nil)
@@ -702,7 +718,8 @@ final class AppModel: ObservableObject {
     }
     func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id);Task { await providerQuota.stop(account.id) } }
     private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
-        guard !shuttingDown, !loadFailed, !installingProviderAgents.contains(account.effectiveAgent), !quotaBusyIDs.contains(account.id), accounts.contains(where: { $0.id == account.id }) else { return }
+        guard let account = accounts.first(where: { $0.id == account.id }),
+              !shuttingDown, !loadFailed, !installingProviderAgents.contains(account.effectiveAgent), !quotaBusyIDs.contains(account.id) else { return }
         if connect && !canConnectSession(account) { return }
         quotaBusyIDs.insert(account.id);if connect { connectingSessionIDs.insert(account.id) };lastQuotaChecks[account.id] = Date()
         quotaTasks[account.id] = Task {

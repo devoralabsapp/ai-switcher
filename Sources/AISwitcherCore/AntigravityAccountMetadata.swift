@@ -1,6 +1,6 @@
 import Foundation
 
-/// Display metadata from Antigravity's own shared Google sign-in record.
+/// Display metadata from Antigravity's selected profile Google sign-in record.
 /// These claims identify the saved profile, not an independently authenticated session.
 /// A successful official CLI quota read is required before attaching them to a snapshot.
 public enum AntigravityAccountMetadata {

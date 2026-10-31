@@ -64,7 +64,7 @@ struct ProviderQuotaSummaryView: View {
     }
     private func connectionContent(_ value: CodexConnection, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(value.identity.email ?? L10n.text("Shared application sign-in")).font(theme.font(size: 9)).lineLimit(1).foregroundColor(palette.secondary)
+            Text(value.identity.email ?? (account.usesSharedApplication ? L10n.text("Shared application sign-in") : L10n.text("Account email unavailable"))).font(theme.font(size: 9)).lineLimit(1).foregroundColor(palette.secondary)
             if let plan = value.identity.planType {
                 Text(L10n.format("Plan: %@", plan.prefix(1).uppercased() + String(plan.dropFirst()))).font(theme.font(size: 10, weight: .semibold)).foregroundColor(palette.ink)
             }

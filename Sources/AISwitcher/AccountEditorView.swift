@@ -42,7 +42,6 @@ struct AccountEditorView: View {
     private var valid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 48 && email.count <= 160
             && (selectedMode == .desktop || !isNew || model.browserService.applicationURL(for: browser) != nil)
-            && (!isNew || !agent.isSharedApplication || !model.accounts.contains { $0.effectiveAgent == agent })
     }
 
     var body: some View {
@@ -89,8 +88,8 @@ struct AccountEditorView: View {
                         Text(L10n.text("The agent is fixed for existing profiles. Create another profile to use a different agent."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
-                    if isNew && agent.isSharedApplication && model.accounts.contains(where: { $0.effectiveAgent == agent }) {
-                        Text(L10n.text("An Antigravity entry already exists. Edit it from the agent filter."))
+                    if agent == .antigravity {
+                        Text(L10n.text(editor.account?.usesSharedApplication == true ? "This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session." : "Each new Antigravity account has its own Desktop and CLI sign-in. Sign in once in that account's window or with Connect."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                 }
@@ -234,6 +233,7 @@ struct AccountEditorView: View {
         account.color = color
         account.launchMode = selectedMode
         account.agent = agent
+        if isNew && agent == .antigravity { account.antigravityUsesPrivateHome = true }
         account.sharesLocalWorkspace = agent == .chatgpt && sharesLocalWorkspace
         account.defaultAction = agent == .chatgpt ? defaultAction : .openDesktop
         account.connectOnStartup = agent == .chatgpt && connectOnStartup

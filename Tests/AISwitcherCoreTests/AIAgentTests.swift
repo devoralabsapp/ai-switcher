@@ -90,7 +90,7 @@ final class AIAgentTests: XCTestCase {
         await model.shutdownQuota()
     }
 
-    func testSharedApplicationCannotBeClosedOrDuplicated() async throws {
+    func testLegacySharedApplicationIsPreservedAndNewAccountsUsePrivateHomes() async throws {
         let profile = Account(name: "Antigravity", agent: .antigravity)
         let source = AgentFixtureSource()
         let model = try model([profile], source: source)
@@ -98,8 +98,19 @@ final class AIAgentTests: XCTestCase {
         model.restartSession(profile)
         XCTAssertFalse(model.hasRunningSession(profile), "The shared application is never owned by this entry")
         XCTAssertEqual(source.closes, 0)
-        XCTAssertFalse(model.saveAccount(Account(name: "Another", agent: .antigravity)))
-        XCTAssertEqual(model.accounts.count, 1)
+        XCTAssertTrue(model.saveAccount(Account(name: "Another", agent: .antigravity)))
+        XCTAssertTrue(model.saveAccount(Account(name: "Third", agent: .antigravity)))
+        XCTAssertEqual(model.accounts.count, 3)
+        XCTAssertTrue(model.accounts[0].usesSharedApplication)
+        XCTAssertTrue(model.accounts[1].usesIsolatedAntigravity)
+        XCTAssertTrue(model.accounts[2].usesIsolatedAntigravity)
+        var edit = model.accounts[0]
+        edit.name = "Legacy renamed";edit.antigravityUsesPrivateHome = true
+        XCTAssertTrue(model.saveAccount(edit))
+        XCTAssertTrue(model.accounts[0].usesSharedApplication, "Editing a legacy label must preserve its original sign-in")
+        model.reload()
+        XCTAssertTrue(model.accounts[0].usesSharedApplication)
+        XCTAssertTrue(model.accounts[1].usesIsolatedAntigravity)
         await model.shutdownQuota()
     }
 

@@ -35,7 +35,7 @@ enum AccountQuickMenu {
             info(L10n.format("Last read: %@", L10n.dateTime(quota.fetchedAt)))
         } else { info(account.effectiveAgent.supportsQuota ? L10n.text("No data yet") : L10n.text("Quota is not available for this agent.")) }
         if !account.effectiveAgent.supportsQuota {
-            info(account.effectiveAgent.isSharedApplication ? L10n.text("Shared application sign-in") : account.usesClaudeDesktop ? L10n.text("Separate Desktop profile") : L10n.text("Separate browser profile"))
+            info(account.usesSharedApplication ? L10n.text("Shared application sign-in") : (account.usesClaudeDesktop || account.usesIsolatedAntigravity) ? L10n.text("Separate Desktop profile") : L10n.text("Separate browser profile"))
         }
         menu.addItem(.separator())
         let busy = model.launchingIDs.contains(account.id)
@@ -54,7 +54,7 @@ enum AccountQuickMenu {
             action(L10n.text("Refresh quota"), #selector(AppDelegate.refreshAccountQuota(_:)), enabled: !busy && !quotaBusy && account.codexConnection != nil)
         }
         if account.effectiveAgent.supportsQuota { action(L10n.text("Details"), #selector(AppDelegate.showAccountQuota(_:))) }
-        action(L10n.text("Close account session…"), #selector(AppDelegate.closeAccount(_:)), enabled: (!account.effectiveAgent.isSharedApplication || model.providerSessionIDs.contains(account.id)) && !busy && !quotaBusy && model.runningIDs.contains(account.id))
+        action(L10n.text("Close account session…"), #selector(AppDelegate.closeAccount(_:)), enabled: (!account.usesSharedApplication || model.providerSessionIDs.contains(account.id)) && !busy && !quotaBusy && model.runningIDs.contains(account.id))
         action(L10n.text("Session diagnostics"), #selector(AppDelegate.showSessionDiagnostics(_:)))
         return menu
     }
