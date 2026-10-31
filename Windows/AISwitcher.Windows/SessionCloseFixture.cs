@@ -21,7 +21,9 @@ internal static partial class PreviewRunner {
         try{
             foreach(var account in new[]{a,b}){repo.PrepareProfile(account);repo.PrepareQuota(account);}
             var keep=Launch(b);var separate=Launch(null);var main=Launch(a,"--spawn-headless-fixture");await Observe();var backend=Backend(main);
-            Require(engine.Platform.SessionProcesses(a).Any(p=>p.Id==backend.Id)&&!engine.Platform.Processes.First(p=>p.Id==backend.Id).Arguments.Any(x=>x.StartsWith("--user-data-dir=")),"Headless fixture was not attributed exclusively through ancestry");
+            for(var i=0;i<20&&!engine.Platform.SessionProcesses(a).Any(p=>p.Id==backend.Id);i++){await Task.Delay(150);await engine.Platform.RefreshProcessesAsync();}
+            var seen=engine.Platform.Processes.FirstOrDefault(p=>p.Id==backend.Id);
+            Require(engine.Platform.SessionProcesses(a).Any(p=>p.Id==backend.Id)&&seen!=null&&!seen.Arguments.Any(x=>x.StartsWith("--user-data-dir=")),"Headless fixture was not attributed exclusively through ancestry; root="+main.Id+"; child="+backend.Id+"; observed="+(seen==null?"missing":System.Text.Json.JsonSerializer.Serialize(seen))+"; root observed="+System.Text.Json.JsonSerializer.Serialize(engine.Platform.Owned(a)));
             var saved=Path.Combine(repo.DataPath(a),"persist.txt");File.WriteAllText(saved,"profile remains");
             Require(main.CloseMainWindow(),"Could not manually close the fixture root");await main.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));await engine.Platform.RefreshProcessesAsync();
             Require(!backend.HasExited&&engine.Platform.Owned(a)==null&&engine.Running(a)&&!engine.CanConnect(a)&&engine.Status(a)==engine.L["Running in background"],"Orphaned backend was mislabeled disconnected/connectable");
