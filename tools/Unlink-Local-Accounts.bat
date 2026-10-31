@@ -159,12 +159,15 @@ public static class LocalAccountUnlink {
         public List<string[]> Query(string sql,params string[] values) {
             IntPtr statement=IntPtr.Zero;try{Prepare(sql,values,out statement);var rows=new List<string[]>();int step;while((step=Step(statement))==100){var row=new string[ColumnCount(statement)];for(var i=0;i<row.Length;i++)row[i]=Utf8(Column(statement,i));rows.Add(row);}if(step!=101)throw new IOException("SQLite read failed or database is busy.");return rows;}finally{if(statement!=IntPtr.Zero)FinalizeSql(statement);}
         }
-        void Prepare(string sql,string[] values,out IntPtr statement){if(PrepareNative(db,sql,-1,out statement,IntPtr.Zero)!=0)throw new IOException("Unsupported or unavailable local database schema.");for(var i=0;i<values.Length;i++){var data=Encoding.UTF8.GetBytes(values[i]);if(Bind(statement,i+1,data,data.Length,new IntPtr(-1))!=0)throw new IOException("SQLite parameter failed.");}}
+        void Prepare(string sql,string[] values,out IntPtr statement){if(PrepareNative(db,sql,-1,out statement,IntPtr.Zero)!=0)throw new IOException("Unsupported or unavailable local database schema: "+Utf8(Error(db)));for(var i=0;i<values.Length;i++){var data=Encoding.UTF8.GetBytes(values[i]);if(Bind(statement,i+1,data,data.Length,new IntPtr(-1))!=0)throw new IOException("SQLite parameter failed.");}}
         public void Execute(string sql,params string[] values) {IntPtr statement=IntPtr.Zero;try{Prepare(sql,values,out statement);if(Step(statement)!=101)throw new IOException("SQLite update failed or database is busy.");}finally{if(statement!=IntPtr.Zero)FinalizeSql(statement);}}
         public int Changes(){return ChangeCount(db);}
         public void Backup(string path) {
             SafePath(path);if(File.Exists(path))throw new IOException("Backup already exists.");IntPtr target=IntPtr.Zero,backup=IntPtr.Zero;
             try{if(Open(path,out target,6,IntPtr.Zero)!=0)throw new IOException("Cannot create database backup.");backup=BackupInit(target,"main",db,"main");if(backup==IntPtr.Zero||BackupStep(backup,-1)!=101)throw new IOException("Cannot back up the local database, including pending WAL data.");var code=BackupFinish(backup);backup=IntPtr.Zero;if(code!=0)throw new IOException("Database backup did not finish.");}finally{if(backup!=IntPtr.Zero)BackupFinish(backup);if(target!=IntPtr.Zero)Close(target);}
+            // Make the backup independent of any WAL/SHM sidecars before editing
+            // the source. This changes only the newly created snapshot.
+            using(var snapshot=new Database(path,true))snapshot.Query("PRAGMA journal_mode=DELETE");
         }
         public void Dispose(){if(db!=IntPtr.Zero){Close(db);db=IntPtr.Zero;}}
     }
@@ -217,6 +220,7 @@ public static class LocalAccountUnlink {
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_finalize",CallingConvention=CallingConvention.Cdecl)]static extern int FinalizeSql(IntPtr statement);
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_column_count",CallingConvention=CallingConvention.Cdecl)]static extern int ColumnCount(IntPtr statement);
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_column_text",CallingConvention=CallingConvention.Cdecl)]static extern IntPtr Column(IntPtr statement,int index);
+    [DllImport("winsqlite3.dll",EntryPoint="sqlite3_errmsg",CallingConvention=CallingConvention.Cdecl)]static extern IntPtr Error(IntPtr db);
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_changes",CallingConvention=CallingConvention.Cdecl)]static extern int ChangeCount(IntPtr db);
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_backup_init",CallingConvention=CallingConvention.Cdecl)]static extern IntPtr BackupInit(IntPtr target,string targetName,IntPtr source,string sourceName);
     [DllImport("winsqlite3.dll",EntryPoint="sqlite3_backup_step",CallingConvention=CallingConvention.Cdecl)]static extern int BackupStep(IntPtr backup,int pages);
