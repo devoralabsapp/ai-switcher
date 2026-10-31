@@ -1,0 +1,37 @@
+name: Windows maintenance tools
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['tools/**', 'scripts/package-unlink-tool.py', '.github/workflows/maintenance-tools.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify standalone package matches reviewed sources
+        shell: pwsh
+        run: |
+          python scripts/package-unlink-tool.py
+          if($LASTEXITCODE -ne 0){throw 'Tool package failed'}
+          git diff --exit-code -- tools/Unlink-Local-Accounts.bat
+          if($LASTEXITCODE -ne 0){throw 'Tool package is stale'}
+      - name: Test actual BAT launcher with Windows PowerShell 5 and native SQLite
+        shell: pwsh
+        run: |
+          $fixture=Join-Path $env:TEMP "ai-switcher-tool-test folder ' unicode đ"
+          New-Item -ItemType Directory -Path $fixture -Force | Out-Null
+          Copy-Item tools/Unlink-Local-Accounts.bat (Join-Path $fixture 'Unlink-Local-Accounts.bat')
+          $env:AISW_UNLINK_SELF_TEST='1'
+          & (Join-Path $fixture 'Unlink-Local-Accounts.bat')
+          if($LASTEXITCODE -ne 0){throw 'Standalone Windows BAT self-test failed'}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: Windows-Local-Account-Unlink-${{ github.sha }}
+          path: tools/Unlink-Local-Accounts.bat
+          if-no-files-found: error
