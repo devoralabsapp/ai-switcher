@@ -10,7 +10,7 @@ namespace AISwitcher.Windows;
 internal static partial class PreviewRunner {
     static async Task SessionCloseFixtureAsync(string parent){
         var root=Path.Combine(parent,"ai-switcher-smoke.close-"+Guid.NewGuid().ToString("N"));var repo=new Repository(root);var a=new Account{Name="Close A"};var b=new Account{Name="Keep B"};repo.Save(new(){Accounts=[a,b]});var engine=new AppEngine(root);
-        engine.Preferences.Executables["chatgpt"]=Environment.ProcessPath!;
+        engine.Preferences.Executables["chatgpt"]=Environment.ProcessPath!;Exception? closeError=null;engine.FixtureFailure=error=>closeError=error;
         var started=new List<Process>();
         Process Launch(Account? account,string? mode=null){
             var info=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false};foreach(var value in new[]{"--process-fixture","--data-dir",root,"--user-data-dir="+(account==null?Path.Combine(root,"separate"):repo.DataPath(account))})info.ArgumentList.Add(value);if(mode!=null)info.ArgumentList.Add(mode);
@@ -27,11 +27,11 @@ internal static partial class PreviewRunner {
             var saved=Path.Combine(repo.DataPath(a),"persist.txt");File.WriteAllText(saved,"profile remains");
             Require(main.CloseMainWindow(),"Could not manually close the fixture root");await main.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));await engine.Platform.RefreshProcessesAsync();
             Require(!backend.HasExited&&engine.Platform.Owned(a)==null&&engine.Running(a)&&!engine.CanConnect(a)&&engine.Status(a)==engine.L["Running in background"],"Orphaned backend was mislabeled disconnected/connectable");
-            await engine.CloseAsync(a);Require(!engine.Errors.ContainsKey(a.Id),"Close rejected its owned headless backend: "+engine.Errors.GetValueOrDefault(a.Id));Require(backend.HasExited&&!engine.Running(a)&&engine.CanConnect(a),"Close left the background backend running");
+            await engine.CloseAsync(a);Require(!engine.Errors.ContainsKey(a.Id),"Close rejected its owned headless backend: "+engine.Errors.GetValueOrDefault(a.Id)+"; "+closeError);Require(backend.HasExited&&!engine.Running(a)&&engine.CanConnect(a),"Close left the background backend running");
             Require(!keep.HasExited&&!separate.HasExited&&File.ReadAllText(saved)=="profile remains","Closing A changed B, another app or profile data");
             // This child is born during quit, after the final pre-close snapshot.
             var late=Launch(a,"--spawn-headless-on-exit-fixture");await Observe();await engine.CloseAsync(a);
-            Require(!engine.Errors.ContainsKey(a.Id)&&late.HasExited,"Normal close did not finish its root: "+engine.Errors.GetValueOrDefault(a.Id));
+            Require(!engine.Errors.ContainsKey(a.Id)&&late.HasExited,"Normal close did not finish its root: "+engine.Errors.GetValueOrDefault(a.Id)+"; "+closeError);
             var latePid=int.Parse(File.ReadAllText(Path.Combine(root,"fixture-headless-"+late.Id+".pid")));
             Require(!engine.Platform.Processes.Any(p=>p.Id==latePid),"A backend born during quit survived the close action");
             Require(!keep.HasExited&&!separate.HasExited&&engine.CanConnect(a),"Late-child cleanup affected other profiles or Connect");

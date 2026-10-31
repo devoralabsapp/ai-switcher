@@ -36,6 +36,7 @@ internal sealed partial class NativePlatform {
             foreach(var target in remaining.OrderByDescending(p=>p.Created)){
                 if(target.Id==Environment.ProcessId)continue;
                 try{using var process=Process.GetProcessById(target.Id);
+                    _=process.SafeHandle; // ExitTime must remain readable after Windows reaps the PID.
                     if(process.HasExited||process.StartTime.ToUniversalTime().ToFileTimeUtc()!=target.Created)continue;
                     if(process.MainWindowHandle!=IntPtr.Zero)throw new AppError("Some account processes could not be stopped. Check Session diagnostics and try again.");
                     // The root already agreed to quit (or was closed manually).

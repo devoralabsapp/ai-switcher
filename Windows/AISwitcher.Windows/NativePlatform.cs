@@ -182,6 +182,7 @@ internal sealed partial class NativePlatform {
         if(owned!=null){
             Process? process=null;try{process=Process.GetProcessById(owned.Id);}catch(ArgumentException){}
             if(process!=null)using(process){
+                _=process.SafeHandle; // Retain the identity/exit-time handle through shutdown.
                 if(process.StartTime.ToUniversalTime().ToFileTimeUtc()!=owned.Created)throw new AppError("The session process changed. Check its status before closing again.");
                 if(!process.HasExited){
                     if(account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)){

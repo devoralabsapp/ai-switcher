@@ -27,6 +27,7 @@ internal sealed class AppEngine {
     public string? LifecycleError { get; private set; }
     public event Action? Changed;
     public event Action<string>? Error;
+    internal Action<Exception>? FixtureFailure { get; set; }
     public event Action<Account,IReadOnlyList<QuotaAlert>>? QuotaAlert;
     sealed record Operation(CancellationTokenSource Cancellation,TaskCompletionSource Completion);
     readonly Dictionary<Guid,Operation> operations=[];
@@ -80,7 +81,7 @@ internal sealed class AppEngine {
     async Task Run(Account a,Func<CancellationToken,Task> action,bool report=true){
         if(ReadOnly||StoppingAll||InstallingProviders.Contains(a.Agent)||lifetime.IsCancellationRequested||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!Busy.Add(a.Id))return;
         using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var operation=new Operation(cancellation,new(TaskCreationOptions.RunContinuationsAsynchronously));operations[a.Id]=operation;Notify();
-        try{Errors.Remove(a.Id);await action(cancellation.Token);}catch(OperationCanceledException)when(!cancellation.IsCancellationRequested){Errors[a.Id]=L["The provider quota request timed out. Try again."];}catch(OperationCanceledException){}catch(Exception error){Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
+        try{Errors.Remove(a.Id);await action(cancellation.Token);}catch(OperationCanceledException)when(!cancellation.IsCancellationRequested){Errors[a.Id]=L["The provider quota request timed out. Try again."];}catch(OperationCanceledException){}catch(Exception error){FixtureFailure?.Invoke(error);Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
         finally{Busy.Remove(a.Id);try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}operations.Remove(a.Id);operation.Completion.TrySetResult();Notify();}
     }
     public Task OpenAsync(Account a)=>Run(a,async ct=>{
