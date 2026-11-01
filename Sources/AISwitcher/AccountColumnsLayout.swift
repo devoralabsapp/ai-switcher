@@ -6,7 +6,9 @@ struct AccountColumnsLayout: Layout {
     var spacing: CGFloat = 16
 
     private func geometry(width: CGFloat, subviews: Subviews) -> (CGSize, [CGRect]) {
-        let columns = max(1, Int((width + spacing) / (minimumWidth + spacing)))
+        // SwiftUI also probes zero and infinite proposals before actual placement.
+        let width = width.isFinite ? max(0, width) : minimumWidth
+        let columns = max(1, Int(min(CGFloat(max(1, subviews.count)), (width + spacing) / (minimumWidth + spacing))))
         let cardWidth = max(0, (width - CGFloat(columns - 1) * spacing) / CGFloat(columns))
         var heights = Array(repeating: CGFloat.zero, count: columns)
         var frames: [CGRect] = []
