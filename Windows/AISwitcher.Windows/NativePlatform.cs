@@ -63,7 +63,7 @@ internal sealed partial class NativePlatform {
         }}while(added);
     }
     public async Task ForceStopAsync(Account account){
-        if(account.Agent.IsShared())return;
+        if(account.UsesSharedApplication)return;
         await FindExecutableAsync(ExecutableKey(account));
         for(var pass=0;pass<3;pass++){
             await RefreshProcessesAsync();Owned(account);
@@ -150,10 +150,15 @@ internal sealed partial class NativePlatform {
     public async Task OpenAsync(Account account,Uri? url=null,bool useLocalDaemon=true,CancellationToken ct=default){
         var exe=await FindExecutableAsync(ExecutableKey(account))??throw new AppError("The required app or browser was not found. Choose its executable in Settings.");
         ct.ThrowIfCancellationRequested();
-        if(account.Agent.IsShared()) { Process.Start(new ProcessStartInfo(exe){UseShellExecute=true});return; }
+        if(account.UsesSharedApplication) { Process.Start(new ProcessStartInfo(exe){UseShellExecute=true});return; }
         await RefreshProcessesAsync();var owned=Owned(account);
+        if(account.UsesPrivateAntigravity){
+            repository.PrepareProfile(account);AntigravityProfile.Validate(repository,account);
+            var native=AntigravityServerPath(exe);if(!AntigravityProfile.SupportsPrivateStorage(native))throw new AppError(AntigravityProfile.Unsupported);
+            if(owned!=null&&!owned.Arguments.Contains(AntigravityProfile.MarkerArgument))throw new AppError("Close this Antigravity account session once, then open it again to apply separate sign-in storage. Your data is kept.");
+        }
         if(url==null&&owned?.HasWindow==true){Activate(owned.Id);return;}
-        if(account.EffectiveMode==LaunchMode.Desktop)VerifyIsolation(exe,account.Agent);
+        if(!account.UsesPrivateAntigravity&&account.EffectiveMode==LaunchMode.Desktop)VerifyIsolation(exe,account.Agent);
         if(account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)&&WindowsExecutable.IsStorePath(exe)){
             var installed=await PackageLocationsAsync(account.Agent==Agent.Claude?"Claude":"OpenAI.Codex");
             if(!installed.Any(location=>SamePath(Path.GetDirectoryName(exe)!,Path.Combine(location,"app"))||SamePath(Path.GetDirectoryName(exe)!,location)))throw new AppError(account.Agent==Agent.Claude?"The Claude Store installation could not be verified. Reset its path in Settings and try again.":"The ChatGPT Store installation could not be verified. Reset its path in Settings and try again.");
@@ -161,11 +166,13 @@ internal sealed partial class NativePlatform {
             try{var source=exe;exe=await Task.Run(()=>StoreRuntime.PrepareAsync(repository.Root,source,ct));}catch(Exception error)when(error is IOException or UnauthorizedAccessException){throw new AppError(account.Agent==Agent.Claude?"Windows could not prepare the Claude Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.":"Windows could not prepare the ChatGPT Store runtime. The installed app and account data were preserved. Check Session diagnostics and try again.");}finally{PreparingRuntime.Remove(account.Id);PreparationChanged?.Invoke();}
         }
         repository.PrepareProfile(account);ProtectDirectory(repository.ProfilePath(account));
-        var env=ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
+        var env=account.UsesPrivateAntigravity?AntigravityProfile.Environment(EnvironmentValues(),repository,account):ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
+        if(account.UsesPrivateAntigravity){AntigravityProfile.Validate(repository,account);foreach(var dir in AntigravityProfile.Directories(repository,account))ProtectDirectory(dir);}
         if(account.UsesCodexDesktop){env["CODEX_ELECTRON_USER_DATA_PATH"]=repository.DataPath(account);if(useLocalDaemon)env["CODEX_APP_SERVER_USE_LOCAL_DAEMON"]="1";if(account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.Database(preferences);}
         if(account.UsesCodexDesktop){try{var cli=await FindExecutableAsync("codex");if(cli!=null)env["CODEX_CLI_PATH"]=cli;}catch(AppError){/* The Desktop app can use its own packaged CLI while the selected external CLI is unavailable. */}}
         if(account.Agent==Agent.Claude&&account.EffectiveMode==LaunchMode.Desktop)env["CLAUDE_CONFIG_DIR"]=repository.CodeConfig(account);
         var arguments=new List<string>{"--user-data-dir="+repository.DataPath(account)};
+        if(account.UsesPrivateAntigravity)arguments.Add(AntigravityProfile.MarkerArgument);
         if(account.EffectiveMode==LaunchMode.Browser)arguments.AddRange(["--no-first-run","--no-default-browser-check","--disable-background-mode","--app="+(url??account.Agent.Url()).AbsoluteUri]);
         ct.ThrowIfCancellationRequested();
         using var child=Process.Start(ChildEnvironment.StartInfo(exe,arguments,env,repository.ProfilePath(account)))??throw new AppError("Could not open the AI agent window. Try again or check the browser.");
@@ -177,7 +184,7 @@ internal sealed partial class NativePlatform {
         throw new AppError("Could not open the AI agent window. Try again or check the browser.");
     }
     public async Task CloseAsync(Account account){
-        if(account.Agent.IsShared())return;await FindExecutableAsync(ExecutableKey(account));await RefreshProcessesAsync();var owned=Owned(account);
+        if(account.UsesSharedApplication)return;await FindExecutableAsync(ExecutableKey(account));await RefreshProcessesAsync();var owned=Owned(account);
         repository.ValidateOwned(repository.ProfilePath(account),account.Id);
         if(owned!=null){
             Process? process=null;try{process=Process.GetProcessById(owned.Id);}catch(ArgumentException){}
@@ -185,7 +192,7 @@ internal sealed partial class NativePlatform {
                 _=process.SafeHandle; // Retain the identity/exit-time handle through shutdown.
                 if(process.StartTime.ToUniversalTime().ToFileTimeUtc()!=owned.Created)throw new AppError("The session process changed. Check its status before closing again.");
                 if(!process.HasExited){
-                    if(account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude)){
+                    if(account.EffectiveMode==LaunchMode.Desktop&&(account.Agent is Agent.Chatgpt or Agent.Claude or Agent.Antigravity)){
                         try{await ProfileQuit.RequestAsync(owned.Id,owned.Created);}catch(AppError)when(process.HasExited){}
                     }else if(!process.CloseMainWindow())throw new AppError("This profile is still running. Save drafts and close its window before trying again.");
                     try{await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));}catch(TimeoutException){throw new AppError("This profile did not agree to quit. Finish any confirmation in its window or use its own tray Quit action, then retry.");}
@@ -197,6 +204,7 @@ internal sealed partial class NativePlatform {
         }
         await CompleteCloseAsync(account);
     }
+    internal static string AntigravityServerPath(string exe)=>Path.Combine(Path.GetDirectoryName(exe)!,"resources","bin","language_server.exe");
     static void Activate(int pid){using var process=Process.GetProcessById(pid);var window=process.MainWindowHandle;if(window!=IntPtr.Zero){ShowWindow(window,9);SetForegroundWindow(window);}}
     public static string[] SplitArguments(string command){var ptr=CommandLineToArgvW(command,out var count);if(ptr==IntPtr.Zero)return [];try{return Enumerable.Range(0,count).Select(i=>Marshal.PtrToStringUni(Marshal.ReadIntPtr(ptr,i*IntPtr.Size))??"").ToArray();}finally{LocalFree(ptr);}}
     [DllImport("shell32.dll",SetLastError=true)]static extern IntPtr CommandLineToArgvW([MarshalAs(UnmanagedType.LPWStr)]string command,out int argc);

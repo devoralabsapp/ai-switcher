@@ -95,14 +95,14 @@ internal sealed partial class MainWindow:Window {
         stack.Children.Add(Space(18));var open=Button(engine.DefaultTitle(a)+"  ↗",()=>_=engine.DefaultAsync(a));open.IsEnabled=!engine.StoppingAll&&!engine.Busy.Contains(a.Id);open.HorizontalAlignment=HorizontalAlignment.Stretch;stack.Children.Add(open);
         var panel=Panel(stack,T,ProfileColors.Pale(a.Color,T),true);panel.ContextMenu=AccountMenu(a);return panel;
     }
-    string Support(Account a)=>a.Agent.IsShared()?L["Antigravity quota uses the official CLI and shared application sign-in."]:a.Agent==Agent.Claude?L["Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate."]:L["Separate browser sign-in for each profile. Quota and background connections are not available for this agent."];
+    string Support(Account a)=>a.UsesPrivateAntigravity?L["Separate Antigravity Desktop sign-in with email and quota from that same session."]:a.UsesSharedApplication?L["Antigravity quota uses the official CLI and shared application sign-in."]:a.Agent==Agent.Claude?L["Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate."]:L["Separate browser sign-in for each profile. Quota and background connections are not available for this agent."];
     ContextMenu AccountMenu(Account a){var menu=new ContextMenu();bool busy=engine.StoppingAll||engine.Busy.Contains(a.Id);
         void Item(string text,Action action,bool enabled=true){var item=new MenuItem{Header=text,IsEnabled=enabled};item.Click+=(_,_)=>action();menu.Items.Add(item);}
         Item(L.Format("Open %@",a.Agent.Name()),()=>_=engine.OpenAsync(a),!busy);
         if(a.Agent.ProviderQuota()){Item(L["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));Item(L["Refresh quota"],()=>_=engine.RefreshAsync(a),!busy);}
         if(a.UsesCodexDesktop){Item(L["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));Item(L["Refresh quota"],()=>_=engine.RefreshAsync(a),!busy);Item(L["Restart session…"],()=>Restart(a),!busy);}
         if(a.Agent.HasQuota())Item(L[a.Agent.ProviderQuota()?"Details":"Codex quota…"],()=>QuotaDetails(a));
-        menu.Items.Add(new Separator());Item(L["Edit profile…"],()=>EditAccount(a),!busy);Item(L["Close account session…"],()=>Close(a),!busy&&(!a.Agent.IsShared()||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a));
+        menu.Items.Add(new Separator());Item(L["Edit profile…"],()=>EditAccount(a),!busy);Item(L["Close account session…"],()=>Close(a),!busy&&(!a.UsesSharedApplication||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a));
         Item(L["Delete local profile…"],()=>Delete(a),!busy);return menu;
     }
     void AddProviderInstallation(StackPanel stack,Account a,Action? refresh=null){
@@ -115,21 +115,36 @@ internal sealed partial class MainWindow:Window {
         }
         if(engine.InstallationErrors.TryGetValue(a.Agent,out var message))stack.Children.Add(Text(message,11,false,T.Secondary));
     }
-    StackPanel QuotaSummary(Account a,bool all){var stack=new StackPanel();if(!all&&a.Agent.ProviderQuota())AddProviderInstallation(stack,a);var connection=a.Connection;var now=DateTimeOffset.UtcNow;
-        if(connection==null){stack.Children.Add(Text(L[a.Agent.ProviderQuota()?"Connect the official CLI session to read subscription quota. No model prompt is sent.":a.UsesCodexDesktop?"For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window.":"No data yet"],11,false,T.Secondary));if(a.UsesCodexDesktop||a.Agent.ProviderQuota()){var connect=Button(L["Connect account session"],()=>_=engine.ConnectAsync(a));connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);}return stack;}
-        stack.Children.Add(Text("◉ "+(a.Agent.ProviderQuota()?L.Format("%@ quota",a.Agent.Name()):L["Codex quota"]),12,true));stack.Children.Add(Space(8));stack.Children.Add(Text(connection.Identity.Email??L[a.Agent.ProviderQuota()?"Shared application sign-in":"Verified Codex identity"],11,false,T.Secondary));
-        if(connection.Quota is not { } quota){stack.Children.Add(Text(L["No data yet"]));return stack;}
-        foreach(var bucket in all?quota.Limits.Buckets:quota.Limits.Buckets.Take(1)){
-            if(all)stack.Children.Add(Text(bucket.Value.LimitName??bucket.Key,12,true));
-            foreach(var window in new[]{bucket.Value.Primary,bucket.Value.Secondary}.OfType<QuotaWindow>()){
-                stack.Children.Add(Space(9));var remaining=window.Expired(now)?null:window.Remaining;
-                stack.Children.Add(Text(window.Duration(L)+" · "+(remaining.HasValue?L.Format("%@%% remaining",remaining.Value.ToString("0.#",L.Culture)):!window.Expired(now)&&window.RemainingAmount is double amount?L.Format("%@ remaining",amount.ToString("0.#",L.Culture)):L["No data yet"]),11));
-                if(remaining.HasValue)stack.Children.Add(new ProgressBar{Minimum=0,Maximum=100,Value=remaining??0,Height=5,Margin=new Thickness(0,5,0,4),Foreground=Brush(T.Accent),Background=Brush(T.Line)});
-                if(window.Reset is { } reset)stack.Children.Add(Text(L.Format("Reset: %@",L.Date(reset)),10,false,T.Secondary));
-            }
+    StackPanel QuotaSummary(Account a,bool all){
+        var stack=new StackPanel();var connection=a.Connection;var now=DateTimeOffset.UtcNow;
+        var title=new DockPanel{LastChildFill=true};
+        if(connection!=null){var refresh=Button("↻",()=>_=engine.RefreshAsync(a));refresh.ToolTip=L["Refresh quota"];refresh.IsEnabled=!engine.StoppingAll&&!engine.Busy.Contains(a.Id);refresh.Padding=new Thickness(4,0,4,0);refresh.Margin=new Thickness(0);DockPanel.SetDock(refresh,Dock.Right);title.Children.Add(refresh);}
+        title.Children.Add(Text("◉ "+(a.Agent.ProviderQuota()?L.Format("%@ quota",a.Agent.Name()):L["Codex quota"]),12,true));stack.Children.Add(title);stack.Children.Add(Space(8));
+        if(connection==null){
+            if(!all&&a.UsesProviderCli)AddProviderInstallation(stack,a);
+            stack.Children.Add(Text(L[a.Agent==Agent.Antigravity?"Connect to view quota.":a.Agent.ProviderQuota()?"Connect the official CLI session to read subscription quota. No model prompt is sent.":a.UsesCodexDesktop?"For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window.":"No data yet"],11,false,T.Secondary));
+            if(!all&&(a.UsesCodexDesktop||a.Agent.ProviderQuota())){var connect=Button(L["Connect account session"],()=>_=engine.ConnectAsync(a));connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);}
+        }else{
+            stack.Children.Add(Text(connection.Identity.Email??L[a.UsesSharedApplication?"Shared application sign-in":"Account email unavailable"],11,false,T.Secondary));
+            if(connection.Identity.PlanType is {} plan)stack.Children.Add(Text(L.Format("Plan: %@",plan),11,true));
+            if(connection.Quota is {} quota){
+                foreach(var bucket in all||a.Agent==Agent.Antigravity?quota.Limits.Buckets:quota.Limits.Buckets.Take(1)){
+                    if(all||a.Agent==Agent.Antigravity){stack.Children.Add(Space(10));stack.Children.Add(Text(bucket.Value.LimitName??bucket.Key,12,true));}
+                    foreach(var window in new[]{bucket.Value.Primary,bucket.Value.Secondary}.OfType<QuotaWindow>()){
+                        stack.Children.Add(Space(9));var remaining=window.Expired(now)?null:window.Remaining;
+                        stack.Children.Add(Text(window.Duration(L)+" · "+(remaining.HasValue?L.Format("%@%% remaining",remaining.Value.ToString("0.#",L.Culture)):!window.Expired(now)&&window.RemainingAmount is double amount?L.Format("%@ remaining",amount.ToString("0.#",L.Culture)):L["No data yet"]),11));
+                        if(remaining.HasValue)stack.Children.Add(new ProgressBar{Minimum=0,Maximum=100,Value=remaining??0,Height=5,Margin=new Thickness(0,5,0,4),Foreground=Brush(T.Accent),Background=Brush(T.Line)});
+                        if(window.Reset is {} reset)stack.Children.Add(Text(L.Format("Reset: %@",L.Date(reset)),10,false,T.Secondary));
+                    }
+                }
+                if(quota.IsStale(now)||engine.Errors.ContainsKey(a.Id))stack.Children.Add(Text(L["Stale data · refresh needed"],10,true));
+            }else stack.Children.Add(Text(L["No quota data available for this account."],11,false,T.Secondary));
+            if((connection.Quota?.FetchedAt??connection.IdentityFetchedAt) is {} read){stack.Children.Add(Space(10));stack.Children.Add(Text(L.Format("Last read: %@",L.Date(read)),10,false,T.Secondary));}
         }
-        stack.Children.Add(Space(10));stack.Children.Add(Text(L.Format("Last read: %@",L.Date(quota.FetchedAt)),10,false,T.Secondary));
-        if(quota.IsStale(now)||engine.Errors.ContainsKey(a.Id))stack.Children.Add(Text(L["Stale data · refresh needed"],10,true));return stack;
+        if(engine.Errors.TryGetValue(a.Id,out var error))stack.Children.Add(Text(error,11,false,T.Secondary));
+        if(engine.WaitingForSignIn.Contains(a.Id)){stack.Children.Add(Text(L["Waiting for sign-in…"],11));stack.Children.Add(Button(L["Cancel"],()=>engine.CancelConnection(a)));}
+        if(!all)stack.Children.Add(Button(L["Details"]+" ↗",()=>QuotaDetails(a)));
+        return stack;
     }
     void RenderTable(Account[] accounts){var table=new StackPanel();
         var headings=new StackPanel{Orientation=Orientation.Horizontal};foreach(var (key,title,width) in new[]{(SortKey.Name,"Account",185),(SortKey.PrimaryRemaining,"Short window",115),(SortKey.SecondaryRemaining,"Long window",115),(SortKey.NextReset,"Next reset",150),(SortKey.LastUpdated,"Last updated",150)}){var button=Button(L[title]+(engine.Preferences.QuotaSortKey==key?(engine.Preferences.QuotaSortAscending?" ↑":" ↓"):""),()=>{engine.Preferences.QuotaSortAscending=engine.Preferences.QuotaSortKey==key?!engine.Preferences.QuotaSortAscending:true;engine.Preferences.QuotaSortKey=key;engine.SavePreferences();});button.Width=width;headings.Children.Add(button);}table.Children.Add(headings);

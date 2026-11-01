@@ -13,7 +13,7 @@ public sealed class Repository {
         Root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         BackendBase = Path.GetFullPath(backendBase ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".aisw"));
     }
-    public string ProfilePath(Account account) => Path.Combine(Root, account.EffectiveMode == LaunchMode.Browser ? "Profiles" : account.Agent == Agent.Claude ? "Claude" : "Desktop", account.Id.ToString("D"));
+    public string ProfilePath(Account account) => Path.Combine(Root, account.EffectiveMode == LaunchMode.Browser ? "Profiles" : account.Agent == Agent.Claude ? "Claude" : account.UsesPrivateAntigravity ? "Antigravity" : "Desktop", account.Id.ToString("D"));
     public string DataPath(Account account) => account.EffectiveMode == LaunchMode.Browser ? ProfilePath(account) : Path.Combine(ProfilePath(account), "UserData");
     public string BackendPath(Guid id) => Path.Combine(BackendBase, "win-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Root + "\n" + id))).ToLowerInvariant()[..20]);
     public string QuotaHome(Account account) => account.UsesCodexDesktop ? BackendPath(account.Id) : Path.Combine(Root, "Codex", account.Id.ToString("D"));
@@ -71,6 +71,7 @@ public sealed class Repository {
         account.Validate(); PrepareOwned(ProfilePath(account), account.Id);
         if (account.EffectiveMode == LaunchMode.Desktop) EnsureDirectory(DataPath(account));
         if (account.Agent == Agent.Claude && account.EffectiveMode == LaunchMode.Desktop) EnsureDirectory(CodeConfig(account));
+        if(account.UsesPrivateAntigravity){foreach(var path in AntigravityProfile.Directories(this,account)){RejectLinks(path);Directory.CreateDirectory(path);}}
     }
     public void PrepareQuota(Account account) {
         if (!account.Agent.HasQuota()) throw new AppError("Quota is not available for this agent.");
@@ -78,7 +79,7 @@ public sealed class Repository {
         var config = Path.Combine(home, "config.toml"); RejectLinks(config);
         if (!File.Exists(config)) File.WriteAllText(config, "cli_auth_credentials_store = \"file\"\n[analytics]\nenabled = false\n");
     }
-    public IEnumerable<string> AllProfilePaths(Guid id) => new[] { "Profiles", "Claude", "Desktop", "Codex" }.Select(x => Path.Combine(Root, x, id.ToString("D"))).Append(BackendPath(id));
+    public IEnumerable<string> AllProfilePaths(Guid id) => new[] { "Profiles", "Claude", "Desktop", "Codex", "Antigravity" }.Select(x => Path.Combine(Root, x, id.ToString("D"))).Append(BackendPath(id));
     public Snapshot Remove(Account account, Snapshot snapshot) {
         var moved = new List<(string Source, string Staged)>();
         foreach (var path in AllProfilePaths(account.Id)) ValidateOwned(path, account.Id);

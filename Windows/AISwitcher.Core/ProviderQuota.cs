@@ -19,7 +19,7 @@ public static class ProviderQuota {
     }
     public const string Unavailable="The provider has not returned subscription quota. Previous data is kept.";
     public const string Invalid="The provider quota response could not be verified. Previous data is kept.";
-    public const string SignedOut="The provider session is signed out. Choose Sign in with official CLI, then connect again.";
+    public const string SignedOut="The provider session is signed out. Connect account session to sign in.";
     public const string Changed="The provider account does not match this profile. Verify the email before reconnecting.";
     public const string Outdated="Update the provider CLI to read quota without starting a model turn.";
     public static JsonElement Get(JsonElement parent,string key)=>parent.ValueKind==JsonValueKind.Object&&parent.TryGetProperty(key,out var value)?value:default;
@@ -48,16 +48,16 @@ public static class ProviderQuota {
             }
             var models=Get(limits,"model_scoped");if(models.ValueKind==JsonValueKind.Array){int i=0;foreach(var raw in models.EnumerateArray())if(Window(raw,null) is {} w){var id="claude-model-"+i++;buckets[id]=new(id,String(Get(raw,"display_name"))??id,w,null);}}
         }else if(agent==Agent.Antigravity){
-            List<(string Id,JsonElement Raw)> rows=[];var command=Get(root,"command");
+            List<(string Id,JsonElement Raw,string? Group)> rows=[];var command=Get(root,"command");
             if(command.ValueKind==JsonValueKind.Object){
                 if(String(Get(command,"name"))!="usage"||(Number(Get(root,"num_turns"))??0)!=0)throw new AppError(Invalid);
                 var groups=Get(Get(command,"data"),"groups");if(groups.ValueKind!=JsonValueKind.Array)throw new AppError(Invalid);
-                foreach(var group in groups.EnumerateArray()){var list=Get(group,"buckets");if(list.ValueKind!=JsonValueKind.Array)continue;foreach(var raw in list.EnumerateArray())if(String(Get(raw,"id")) is {} id)rows.Add((id,raw));}
-            }else{var quota=Get(payload,"quota");if(quota.ValueKind!=JsonValueKind.Object)throw new AppError(Unavailable);foreach(var pair in quota.EnumerateObject())rows.Add((pair.Name,pair.Value));}
-            foreach(var (id,raw) in rows){
+                foreach(var group in groups.EnumerateArray()){var list=Get(group,"buckets");if(list.ValueKind!=JsonValueKind.Array)continue;foreach(var raw in list.EnumerateArray())if(String(Get(raw,"id")) is {} id)rows.Add((id,raw,String(Get(group,"name"))));}
+            }else{var quota=Get(payload,"quota");if(quota.ValueKind!=JsonValueKind.Object)throw new AppError(Unavailable);foreach(var pair in quota.EnumerateObject())rows.Add((pair.Name,pair.Value,null));}
+            foreach(var (id,raw,groupName) in rows){
                 if(id.Length>160||Get(raw,"disabled").ValueKind==JsonValueKind.True)continue;
                 var label=String(Get(raw,"window"))??id;int? mins=label.Contains("week",StringComparison.OrdinalIgnoreCase)||label=="7d"?10080:new[]{"5h","5 hours","five_hour"}.Contains(label.ToLowerInvariant())?300:null;
-                if(Window(raw,mins,true) is {} w){if(!buckets.TryAdd(id,new(id,String(Get(raw,"name"))??id.Replace('-',' '),w,null)))throw new AppError(Invalid);}
+                if(Window(raw,mins,true) is {} w){if(!buckets.TryAdd(id,new(id,AntigravityProfile.DisplayTitle(id,String(Get(raw,"name")),groupName),w,null)))throw new AppError(Invalid);}
             }
         }else throw new AppError(Invalid);
         if(buckets.Count==0)throw new AppError(Unavailable);

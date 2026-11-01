@@ -38,7 +38,7 @@
   "Use this Codex account for this profile?": "Dùng tài khoản Codex này cho hồ sơ này?",
   "Verify Codex account": "Xác minh tài khoản Codex",
   "The operation failed. Your existing data has been preserved.": "Thao tác thất bại. Dữ liệu hiện có đã được giữ nguyên.",
-  "Windows quick start": "Chọn agent rồi thêm hồ sơ. Đăng nhập trực tiếp trong cửa sổ riêng của hồ sơ. ChatGPT và Claude có chế độ Desktop; các agent web có hồ sơ trình duyệt riêng. Antigravity dùng đăng nhập chung của ứng dụng. Bật Chỉ xem quota để kết nối ChatGPT trong nền; tắt để về thẻ tài khoản. Nút Connect bị khóa khi phiên đang chạy. Đóng cửa sổ quản lý vẫn giữ app ở system tray. Chuột phải biểu tượng tray để mở lại hoặc thoát. Ctrl+N: thêm, Ctrl+K: tìm, Ctrl+1–9: mở hồ sơ. Cài đặt có các theme, ngôn ngữ và đường dẫn .exe. Không tìm thấy app thì chọn executable đã cài. Claude đọc hạn mức qua Claude Code CLI 2.1.270 trở lên với đăng nhập riêng từng hồ sơ. Antigravity dùng CLI chính thức 1.1.12 trở lên với đăng nhập chung. Đọc hạn mức không gửi câu hỏi AI. Chọn Đăng nhập bằng CLI chính thức trong chi tiết hạn mức nếu cần.",
+  "Windows quick start": "Chọn agent, thêm hồ sơ và đăng nhập trong phiên riêng. ChatGPT, Claude và Antigravity hỗ trợ Desktop. Khi thêm Antigravity, chọn đăng nhập Google trên trình duyệt hoặc CLI chính thức; mỗi hồ sơ mới có email và dữ liệu đăng nhập riêng. Mục Antigravity cũ giữ đăng nhập chung. Connect kết nối và đọc quota trong nền, không gửi prompt. Close account session đóng đúng hồ sơ và giữ đăng nhập. Tắt chế độ chỉ xem quota để trở lại các thẻ tài khoản. Đóng cửa sổ AI Switcher vẫn giữ biểu tượng ở khay hệ thống.",
   "Shared database folder (optional override)": "Thư mục cơ sở dữ liệu dùng chung (tùy chọn)",
   "Shared Work artifacts folder (optional)": "Thư mục artifact Work dùng chung (tùy chọn)",
   "The shared workspace database could not be updated. Its data was preserved.": "Không cập nhật được chỉ mục dữ liệu dùng chung. Dữ liệu đã được giữ nguyên.",
@@ -64,5 +64,7 @@
   "Force stop all account processes?": "Dừng cưỡng bức mọi tiến trình tài khoản?",
   "Force stop all": "Dừng tất cả",
   "This immediately stops Desktop windows, browsers and background connections belonging to AI Switcher accounts. Unsaved drafts may be lost. Apps opened separately and account sign-ins are kept.": "Thao tác này dừng ngay cửa sổ Desktop, trình duyệt và kết nối nền thuộc các tài khoản AI Switcher. Bản nháp chưa lưu có thể bị mất. Ứng dụng mở riêng và dữ liệu đăng nhập được giữ nguyên.",
-  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Một số tiến trình tài khoản chưa dừng được. Kiểm tra Chẩn đoán phiên rồi thử lại."
+  "Some account processes could not be stopped. Check Session diagnostics and try again.": "Một số tiến trình tài khoản chưa dừng được. Kiểm tra Chẩn đoán phiên rồi thử lại.",
+  "The provider session is signed out. Connect account session to sign in.": "Phiên tài khoản chưa đăng nhập. Chọn Kết nối phiên tài khoản để đăng nhập.",
+  "Antigravity native Windows smoke requires an isolated CI runner.": "Bài kiểm tra Antigravity Windows cần máy kiểm thử riêng."
 }

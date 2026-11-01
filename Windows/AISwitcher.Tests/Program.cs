@@ -19,6 +19,38 @@ Repository Repo(string name)=>new(Path.Combine(root,name),Path.Combine(root,name
 Account Profile(string name="A",Agent agent=Agent.Chatgpt,LaunchMode mode=LaunchMode.Desktop)=>new(){Name=name,Agent=agent,LaunchMode=mode};
 var now=DateTimeOffset.UtcNow;
 Account WithQuota(string name,double used,double secondary=40,TimeSpan? age=null,long? reset=null){var limits=new Limits("identity",new("codex",null,new(used,300,reset??now.AddHours(2).ToUnixTimeSeconds()),new(secondary,10080,now.AddDays(3).ToUnixTimeSeconds())),null);return Profile(name)with{DesktopConnection=new(new("fixture@example.test","plus","identity"),new(limits,now-(age??TimeSpan.Zero)))};}
+Test("Antigravity preserves legacy sign-in and permits multiple private profiles",()=>{
+    var repo=Repo("antigravity-profiles");var legacy=Profile("Legacy",Agent.Antigravity);var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};var b=Profile("B",Agent.Antigravity)with{AntigravityUsesPrivateHome=true,AntigravitySignInMethod=AntigravitySignInMethod.Cli};
+    repo.Save(new(){Accounts=[legacy,a,b]});True(repo.Load().Accounts[0].UsesSharedApplication);True(a.UsesAntigravityDesktopQuota);True(b.UsesProviderCli);True(!a.UsesProviderCli);True(!a.UsesSharedApplication);
+    Throws(()=>new Snapshot{Accounts=[legacy,Profile("Duplicate shared",Agent.Antigravity)]}.Validate());repo.PrepareProfile(a);repo.PrepareProfile(b);True(repo.DataPath(a)!=repo.DataPath(b));True(AntigravityProfile.Home(repo,a)!=AntigravityProfile.Home(repo,b));
+    File.WriteAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep"),"B");repo.Remove(a,repo.Load());Equal(File.ReadAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep")),"B");
+});
+Test("Antigravity private environment excludes inherited auth and places native Windows home aliases in one profile",()=>{
+    var repo=Repo("antigravity-env");var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};
+    var env=AntigravityProfile.Environment(new Dictionary<string,string>{{"PATH","system path"},{"SystemRoot","system"},{"USERPROFILE","global home"},{"APPDATA","global data"},{"JETSKI_OAUTH_TOKEN","must not inherit"},{"ANTIGRAVITY_CREDENTIAL_SCOPE","global"},{"GOOGLE_API_KEY","secret"},{"SSH_CONNECTION","remote"},{"NODE_OPTIONS","inject"}},repo,a);
+    Equal(env["USERPROFILE"],AntigravityProfile.Home(repo,a));Equal(env["HOME"],env["USERPROFILE"]);True(env["APPDATA"].StartsWith(env["HOME"]));Equal(env["WSL_INTEROP"],"AI-Switcher-private-file-storage");True(!env.ContainsKey("JETSKI_OAUTH_TOKEN")&&!env.ContainsKey("GOOGLE_API_KEY")&&!env.ContainsKey("SSH_CONNECTION")&&!env.ContainsKey("NODE_OPTIONS"));
+});
+Test("Antigravity never shows a legacy shared quota cache on a private account",()=>{
+    var old=WithQuota("fixture",1).DesktopConnection!;var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true,ProviderConnection=old};True(a.Connection==null);
+    a.ProviderConnection=old with{ProviderSessionKind=AntigravityProfile.DesktopSessionKind};True(a.Connection!=null);
+});
+Test("Antigravity private paths reject redirected parents, identity files and mismatched owners",()=>{
+    var repo=Repo("antigravity-ownership");var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};repo.PrepareProfile(a);AntigravityProfile.Validate(repo,a);
+    var target=Path.Combine(root,"other-private");Directory.CreateDirectory(target);var home=AntigravityProfile.Home(repo,a);Repository.DeleteTree(home);Directory.CreateSymbolicLink(home,target);Throws(()=>AntigravityProfile.Validate(repo,a));
+});
+Test("Antigravity native quota preserves email, plan, both model groups and independent resets",()=>{
+    var status=JsonDocument.Parse("""{"userStatus":{"email":"private@example.test","planStatus":{"planInfo":{"planName":"Pro"}}}}""").RootElement;
+    var quota=JsonDocument.Parse("""{"response":{"groups":[{"displayName":"Gemini Models","buckets":[{"bucketId":"gemini-weekly","displayName":"Weekly Limit Remaining","window":"weekly","remainingFraction":0.99,"resetTime":"2030-01-01T00:00:00Z"}]},{"displayName":"Claude and GPT models","buckets":[{"bucketId":"3p-weekly","displayName":"Weekly Limit Remaining","window":"weekly","remainingFraction":0.91,"resetTime":"2030-01-02T00:00:00Z"}]}]}}""").RootElement;
+    var c=AntigravityProfile.Parse(status,quota,status,"private@example.test");Equal(c.Identity.Email,"private@example.test");Equal(c.Identity.PlanType,"Pro");Equal(c.Quota!.Limits.Buckets.Count(),2);var groups=c.Quota.Limits.Buckets.ToDictionary(x=>x.Value.LimitName!);True(Math.Abs(groups["Gemini models"].Value.Primary!.Remaining!.Value-99)<0.001);True(Math.Abs(groups["Claude and GPT models"].Value.Primary!.Remaining!.Value-91)<0.001);True(groups["Gemini models"].Value.Primary!.Reset!=groups["Claude and GPT models"].Value.Primary!.Reset);
+    Throws(()=>AntigravityProfile.Parse(status,quota,status,"other@example.test"));var changed=JsonDocument.Parse("""{"userStatus":{"email":"other@example.test"}}""").RootElement;Throws(()=>AntigravityProfile.Parse(status,quota,changed));
+});
+Test("Antigravity identity-only data does not invent quota; signed-out, invalid fractions and duplicates are rejected",()=>{
+    var status=JsonDocument.Parse("""{"userStatus":{"email":"free@example.test"}}""").RootElement;var empty=JsonDocument.Parse("""{"response":{"groups":[]}}""").RootElement;var connection=AntigravityProfile.Parse(status,empty,status);True(connection.Quota==null);True(connection.Identity.PlanType==null);
+    Throws(()=>AntigravityProfile.Status(JsonDocument.Parse("{}").RootElement));var bad=JsonDocument.Parse("""{"response":{"groups":[{"buckets":[{"bucketId":"g","remainingFraction":1.2}]}]}}""").RootElement;Throws(()=>AntigravityProfile.Parse(status,bad,status));
+});
+Test("Antigravity saved email is display metadata only and private email changes remain detectable",()=>{
+    var file=Path.Combine(root,"antigravity-metadata.json");File.WriteAllText(file,"""{"auth_method":"consumer","id_token_email":"a@example.test","token":{"access_token":"synthetic-do-not-display"}}""");Equal(AntigravityProfile.ReadIdentity(file)?.Email,"a@example.test");File.WriteAllText(file,"""{"auth_method":"consumer","id_token_email":"invalid"}""");True(AntigravityProfile.ReadIdentity(file)==null);
+});
 Test("Workspace activation renews changed accounts and survives manager restart without editing authentication or history",()=>{
     var repo=Repo("workspace-activation");var source=Path.Combine(root,"workspace-source");var database=Path.Combine(root,"workspace-db");var a=Guid.NewGuid();var b=Guid.NewGuid();
     Directory.CreateDirectory(source);File.WriteAllText(Path.Combine(source,"auth.json"),"private authentication fixture");File.WriteAllText(Path.Combine(source,"chat.jsonl"),"original conversation");

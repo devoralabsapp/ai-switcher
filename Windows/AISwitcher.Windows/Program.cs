@@ -22,7 +22,7 @@ internal sealed class Program:Application {
     FileStream? lease;SilentTrayIcon? tray;DispatcherTimer? timer;AppEngine? engine;MainWindow? manager;Guid? notificationAccount;
     [STAThread]public static int Main(string[] args){
         if(args.Contains("--process-fixture")){RunFixture(args);return 0;}
-        if(args.Contains("--account-handoff-smoke-test")||args.Contains("--render-previews")||args.Contains("--ui-smoke-test")||args.Contains("--backend-smoke-test")||args.Contains("--stdio-smoke-test")||args.Contains("--store-runtime-smoke-test")||args.Contains("--store-runtime-reopen-smoke-test"))return PreviewRunner.Run(args);
+        if(args.Contains("--antigravity-smoke-test")||args.Contains("--account-handoff-smoke-test")||args.Contains("--render-previews")||args.Contains("--ui-smoke-test")||args.Contains("--backend-smoke-test")||args.Contains("--stdio-smoke-test")||args.Contains("--store-runtime-smoke-test")||args.Contains("--store-runtime-reopen-smoke-test"))return PreviewRunner.Run(args);
         var app=new Program();app.Run();return 0;
     }
     protected override void OnStartup(StartupEventArgs e){base.OnStartup(e);ShutdownMode=ShutdownMode.OnExplicitShutdown;
@@ -56,7 +56,8 @@ internal sealed class Program:Application {
             if(a.Agent.ProviderQuota()){Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
             if(a.UsesCodexDesktop){Action(l["Open ChatGPT Desktop"],()=>_=engine.OpenAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id));Action(l["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));}
             if(a.Agent.HasQuota()){Action(l["Refresh quota"],()=>_=engine.RefreshAsync(a),!engine.StoppingAll&&!engine.Busy.Contains(a.Id)&&(a.Agent.ProviderQuota()||a.UsesCodexDesktop||a.BrowserConnection!=null));Action(l["Details"],()=>manager.QuotaDetails(a));}
-            Action(l["Close account session…"],()=>manager.Close(a),(!a.Agent.IsShared()||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a)&&!engine.StoppingAll&&!engine.Busy.Contains(a.Id));menu.Items.Add(item);
+            if(engine.WaitingForSignIn.Contains(a.Id))Action(l["Cancel"],()=>engine.CancelConnection(a));
+            Action(l["Close account session…"],()=>manager.Close(a),(!a.UsesSharedApplication||engine.Provider.Connected.Contains(a.Id))&&engine.Running(a)&&!engine.StoppingAll&&!engine.Busy.Contains(a.Id));menu.Items.Add(item);
         }
         menu.Items.Add(new Forms.ToolStripSeparator());menu.Items.Add(l["Add account…"],null,(_,_)=>Dispatcher.Invoke(()=>manager.EditAccount()));menu.Items.Add(l["Appearance & Language"],null,(_,_)=>Dispatcher.Invoke(manager.Settings));menu.Items.Add(l["Session diagnostics"],null,(_,_)=>Dispatcher.Invoke(manager.Diagnostics));var force=menu.Items.Add(l["Force stop all…"],null,(_,_)=>Dispatcher.Invoke(manager.ForceStopAll));force.Enabled=!engine.ReadOnly&&!engine.StoppingAll;menu.Items.Add(l["Quit AI Switcher"],null,(_,_)=>Dispatcher.Invoke(async()=>{manager.Exiting=true;await engine.ShutdownAsync();Shutdown();}));
         var old=tray.ContextMenuStrip;tray.ContextMenuStrip=menu;old?.Dispose();

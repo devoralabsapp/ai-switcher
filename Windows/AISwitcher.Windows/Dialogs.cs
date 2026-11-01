@@ -20,7 +20,13 @@ internal sealed partial class MainWindow {
         else{
             stack.Children.Add(QuotaSummary(a,true));if(engine.Errors.TryGetValue(a.Id,out var error)){stack.Children.Add(Space(12));stack.Children.Add(Text(error));}
             stack.Children.Add(Space(18));
-            if(a.Agent.ProviderQuota()){var connect=Button(L["Connect account session"],async()=>{await engine.ConnectAsync(a);Build();},true,T);connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);stack.Children.Add(Button(L["Sign in with official CLI…"],()=>{try{engine.Provider.SignIn(a);}catch(Exception error){Notice(L["AI Switcher"],engine.Message(error));}}));AddProviderInstallation(stack,a,Build);if(engine.Provider.Connected.Contains(a.Id))stack.Children.Add(Button(L["Disconnect"],async()=>{await engine.CloseAsync(a);Build();}));stack.Children.Add(Text(L[a.Agent==Agent.Claude?"Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate.":"Antigravity quota uses the official CLI and shared application sign-in."]));}
+            if(a.Agent.ProviderQuota()){
+                var connect=Button(L["Connect account session"],async()=>{await engine.ConnectAsync(a);Build();},true,T);connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);
+                if(a.Agent!=Agent.Antigravity){stack.Children.Add(Button(L["Sign in with official CLI…"],()=>{try{engine.Provider.SignIn(a);}catch(Exception error){Notice(L["AI Switcher"],engine.Message(error));}}));}
+                if(a.UsesProviderCli)AddProviderInstallation(stack,a,Build);
+                if(a.Agent!=Agent.Antigravity&&engine.Provider.Connected.Contains(a.Id))stack.Children.Add(Button(L["Disconnect"],async()=>{await engine.CloseAsync(a);Build();}));
+                if(engine.WaitingForSignIn.Contains(a.Id))stack.Children.Add(Button(L["Cancel"],()=>{engine.CancelConnection(a);Build();}));
+            }
             else if(a.UsesCodexDesktop){var connect=Button(L["Connect account session"],async()=>{await engine.ConnectAsync(a);Build();},true,T);connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);stack.Children.Add(Space(8));stack.Children.Add(Button(L["Open ChatGPT Desktop"],async()=>{await engine.OpenAsync(a);Build();}));}
             else{stack.Children.Add(Text(L["Browser quota is a separate Codex sign-in. Verify its email before using it."]));stack.Children.Add(Space(12));var connect=Button(L["Connect Codex…"],async()=>{await BrowserLogin(a);Build();},true,T);connect.IsEnabled=!engine.Busy.Contains(a.Id);stack.Children.Add(connect);if(a.BrowserConnection!=null)stack.Children.Add(Button(L["Disconnect"],async()=>{if(Ask(L["Disconnect Codex?"],L["This removes this profile's separate Codex sign-in and cached quota."],L["Disconnect"])){await engine.DisconnectBrowserAsync(a);Build();}}));}
             var refresh=Button(L["Refresh quota"],async()=>{await engine.RefreshAsync(a);Build();});refresh.IsEnabled=!engine.Busy.Contains(a.Id)&&(a.Agent.ProviderQuota()||a.UsesCodexDesktop||a.BrowserConnection!=null);stack.Children.Add(Space(10));stack.Children.Add(refresh);
@@ -40,24 +46,28 @@ internal sealed partial class MainWindow {
         var defaultAction=new ComboBox{ItemsSource=new[]{L["Open ChatGPT"],L["Connect in background"]},SelectedIndex=original?.DefaultAction==DefaultAction.ConnectSession||original==null&&engine.Preferences.QuotaOnlyMode?1:0};
         var startup=new CheckBox{Content=L["Connect in background when AI Switcher starts"],IsChecked=original?.ConnectOnStartup??false};
         var shared=new CheckBox{Content=L["Share local projects and Work history"],IsChecked=original?.SharesLocalWorkspace??false};
+        var signInMethod=new ComboBox{ItemsSource=new[]{L["Sign in with browser"],L["Sign in with Antigravity CLI"]},SelectedIndex=original?.AntigravitySignInMethod==AntigravitySignInMethod.Cli?1:0};System.Windows.Automation.AutomationProperties.SetAutomationId(signInMethod,"antigravitySignInMethod");
         var openAfter=new CheckBox{Content=L["Open after adding"],IsChecked=!engine.Preferences.QuotaOnlyMode};
         var explanation=Text("",11,false,T.Secondary);var fields=new StackPanel();
         StackPanel Field(string label,UIElement content){var group=Stack(Text(L[label],12,true),Space(6),content,Space(16));fields.Children.Add(group);return group;}
         Field("AI agent",agent);Field("Account name",name);Field("Email or note",note);Field("Profile color",color);var modeField=Field("Mode",mode);fields.Children.Add(explanation);fields.Children.Add(Space(14));var browserField=Field("Browser",browser);
         var desktopOptions=Stack(Text(L["Default account action"],12,true),Space(6),defaultAction,startup,shared,Text(L["Sharing uses the workspace folder selected in Settings. Authentication stays private."],11,false,T.Secondary),Space(16));fields.Children.Add(desktopOptions);
+        var signInField=Field("Sign-in method",signInMethod);
         if(original==null)fields.Children.Add(openAfter);
         var support=Text(L["Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."],11,false,T.Secondary);support.Margin=new Thickness(0,16,0,20);fields.Children.Add(support);
         void UpdateFields(){var selected=agentValues[agent.SelectedIndex];var selectedMode=(LaunchMode)mode.SelectedIndex;
             mode.IsEnabled=(selected is Agent.Chatgpt or Agent.Claude)&&(original==null||!engine.Running(original)&&!engine.Busy.Contains(original.Id));
             var effective=selected is Agent.Chatgpt or Agent.Claude?selectedMode:selected.IsShared()?LaunchMode.Desktop:LaunchMode.Browser;
             modeField.Visibility=selected is Agent.Claude or Agent.Chatgpt?Visibility.Visible:Visibility.Collapsed;browserField.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
+            signInField.Visibility=selected==Agent.Antigravity&&original==null?Visibility.Visible:Visibility.Collapsed;
+            openAfter.Content=L[selected==Agent.Antigravity?"Sign in after adding":"Open after adding"];
             shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=Support(new Account{Agent=selected,LaunchMode=effective});
         }
         agent.SelectionChanged+=(_,_)=>UpdateFields();mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
             var selected=agentValues[agent.SelectedIndex];
-            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedIndex,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true};
-            if(engine.SaveAccount(edited)){dialog.Close();if(original==null&&openAfter.IsChecked==true)_=engine.OpenAsync(edited);}
+            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedIndex,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true,AntigravityUsesPrivateHome=original?.AntigravityUsesPrivateHome??(original==null&&selected==Agent.Antigravity?true:null),AntigravitySignInMethod=original?.AntigravitySignInMethod??(original==null&&selected==Agent.Antigravity?(AntigravitySignInMethod)signInMethod.SelectedIndex:null)};
+            if(engine.SaveAccount(edited)){dialog.Close();if(original==null&&openAfter.IsChecked==true){if(edited.Agent==Agent.Antigravity)_=engine.ConnectAsync(edited);else _=engine.OpenAsync(edited);}}
         },true,T);save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;name.TextChanged+=(_,_)=>save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;
         var body=new DockPanel{LastChildFill=true,Margin=new Thickness(25)};var footer=Row(Button(L["Cancel"],()=>dialog.Close()),save);footer.HorizontalAlignment=HorizontalAlignment.Right;DockPanel.SetDock(footer,Dock.Bottom);body.Children.Add(footer);body.Children.Add(new ScrollViewer{Content=Stack(Text(L[original==null?"Another account.\nKeep your flow.":"Edit profile"],24,true),Space(20),fields),VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new Thickness(0,0,0,14)});dialog.Content=body;dialog.ShowDialog();
     }

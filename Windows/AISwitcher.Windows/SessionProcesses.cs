@@ -19,7 +19,7 @@ internal sealed partial class NativePlatform {
         // Native Codex helpers inherit ownership from a verified live parent or its
         // exact exit lifetime. Matching a global executable name is never sufficient.
         var name=Path.GetFileName(process.Executable);
-        return account.UsesCodexDesktop&&(name.Equals("codex.exe",StringComparison.OrdinalIgnoreCase)||name.Equals("codex-cli.exe",StringComparison.OrdinalIgnoreCase));
+        return account.UsesPrivateAntigravity&&SamePath(process.Executable,AntigravityServerPath(preferences.Executables.GetValueOrDefault("antigravity")??discovered.GetValueOrDefault("antigravity")??process.Executable))||account.UsesCodexDesktop&&(name.Equals("codex.exe",StringComparison.OrdinalIgnoreCase)||name.Equals("codex-cli.exe",StringComparison.OrdinalIgnoreCase));
     }
     internal async Task CompleteCloseAsync(Account account){
         // Give renderers and the app-server a short opportunity to follow the root.
@@ -49,7 +49,7 @@ internal sealed partial class NativePlatform {
         await VerifyClosedAsync(account);
     }
     internal async Task VerifyClosedAsync(Account account){
-        if(account.Agent.IsShared())return;await RefreshProcessesAsync();
+        if(account.UsesSharedApplication)return;await RefreshProcessesAsync();
         if(HasOwnedProcesses(account))throw new AppError("Some account processes could not be stopped. Check Session diagnostics and try again.");
         if(tracked.Remove(account.Id,out var family))foreach(var key in family.Keys)exitedParents.Remove(key);
     }

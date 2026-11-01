@@ -30,12 +30,14 @@ internal sealed class ProviderQuotaService {
     }
     string Config(Account a)=>repo.CodeConfig(a with{LaunchMode=LaunchMode.Desktop});
     Dictionary<string,string> EnvironmentFor(Account a){
+        if(a.UsesPrivateAntigravity){repo.PrepareProfile(a);AntigravityProfile.Validate(repo,a);foreach(var dir in AntigravityProfile.Directories(repo,a))NativePlatform.ProtectDirectory(dir);return AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,a);}
         var env=ChildEnvironment.Create(NativePlatform.EnvironmentValues());
         if(a.Agent==Agent.Claude){var desktop=a with{LaunchMode=LaunchMode.Desktop};repo.PrepareProfile(desktop);NativePlatform.ProtectDirectory(repo.ProfilePath(desktop));env["CLAUDE_CONFIG_DIR"]=Config(a);}
         return env;
     }
     Process Start(Account a,string executable,IEnumerable<string> args){
-        var info=ChildEnvironment.StartInfo(executable,args,EnvironmentFor(a),repo.Root);info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+        if(a.UsesPrivateAntigravity&&!AntigravityProfile.SupportsPrivateStorage(executable))throw new AppError(AntigravityProfile.Unsupported);
+        var info=ChildEnvironment.StartInfo(executable,args,EnvironmentFor(a),a.UsesPrivateAntigravity?AntigravityProfile.Home(repo,a):repo.Root);info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
         var process=new Process{StartInfo=info};process.ErrorDataReceived+=(_,_)=>{};
         if(!process.Start())throw new AppError(ProviderQuota.Invalid);process.BeginErrorReadLine();
         if(!commands.TryGetValue(a.Id,out var children))commands[a.Id]=children=[];children.Add(process);return process;
@@ -87,12 +89,33 @@ internal sealed class ProviderQuotaService {
             var after=await Identity();if(!before.Matches(after))throw new AppError(ProviderQuota.Changed);
             return ProviderQuota.Parse(usage,account.Agent,after);
         }
-        using var result=JsonDocument.Parse(await Run(account,executable,ProviderQuota.AntigravityArguments,ct));
-        return ProviderQuota.Parse(result.RootElement,account.Agent,new(null,null));
+        string IdentityPath()=>account.UsesPrivateAntigravity?(File.Exists(AntigravityProfile.CliIdentity(repo,account))?AntigravityProfile.CliIdentity(repo,account):AntigravityProfile.DesktopIdentity(repo,account)):LegacyIdentityPath();
+        string LegacyIdentityPath(){var home=Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);var modern=Path.Combine(home,".gemini","antigravity-cli","antigravity-oauth-token");return File.Exists(modern)?modern:Path.Combine(home,".gemini","jetski-standalone-oauth-token");}
+        var path=IdentityPath();var savedBefore=AntigravityProfile.ReadIdentity(path);if(account.UsesPrivateAntigravity&&savedBefore==null)throw new AppError(ProviderQuota.SignedOut);
+        var text=await Run(account,executable,ProviderQuota.AntigravityArguments,ct);
+        if(new[]{"not signed in","not logged in","please sign in","authentication required","login required"}.Any(term=>text.Contains(term,StringComparison.OrdinalIgnoreCase)))throw new AppError(ProviderQuota.SignedOut);
+        using var result=JsonDocument.Parse(text);var savedAfter=AntigravityProfile.ReadIdentity(path);
+        if(savedBefore!=savedAfter||savedAfter?.Email is {} email&&account.EmailHint.Contains('@')&&!string.Equals(account.EmailHint,email,StringComparison.OrdinalIgnoreCase))throw new AppError(ProviderQuota.Changed);
+        if(account.UsesPrivateAntigravity&&AntigravityProfile.ReadIdentity(AntigravityProfile.DesktopIdentity(repo,account))?.Email is {} desktopEmail&&savedAfter?.Email is {} cliEmail&&!string.Equals(desktopEmail,cliEmail,StringComparison.OrdinalIgnoreCase))throw new AppError(ProviderQuota.Changed);
+        return ProviderQuota.Parse(result.RootElement,account.Agent,savedAfter??new(null,null))with{IdentityFetchedAt=DateTimeOffset.UtcNow,ProviderSessionKind=account.UsesPrivateAntigravity?AntigravityProfile.CliSessionKind:null};
     }
     public async Task DisconnectAsync(Account account){
         Connected.Remove(account.Id);
         if(commands.TryGetValue(account.Id,out var children))foreach(var process in children.ToArray())try{if(!process.HasExited){process.Kill(true);await process.WaitForExitAsync();}}catch(InvalidOperationException){}
+    }
+    public async Task<Connection> SignInAsync(Account account,CancellationToken ct){
+        var executable=Executable(account.Agent);if(account.UsesPrivateAntigravity&&!AntigravityProfile.SupportsPrivateStorage(executable))throw new AppError(AntigravityProfile.Unsupported);
+        var env=EnvironmentFor(account);var script="& '"+executable.Replace("'","''")+"'"+(account.Agent==Agent.Claude?" auth login":"");
+        var info=ChildEnvironment.StartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"WindowsPowerShell","v1.0","powershell.exe"),new[]{"-NoProfile","-NoExit","-EncodedCommand",Convert.ToBase64String(Encoding.Unicode.GetBytes(script))},env,account.UsesPrivateAntigravity?AntigravityProfile.Home(repo,account):repo.Root);info.CreateNoWindow=false;
+        var process=Process.Start(info)??throw new AppError(ProviderQuota.SignedOut);if(!commands.TryGetValue(account.Id,out var children))commands[account.Id]=children=[];children.Add(process);
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromMinutes(10));
+        try{
+            while(!process.HasExited){
+                await Task.Delay(2500,timeout.Token);
+                try{return await ReadAsync(account,timeout.Token);}catch(AppError error)when(error.Key is ProviderQuota.SignedOut or ProviderQuota.Unavailable or ProviderQuota.Invalid){}
+            }
+            throw new AppError(ProviderQuota.SignedOut);
+        }finally{children.Remove(process);await StopProcess(process);}
     }
     public void SignIn(Account account){
         var executable=Executable(account.Agent);_ = EnvironmentFor(account);

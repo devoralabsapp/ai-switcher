@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 namespace AISwitcher.Core;
 
 public enum Agent { Chatgpt, Claude, Gemini, Antigravity, Perplexity, Deepseek }
+public enum AntigravitySignInMethod { Browser, Cli }
 public enum LaunchMode { Desktop, Browser }
 public enum Browser { Chrome, Edge, Brave }
 public enum DefaultAction { OpenDesktop, ConnectSession }
@@ -39,11 +40,17 @@ public sealed record Account {
     public Connection? DesktopConnection { get; set; }
     public Connection? BrowserConnection { get; set; }
     public Connection? ProviderConnection { get; set; }
+    public bool? AntigravityUsesPrivateHome { get; init; }
+    public AntigravitySignInMethod? AntigravitySignInMethod { get; init; }
+    [JsonIgnore] public bool UsesPrivateAntigravity=>Agent==Agent.Antigravity&&AntigravityUsesPrivateHome==true;
+    [JsonIgnore] public bool UsesSharedApplication=>Agent.IsShared()&&!UsesPrivateAntigravity;
+    [JsonIgnore] public bool UsesAntigravityDesktopQuota=>UsesPrivateAntigravity&&AntigravitySignInMethod!=global::AISwitcher.Core.AntigravitySignInMethod.Cli;
+    [JsonIgnore] public bool UsesProviderCli=>Agent.ProviderQuota()&&!UsesAntigravityDesktopQuota;
     [JsonIgnore] public LaunchMode EffectiveMode => Agent is Agent.Chatgpt or Agent.Claude ? LaunchMode : Agent.IsShared() ? LaunchMode.Desktop : LaunchMode.Browser;
     [JsonIgnore] public bool UsesCodexDesktop => Agent == Agent.Chatgpt && EffectiveMode == LaunchMode.Desktop;
-    [JsonIgnore] public Connection? Connection => !Agent.HasQuota() ? null : Agent.ProviderQuota() ? ProviderConnection : UsesCodexDesktop ? DesktopConnection : BrowserConnection;
+    [JsonIgnore] public Connection? Connection => !Agent.HasQuota() ? null : Agent.ProviderQuota() ? UsesPrivateAntigravity&&ProviderConnection?.ProviderSessionKind is not (AntigravityProfile.DesktopSessionKind or AntigravityProfile.CliSessionKind)?null:ProviderConnection : UsesCodexDesktop ? DesktopConnection : BrowserConnection;
     public void Validate() {
-        if (Id == Guid.Empty || Name.Trim().Length is < 1 or > 48 || EmailHint.Length > 160 || !ProfileColors.Names.Contains(Color) || !Enum.IsDefined(Agent) || !Enum.IsDefined(Browser) || !Enum.IsDefined(LaunchMode)) throw new AppError("Invalid profile data.");
+        if (Id == Guid.Empty || Name.Trim().Length is < 1 or > 48 || EmailHint.Length > 160 || !ProfileColors.Names.Contains(Color) || !Enum.IsDefined(Agent) || !Enum.IsDefined(Browser) || !Enum.IsDefined(LaunchMode) || AntigravitySignInMethod.HasValue&&!Enum.IsDefined(AntigravitySignInMethod.Value)) throw new AppError("Invalid profile data.");
     }
 }
 public sealed record Snapshot {
@@ -53,7 +60,7 @@ public sealed record Snapshot {
     public void Validate() {
         if (Version != 1 || Accounts.Select(x => x.Id).Distinct().Count() != Accounts.Count || (LastOpenedId.HasValue && Accounts.All(x => x.Id != LastOpenedId))) throw new AppError("Could not read data. The existing file has been preserved.");
         foreach (var account in Accounts) account.Validate();
-        if (Accounts.Count(x => x.Agent.IsShared()) > 1) throw new AppError("Antigravity uses one shared application sign-in. Edit the existing Antigravity entry instead.");
+        if (Accounts.Count(x => x.UsesSharedApplication) > 1) throw new AppError("Antigravity uses one shared application sign-in. Edit the existing Antigravity entry instead.");
     }
 }
 public sealed record Preferences {

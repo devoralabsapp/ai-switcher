@@ -17,7 +17,7 @@ public sealed record Limits(string? AccountId, Bucket? RateLimits, Dictionary<st
 public sealed record QuotaSnapshot(Limits Limits, DateTimeOffset FetchedAt) {
     public bool IsStale(DateTimeOffset now) => now - FetchedAt > TimeSpan.FromMinutes(6) || Limits.Buckets.Any(x => new[] { x.Value.Primary, x.Value.Secondary }.Any(w => w?.Expired(now) == true));
 }
-public sealed record Connection(Identity Identity, QuotaSnapshot? Quota = null);
+public sealed record Connection(Identity Identity, QuotaSnapshot? Quota = null, DateTimeOffset? IdentityFetchedAt = null, string? ProviderSessionKind = null);
 public static class QuotaOverview {
     public static IEnumerable<Account> Sort(IEnumerable<Account> accounts, Preferences prefs, ISet<Guid>? failed = null, DateTimeOffset? time = null) {
         var now = time ?? DateTimeOffset.UtcNow;
