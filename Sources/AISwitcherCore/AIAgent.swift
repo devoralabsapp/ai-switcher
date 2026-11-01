@@ -43,7 +43,7 @@ public enum AIAgent: String, Codable, CaseIterable, Identifiable, Sendable {
     public var supportDetail: String {
         if supportsCodexQuota { return L10n.text("Desktop sessions, browser profiles, and Codex quota") }
         if self == .claude { return L10n.text("Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate.") }
-        if self == .antigravity { return L10n.text("Separate Antigravity Desktop and CLI sign-in for each new profile.") }
+        if self == .antigravity { return L10n.text("Separate Antigravity Desktop sign-in with email and quota from that same session.") }
         return L10n.text("Separate browser sign-in for each profile. Quota and background connections are not available for this agent.")
     }
 }

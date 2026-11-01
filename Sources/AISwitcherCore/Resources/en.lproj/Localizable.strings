@@ -586,3 +586,21 @@
 "Connect again to refresh this profile's isolated quota." = "Connect again to refresh this profile's isolated quota.";
 
 "Each new Antigravity account has separate Desktop and CLI storage. Choose the same Google account in Desktop and Connect when asked to sign in." = "Each new Antigravity account has separate Desktop and CLI storage. Choose the same Google account in Desktop and Connect when asked to sign in.";
+
+"Separate Antigravity Desktop sign-in with email and quota from that same session." = "Separate Antigravity Desktop sign-in with email and quota from that same session.";
+
+"Sign in once in this Antigravity Desktop profile. Email and quota update automatically; Connect reuses its saved sign-in without CLI login." = "Sign in once in this Antigravity Desktop profile. Email and quota update automatically; Connect reuses its saved sign-in without CLI login.";
+
+"ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles read email and quota from their own Desktop sign-in, without CLI login. Connect reuses saved sign-in in the background; first sign-in needs the Desktop window. No model prompt is sent." = "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles read email and quota from their own Desktop sign-in, without CLI login. Connect reuses saved sign-in in the background; first sign-in needs the Desktop window. No model prompt is sent.";
+
+"Sign in with browser" = "Sign in with browser";
+
+"Sign in with Antigravity CLI" = "Sign in with Antigravity CLI";
+
+"Sign-in method" = "Sign-in method";
+
+"Sign in after adding" = "Sign in after adding";
+
+"Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data." = "Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data.";
+
+"ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. Antigravity offers Google browser sign-in or official CLI sign-in when adding an account. Browser sign-in also works with that account’s Desktop session. Connect reuses saved sign-in in the background; no model prompt is sent." = "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. Antigravity offers Google browser sign-in or official CLI sign-in when adding an account. Browser sign-in also works with that account’s Desktop session. Connect reuses saved sign-in in the background; no model prompt is sent.";

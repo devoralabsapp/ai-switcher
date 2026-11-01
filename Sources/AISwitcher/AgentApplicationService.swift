@@ -46,7 +46,7 @@ final class AgentApplicationService {
         }
         let process = Process()
         process.executableURL = AntigravityLaunch.sandboxExecutable
-        process.arguments = AntigravityLaunch.isolatedArguments(executable: executable, arguments: AntigravityLaunch.arguments(userData: repository.antigravityUserDataURL(for: account.id)))
+        process.arguments = AntigravityLaunch.desktopIsolatedArguments(application:app, executable: executable, arguments: AntigravityLaunch.arguments(userData: repository.antigravityUserDataURL(for: account.id)))
         process.environment = AntigravityLaunch.environment(base: ProcessInfo.processInfo.environment, home: repository.antigravityHomeURL(for: account.id))
         process.currentDirectoryURL = repository.antigravityHomeURL(for: account.id)
         process.standardInput = FileHandle.nullDevice;process.standardOutput = launchDiagnostics ?? FileHandle.nullDevice;process.standardError = launchDiagnostics ?? FileHandle.nullDevice

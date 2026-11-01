@@ -108,6 +108,23 @@ final class AntigravityProfileTests: XCTestCase {
         for key in ["AGY_ADC_AUTH","GOOGLE_APPLICATION_CREDENTIALS","GEMINI_API_KEY","JETSKI_LS_PORT","JETSKI_OAUTH_TOKEN","CODEIUM_LANGUAGE_SERVER_BIN","ELECTRON_RUN_AS_NODE","NODE_OPTIONS","BASH_ENV"] { XCTAssertNil(env[key]) }
     }
 
+    func testSignInChoicePersistsAndExistingPrivateDesktopProfilesNeedNoCLI() throws {
+        var existing = Account(name:"Existing",agent:.antigravity,antigravityUsesPrivateHome:true)
+        XCTAssertTrue(existing.usesAntigravityDesktopQuota)
+        XCTAssertFalse(existing.usesAntigravityCLI)
+        for choice in AntigravitySignInMethod.allCases {
+            existing.antigravitySignInMethod = choice
+            let value = try JSONDecoder().decode(Account.self,from:JSONEncoder().encode(existing))
+            XCTAssertEqual(value.antigravitySignInMethod,choice)
+            XCTAssertEqual(value.usesAntigravityCLI,choice == .cli)
+            XCTAssertEqual(value.usesAntigravityDesktopQuota,choice == .browser)
+        }
+        let shared = Account(name:"Legacy shared",agent:.antigravity)
+        XCTAssertTrue(shared.usesAntigravityCLI)
+        XCTAssertFalse(shared.usesAntigravityDesktopQuota)
+        XCTAssertTrue(AntigravityLaunch.sandboxProfile.contains("(deny process-exec (literal \"/usr/bin/security\"))"))
+    }
+
     @MainActor
     func testInstalledCLIReadsExistingPrivateAccountEmailAndQuotaWhenEnabled() async throws {
         let env = ProcessInfo.processInfo.environment

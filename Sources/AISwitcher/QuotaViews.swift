@@ -56,7 +56,7 @@ struct ProviderQuotaSummaryView: View {
                 if model.installingProviderAgents.contains(account.effectiveAgent) {
                     HStack { ProgressView().controlSize(.mini);Text(L10n.format("Installing %@ CLI…", account.effectiveAgent.name)).font(theme.font(size: 11)) }
                     Text(L10n.text("Installation is running in Terminal. This app will connect when it finishes.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
-                } else if !model.hasProviderCLI(account) {
+                } else if !account.usesAntigravityDesktopQuota && !model.hasProviderCLI(account) {
                     Button(L10n.text("Install & connect")) { model.installProviderCLI(account) }.buttonStyle(PrimaryButtonStyle(compact: true)).disabled(busy)
                     Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
                 }

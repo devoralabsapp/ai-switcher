@@ -58,18 +58,21 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var providerQuotaConnection: CodexConnection?
     /// Nil keeps existing Antigravity entries on their original shared sign-in.
     public var antigravityUsesPrivateHome: Bool?
+    public var antigravitySignInMethod: AntigravitySignInMethod?
 
     public var effectiveAgent: AIAgent { agent ?? .chatgpt }
     public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent == .claude ? launchMode ?? .browser : effectiveAgent.isSharedApplication ? .desktop : .browser }
     public var usesClaudeDesktop: Bool { effectiveAgent == .claude && effectiveLaunchMode == .desktop }
     public var usesIsolatedAntigravity: Bool { effectiveAgent == .antigravity && antigravityUsesPrivateHome == true }
+    public var usesAntigravityCLI: Bool { effectiveAgent == .antigravity && (!usesIsolatedAntigravity || antigravitySignInMethod == .cli) }
+    public var usesAntigravityDesktopQuota: Bool { usesIsolatedAntigravity && !usesAntigravityCLI }
     public var usesSharedApplication: Bool { effectiveAgent.isSharedApplication && !usesIsolatedAntigravity }
     public var usesCodexDesktop: Bool { effectiveAgent.supportsCodexQuota && effectiveLaunchMode == .desktop }
     public var usesSharedLocalWorkspace: Bool { usesCodexDesktop && sharesLocalWorkspace == true }
     public var effectiveDefaultAction: AccountAction { usesCodexDesktop ? defaultAction ?? .openDesktop : .openDesktop }
     public var automaticallyConnects: Bool { usesCodexDesktop && connectOnStartup == true }
     public var displayedCodexConnection: CodexConnection? {
-        if usesIsolatedAntigravity, let old = providerQuotaConnection, old.providerSessionKind != AntigravityLaunch.quotaSessionKind {
+        if usesIsolatedAntigravity, let old = providerQuotaConnection, ![AntigravityLaunch.quotaSessionKind,AntigravityLaunch.desktopQuotaSessionKind].contains(old.providerSessionKind ?? "") {
             // Older versions could read the shared Keychain. Preserve that cache
             // internally, but display neither its identity nor its quota here.
             return nil

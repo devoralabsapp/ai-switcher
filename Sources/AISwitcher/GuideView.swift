@@ -19,7 +19,7 @@ struct GuideView: View {
             Text(L10n.text("Your AI accounts.\nOne workspace."))
                 .font(appearanceTheme.font(size: 25, weight: .semibold)).tracking(-0.5)
             row("1", L10n.text("Choose an AI agent"), L10n.text("Choose an agent when adding a profile. Claude, Gemini, Perplexity, and DeepSeek use separate browser profiles; sign in directly on their websites."))
-            row("2", L10n.text("Check agent capabilities"), L10n.text("ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles keep Desktop and CLI sign-in in the same private home; existing shared entries keep their login. Connect reads quota without opening Desktop or sending a model prompt."))
+            row("2", L10n.text("Check agent capabilities"), L10n.text("ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. Antigravity offers Google browser sign-in or official CLI sign-in when adding an account. Browser sign-in also works with that account’s Desktop session. Connect reuses saved sign-in in the background; no model prompt is sent."))
             row("3", L10n.text("Filter and return"), L10n.text("Use the AI AGENTS section in the left sidebar. Agent filters combine with Favorites, Recent, and search. Open a profile from its card or the menu bar."))
             VStack(alignment: .leading, spacing: 9) {
                 Text(L10n.text("ChatGPT Desktop notes")).font(appearanceTheme.font(size: 12, weight: .semibold))

@@ -17,6 +17,7 @@ struct AccountEditorView: View {
     @State private var defaultAction: AccountAction
     @State private var connectOnStartup: Bool
     @State private var agent: AIAgent
+    @State private var antigravitySignInMethod: AntigravitySignInMethod
     @FocusState private var nameFocused: Bool
 
     init(model: AppModel, editor: AccountEditor) {
@@ -31,6 +32,7 @@ struct AccountEditorView: View {
         _defaultAction = State(initialValue: editor.account?.effectiveDefaultAction ?? (model.preferences.quotaOnlyMode ? .connectSession : .openDesktop))
         _connectOnStartup = State(initialValue: editor.account?.automaticallyConnects ?? false)
         _agent = State(initialValue: editor.account?.effectiveAgent ?? editor.defaultAgent)
+        _antigravitySignInMethod = State(initialValue: editor.account?.antigravitySignInMethod ?? .browser)
         _openAfterSave = State(initialValue: !model.preferences.quotaOnlyMode)
     }
 
@@ -89,8 +91,13 @@ struct AccountEditorView: View {
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                     if agent == .antigravity {
-                        Text(L10n.text(editor.account?.usesSharedApplication == true ? "This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session." : "Each new Antigravity account has separate Desktop and CLI storage. Choose the same Google account in Desktop and Connect when asked to sign in."))
+                        Text(L10n.text(editor.account?.usesSharedApplication == true ? "This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session." : "Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        if isNew {
+                            Picker(L10n.text("Sign-in method"), selection: $antigravitySignInMethod) {
+                                ForEach(AntigravitySignInMethod.allCases) { Text($0.title).tag($0) }
+                            }.accessibilityIdentifier("antigravitySignInMethod")
+                        }
                     }
                 }
                 field(L10n.text("Account name"), detail: L10n.text("For example: Personal, Work, Study")) {
@@ -207,7 +214,7 @@ struct AccountEditorView: View {
                 .retroOutline(radius: appearanceTheme.radius(9), shadow: false)
 
             if isNew {
-                Toggle(L10n.format("Open %@ after adding", agent.name), isOn: $openAfterSave)
+                Toggle(agent == .antigravity ? L10n.text("Sign in after adding") : L10n.format("Open %@ after adding", agent.name), isOn: $openAfterSave)
                     .toggleStyle(.checkbox).font(appearanceTheme.font(size: 12))
             }
 
@@ -234,12 +241,16 @@ struct AccountEditorView: View {
         account.launchMode = selectedMode
         account.agent = agent
         if isNew && agent == .antigravity { account.antigravityUsesPrivateHome = true }
+        if isNew && agent == .antigravity { account.antigravitySignInMethod = antigravitySignInMethod }
         account.sharesLocalWorkspace = agent == .chatgpt && sharesLocalWorkspace
         account.defaultAction = agent == .chatgpt ? defaultAction : .openDesktop
         account.connectOnStartup = agent == .chatgpt && connectOnStartup
         guard model.saveAccount(account) else { return }
         dismiss()
-        if isNew && openAfterSave { model.open(account) }
+        if isNew && openAfterSave {
+            if agent == .antigravity { model.connectSession(account) }
+            else { model.open(account) }
+        }
     }
 
     private func openBrowserDownload() {

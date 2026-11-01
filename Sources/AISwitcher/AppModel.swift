@@ -76,6 +76,8 @@ final class AppModel: ObservableObject {
     let desktopService: DesktopService
     let quotaService: CodexQuotaService
     let agentApplications: AgentApplicationService
+    private lazy var antigravityDesktopQuota = AntigravityDesktopQuotaService(applications: agentApplications, repository: repository)
+    private var antigravityRetryAt: [UUID: Date] = [:]
     private let desktopQuotaSource: any DesktopQuotaSource
     private var refreshTimer: AnyCancellable?
     private var quotaTimer: AnyCancellable?
@@ -112,6 +114,7 @@ final class AppModel: ObservableObject {
         refreshTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshRunning()
             self?.refreshDesktopQuotaIfNeeded()
+            self?.refreshAntigravityQuotaIfNeeded()
         }
         quotaTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshAllQuotas()
@@ -403,6 +406,7 @@ final class AppModel: ObservableObject {
                 var edited = account
                 // Changing storage identity would silently switch the saved login.
                 edited.antigravityUsesPrivateHome = updated.accounts[index].antigravityUsesPrivateHome
+                edited.antigravitySignInMethod = updated.accounts[index].antigravitySignInMethod
                 if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode
                     || edited.usesSharedLocalWorkspace != updated.accounts[index].usesSharedLocalWorkspace {
                     guard !hasRunningSession(account), !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
@@ -436,7 +440,7 @@ final class AppModel: ObservableObject {
         Task {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
-                if account.usesIsolatedAntigravity { try await agentApplications.open(account) }
+                if account.usesIsolatedAntigravity { await antigravityDesktopQuota.stop(account.id);try await agentApplications.open(account) }
                 else if account.usesSharedApplication { try await agentApplications.open(account.effectiveAgent) }
                 else if account.usesClaudeDesktop { try await claudeDesktopService.open(account) }
                 else if account.usesCodexDesktop { try await desktopService.open(account) }
@@ -450,6 +454,7 @@ final class AppModel: ObservableObject {
                 }
                 lastAction = L10n.format("Opened %@", String(describing: account.name))
                 if account.usesCodexDesktop && !quotaBusyIDs.contains(account.id) { refreshDesktopQuota(account) }
+                if account.usesAntigravityDesktopQuota && !quotaBusyIDs.contains(account.id) { refreshProviderQuota(account) }
             } catch { showError(error, title: L10n.text("Could not open account")) }
         }
     }
@@ -505,6 +510,7 @@ final class AppModel: ObservableObject {
             do {
                 if account.effectiveAgent == .claude { try await claudeDesktopService.close(account) }
                 if account.usesIsolatedAntigravity { try await agentApplications.close(account) }
+                if account.usesIsolatedAntigravity { await antigravityDesktopQuota.stop(account.id) }
                 try await browserService.close(account)
                 if account.effectiveAgent.supportsCodexQuota { try await desktopQuotaSource.closeSession(account) }
                 quotaErrors[account.id] = nil
@@ -528,6 +534,10 @@ final class AppModel: ObservableObject {
     }
 
     func refreshRunning() {
+        for account in accounts where account.usesAntigravityDesktopQuota && providerSessionIDs.contains(account.id)
+            && !launchingIDs.contains(account.id) && !quotaBusyIDs.contains(account.id) && !connectingSessionIDs.contains(account.id) {
+            if agentApplications.runningApplication(for: account) == nil && !antigravityDesktopQuota.hasBackend(account.id) { providerSessionIDs.remove(account.id) }
+        }
         let ids = Set(accounts.filter { hasRunningSession($0) }.map(\.id))
         if ids != runningIDs { runningIDs = ids }
         let windows = Set(accounts.filter { ($0.usesCodexDesktop && desktopQuotaSource.hasDesktopWindow($0)) || ($0.usesClaudeDesktop && claudeDesktopService.hasWindow($0)) || ($0.usesIsolatedAntigravity && agentApplications.hasWindow($0)) }.map(\.id))
@@ -539,7 +549,7 @@ final class AppModel: ObservableObject {
     func hasRunningSession(_ account: Account) -> Bool {
         if providerSessionIDs.contains(account.id) { return true }
         if account.usesSharedApplication { return false }
-        if account.usesIsolatedAntigravity { return agentApplications.runningApplication(for: account) != nil }
+        if account.usesIsolatedAntigravity { return agentApplications.runningApplication(for: account) != nil || antigravityDesktopQuota.hasBackend(account.id) }
         return (account.effectiveAgent == .claude && claudeDesktopService.runningApplication(for: account) != nil)
             || browserService.runningApplication(for: account) != nil
             || (account.effectiveAgent.supportsCodexQuota && desktopService.runningApplication(for: account) != nil)
@@ -716,7 +726,13 @@ final class AppModel: ObservableObject {
             }
         }
     }
-    func cancelProviderConnection(_ account: Account) { quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id);Task { await providerQuota.stop(account.id) } }
+    func cancelProviderConnection(_ account: Account) {
+        quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id)
+        Task {
+            await providerQuota.stop(account.id)
+            if account.usesAntigravityDesktopQuota { await antigravityDesktopQuota.stop(account.id) }
+        }
+    }
     private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
         guard let account = accounts.first(where: { $0.id == account.id }),
               !shuttingDown, !loadFailed, !installingProviderAgents.contains(account.effectiveAgent), !quotaBusyIDs.contains(account.id) else { return }
@@ -736,11 +752,20 @@ final class AppModel: ObservableObject {
                 }
                 let usesWeb = account.effectiveAgent == .claude && account.providerQuotaConnection?.providerSessionKind == "claudeWeb"
                 let read = { [self] in
+                    if account.usesAntigravityDesktopQuota { return try await antigravityDesktopQuota.read(account) }
                     if usesWeb { return try await claudeWeb.read(account, onIdentity: { try storeIdentity($0, "claudeWeb") }) }
                     return try await providerQuota.read(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue], onIdentity: { try storeIdentity($0, nil) })
                 }
                 let value: CodexConnection
-                if connect && account.effectiveAgent == .claude {
+                if connect && account.usesAntigravityDesktopQuota {
+                    try await antigravityDesktopQuota.connect(account)
+                    do { value = try await read() }
+                    catch ProviderQuotaError.signedOut {
+                        quotaErrors[account.id] = nil;providerSignInIDs.insert(account.id)
+                        try await antigravityDesktopQuota.signInWithBrowser(account)
+                        value = try await read()
+                    }
+                } else if connect && account.effectiveAgent == .claude {
                     do { value = try await read() }
                     catch let error as ProviderQuotaError where [.signedOut, .cliMissing, .cliOutdated].contains(error) {
                         value = try await claudeWeb.read(account, interactive: true, onSignIn: { [self] in
@@ -761,6 +786,22 @@ final class AppModel: ObservableObject {
                 quotaErrors[account.id] = error
                 if (error as? ProviderQuotaError) == .identityChanged || (error as? ProviderQuotaError) == .signedOut { providerSessionIDs.remove(account.id) }
             }
+        }
+    }
+
+    /// Observe a sign-in completed in the account's existing Desktop window.
+    /// This never opens Terminal, starts another login, or launches Desktop.
+    func refreshAntigravityQuotaIfNeeded(now: Date = Date()) {
+        guard !shuttingDown, !loadFailed else { return }
+        for account in accounts where account.usesAntigravityDesktopQuota {
+            guard agentApplications.runningApplication(for: account) != nil || antigravityDesktopQuota.hasBackend(account.id) else { antigravityRetryAt[account.id] = nil;continue }
+            guard !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id),
+                  now >= (antigravityRetryAt[account.id] ?? .distantPast),
+                  account.displayedCodexConnection == nil || quotaErrors[account.id] != nil || !providerSessionIDs.contains(account.id) else { continue }
+            // Poll only once the selected Desktop home has saved sign-in metadata.
+            guard AntigravityAccountMetadata.read(at: repository.antigravityIdentityURL(for: account.id)) != nil else { continue }
+            antigravityRetryAt[account.id] = now.addingTimeInterval(10)
+            refreshProviderQuota(account)
         }
     }
 
@@ -851,6 +892,7 @@ final class AppModel: ObservableObject {
         for task in pendingQuotaTasks { await task.value }
         for client in desktopQuotaClients.values { await client.stop() }
         await quotaService.stopAll()
+        await antigravityDesktopQuota.stopAll()
         for task in quotaCleanupTasks.values { await task.value }
         for task in Array(webCleanupTasks.values) { await task.value }
     }

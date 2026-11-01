@@ -4,6 +4,63 @@ import AISwitcherCore
 
 @MainActor
 enum AntigravitySmokeTest {
+    static func browserProbe(repository: ProfileRepository) async {
+        setbuf(stdout,nil)
+        guard CommandLine.arguments.contains("--data-dir"), repository.root.lastPathComponent.hasPrefix("ai-switcher-smoke."),
+              (try? repository.load().accounts.isEmpty) == true else { Darwin.exit(1) }
+        let service = AgentApplicationService(repository: repository)
+        let quota = AntigravityDesktopQuotaService(applications:service,repository:repository)
+        let account = Account(name: "Browser OAuth probe",agent:.antigravity,antigravityUsesPrivateHome:true)
+        var login: Task<Void, Error>?
+        var loginFailure: Error?
+        let oldPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        do {
+            // Capture the vendor's browser-open request without selecting a real
+            // account or leaving an OAuth tab open during an automated test.
+            let bin = repository.root.appendingPathComponent("browser-fixture-bin")
+            try FileManager.default.createDirectory(at:bin,withIntermediateDirectories:true)
+            let opener = bin.appendingPathComponent("open")
+            let script = """
+            #!/usr/bin/python3
+            import sys,json,pathlib,urllib.parse
+            u=urllib.parse.urlsplit(sys.argv[-1]);q=urllib.parse.parse_qs(u.query)
+            r=urllib.parse.urlsplit(q.get('redirect_uri',[''])[0])
+            pathlib.Path(__file__).parent.parent.joinpath('browser-request.json').write_text(json.dumps({'host':u.hostname,'callbackScheme':r.scheme,'callbackHost':r.hostname}))
+            """
+            try script.write(to:opener,atomically:true,encoding:.utf8)
+            try FileManager.default.setAttributes([.posixPermissions:0o700],ofItemAtPath:opener.path)
+            setenv("PATH",bin.path + ":" + oldPath,1)
+            try await quota.connect(account)
+            setenv("PATH",oldPath,1)
+            guard !service.hasWindow(account) else { throw AntigravityProfileError.launchFailed }
+            do { _ = try await quota.read(account);throw AntigravityProfileError.unsafeStorage }
+            catch ProviderQuotaError.signedOut { print("PASS: fresh browser-mode backend asks for sign-in before returning quota") }
+            print("QA: requesting official browser OAuth in a disposable private background Hub; no credentials will be submitted")
+            login = Task {
+                do { try await quota.signInWithBrowser(account);print("QA: official browser login request completed") }
+                catch { if !Task.isCancelled { loginFailure = error };throw error }
+            }
+            try await Task.sleep(nanoseconds: 30_000_000_000)
+            let requestFile = repository.root.appendingPathComponent("browser-request.json")
+            let info = (try? Data(contentsOf:requestFile)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] }
+            let callbackVerified = info?["host"] as? String == "accounts.google.com" && info?["callbackScheme"] as? String == "http" && ["127.0.0.1","localhost"].contains(info?["callbackHost"] as? String ?? "")
+            login?.cancel();_ = try? await login?.value
+            if let loginFailure { throw loginFailure }
+            guard callbackVerified else { throw AntigravityProfileError.launchFailed }
+            print("PASS: the official Google OAuth request uses a local callback for the selected private backend")
+            await quota.stopAll()
+            try await service.close(account)
+            _ = try repository.remove(account.id,from:.init())
+            print("PASS: cancelled disposable browser sign-in and removed only its fixture profile")
+            Darwin.exit(0)
+        } catch {
+            setenv("PATH",oldPath,1)
+            login?.cancel();_ = try? await login?.value
+            await quota.stopAll()
+            try? await service.close(account)
+            fputs("FAIL: \(error.localizedDescription)\n",stderr);Darwin.exit(1)
+        }
+    }
     static func run(repository: ProfileRepository) async {
         setbuf(stdout, nil)
         guard CommandLine.arguments.contains("--data-dir"), repository.root.lastPathComponent.hasPrefix("ai-switcher-smoke."),
@@ -12,6 +69,7 @@ enum AntigravitySmokeTest {
         FileManager.default.createFile(atPath: diagnosticsURL.path, contents: nil)
         let diagnostics = try? FileHandle(forWritingTo: diagnosticsURL)
         let service = AgentApplicationService(repository: repository, launchDiagnostics: diagnostics)
+        let backgroundQuota = AntigravityDesktopQuotaService(applications:service,repository:repository)
         let a = Account(name: "Antigravity Smoke A", agent: .antigravity, antigravityUsesPrivateHome: true)
         let b = Account(name: "Antigravity Smoke B", agent: .antigravity, antigravityUsesPrivateHome: true)
         let existing = NSRunningApplication.runningApplications(withBundleIdentifier: AntigravityLaunch.bundleIdentifier)
@@ -37,13 +95,28 @@ enum AntigravitySmokeTest {
             try await verifyLanguageServerHome(parent: reopened.processIdentifier, home: repository.antigravityHomeURL(for: a.id))
             guard try Data(contentsOf: marker) == Data("A".utf8), service.hasWindow(b) else { throw AntigravityProfileError.launchFailed }
             print("PASS: focus reuses A; closing/reopening A preserves storage and leaves B running")
-            let quota = ProviderQuotaService(repository: repository)
-            for account in [a,b] {
-                do { _ = try await quota.read(account, override: nil);throw AntigravityProfileError.unsafeStorage }
+            try await service.close(a)
+            // Saved display metadata with no credentials makes Connect choose
+            // background launch. Never use a real account for lifecycle tests.
+            try Data(#"{"auth_method":"consumer","id_token_email":"fixture@example.test","token":null}"#.utf8).write(to: repository.antigravityIdentityURL(for: a.id))
+            try await backgroundQuota.connect(a)
+            guard backgroundQuota.hasBackend(a.id), service.runningApplication(for:a) == nil else { throw AntigravityProfileError.launchFailed }
+            await backgroundQuota.stopAll()
+            _ = try await service.open(a)
+            guard service.hasWindow(a), !second.isTerminated else { throw AntigravityProfileError.launchFailed }
+            print("PASS: quota-only starts a private native backend without CLI or a window; Desktop reopens afterward and leaves B running")
+            var cliAccount = a;cliAccount.antigravitySignInMethod = .cli
+            let cli = ProviderQuotaService(repository:repository)
+            if (try? cli.executable(.antigravity,override:nil)) != nil {
+                do { _ = try await cli.read(cliAccount,override:nil);throw AntigravityProfileError.unsafeStorage }
                 catch ProviderQuotaError.signedOut { }
+                let script = try await cli.prepareSignInScript(cliAccount,override:nil)
+                let text = try String(contentsOf:script,encoding:.utf8)
+                guard text.contains("sandbox-exec"),text.contains("deny process-exec"),text.contains(repository.antigravityHomeURL(for:a.id).path) else { throw AntigravityProfileError.unsafeStorage }
+                print("PASS: official CLI reports signed out in its private home and its login launcher blocks the Keychain helper before it can show a dialog")
             }
-            print("PASS: installed official CLI reports signed out for both fresh private homes; does not use shared login")
         } catch { failure = error }
+        await backgroundQuota.stopAll()
         for account in [a,b] {
             do { try await service.close(account);_ = try repository.remove(account.id, from: .init()) }
             catch { failure = failure ?? error }

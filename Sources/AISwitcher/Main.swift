@@ -89,7 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.rebuildStatusMenu()
         }
 
-        if arguments.contains("--antigravity-smoke-test") {
+        if arguments.contains("--antigravity-browser-probe") {
+            Task { await AntigravitySmokeTest.browserProbe(repository: model.repository) }
+        } else if arguments.contains("--antigravity-smoke-test") {
             Task { await AntigravitySmokeTest.run(repository: model.repository) }
         } else if arguments.contains("--claude-smoke-test") {
             Task { await claudeSmokeTest(root: root) }

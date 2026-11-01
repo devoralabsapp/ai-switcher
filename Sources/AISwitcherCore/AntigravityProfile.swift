@@ -1,18 +1,34 @@
 import Foundation
 import Darwin
 
+public enum AntigravitySignInMethod: String, Codable, CaseIterable, Identifiable, Sendable {
+    case browser, cli
+    public var id: String { rawValue }
+    public var title: String { self == .browser ? L10n.text("Sign in with browser") : L10n.text("Sign in with Antigravity CLI") }
+}
+
 /// Antigravity stores authentication outside Electron userData, under HOME/.gemini.
 /// Both the Desktop language server and the official CLI must use the same private home.
 public enum AntigravityLaunch {
     public static let bundleIdentifier = "com.google.antigravity"
-    public static let isolationArgument = "--ai-switcher-private-keychain=v1"
-    public static let quotaSessionKind = "antigravityPrivateKeychainV1"
+    public static let isolationArgument = "--ai-switcher-private-keychain=v2"
+    public static let quotaSessionKind = "antigravityPrivateKeychainV2"
+    public static let desktopQuotaSessionKind = "antigravityDesktopV1"
     public static let sandboxExecutable = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-    /// Restrict only these child processes, never the user's Keychain or system settings.
-    /// The vendor token store falls back to private HOME when Keychain is unavailable.
-    public static let sandboxProfile = "(version 1)(allow default)(deny mach-lookup (global-name \"com.apple.securityd\") (global-name \"com.apple.securityd.xpc\") (global-name \"com.apple.securityd.system\") (global-name \"com.apple.SecurityServer\"))"
+    /// The vendor's go-keyring adapter uses /usr/bin/security. Deny that helper
+    /// before it starts so token storage uses private files without an OS dialog.
+    /// Keep Cocoa Keychain access intact for Chromium certificate verification.
+    public static let sandboxProfile = "(version 1)(allow default)(deny process-exec (literal \"/usr/bin/security\"))"
     public static func isolatedArguments(executable: URL, arguments: [String]) -> [String] {
         ["-p", sandboxProfile, executable.path] + arguments
+    }
+    public static func desktopIsolatedArguments(application: URL, executable: URL, arguments: [String]) -> [String] {
+        let helpers = application.appendingPathComponent("Contents/Frameworks").path.replacingOccurrences(of:"\\",with:"\\\\").replacingOccurrences(of:"\"",with:"\\\"")
+        // Chromium helpers must enter the vendor's own seatbelt policy. A second
+        // inherited policy prevents that initialization. Only the app's bundled
+        // helpers leave our extra policy; the auth server and CLI stay restricted.
+        let profile = sandboxProfile + "(allow process-exec (with no-sandbox) (subpath \"\(helpers)\"))"
+        return ["-p",profile,executable.path] + arguments
     }
     public static func arguments(userData: URL) -> [String] { ["--user-data-dir=\(userData.path)", isolationArgument] }
     public static func ownsProcess(arguments: [String], userData: URL) -> Bool {
