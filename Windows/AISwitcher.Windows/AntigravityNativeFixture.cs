@@ -107,7 +107,8 @@ internal static partial class PreviewRunner {
                     File.WriteAllText(Path.Combine(output,"antigravity-live-fixture-handles.txt"),(await text)+"\n"+(await error));
                 }
                 File.WriteAllText(Path.Combine(output,"antigravity-fixture-attributes.txt"),string.Join("\n",new[]{a,b,c}.Select(account=>account.Name+": "+(Directory.Exists(repo.ProfilePath(account))?File.GetAttributes(repo.ProfilePath(account)).ToString()+"; "+System.IO.FileSystemAclExtensions.GetAccessControl(new DirectoryInfo(repo.ProfilePath(account))).GetSecurityDescriptorSddlForm(System.Security.AccessControl.AccessControlSections.Access|System.Security.AccessControl.AccessControlSections.Owner|System.Security.AccessControl.AccessControlSections.Group):"removed"))));
-                if(Directory.Exists(repo.ProfilePath(a)))File.WriteAllText(Path.Combine(output,"antigravity-fixture-paths.txt"),string.Join("\n",Directory.EnumerateFileSystemEntries(repo.ProfilePath(a),"*",new EnumerationOptions{RecurseSubdirectories=true,AttributesToSkip=FileAttributes.ReparsePoint,IgnoreInaccessible=false}).Take(5000).Select(path=>Path.GetRelativePath(repo.ProfilePath(a),path)+": "+File.GetAttributes(path))));
+                IEnumerable<string> Paths(string directory){foreach(var path in Directory.EnumerateFileSystemEntries(directory)){var attributes=File.GetAttributes(path);yield return Path.GetRelativePath(repo.ProfilePath(a),path)+": "+attributes;if(attributes.HasFlag(FileAttributes.Directory)&&!attributes.HasFlag(FileAttributes.ReparsePoint))foreach(var nested in Paths(path))yield return nested;}}
+                if(Directory.Exists(repo.ProfilePath(a)))File.WriteAllText(Path.Combine(output,"antigravity-fixture-paths.txt"),string.Join("\n",Paths(repo.ProfilePath(a)).Take(5000)));
                 if(primary==null)throw cleanup;
             }
         }
