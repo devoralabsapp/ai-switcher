@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -18,7 +20,7 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         public Process Process=process;public string Csrf=csrf;public StringBuilder Startup=new();public bool PrivateStore;
         public int? Port {get{lock(Startup){var matches=Regex.Matches(Startup.ToString(),@"listening on random port at (\d+) for HTTP\b");return matches.Count>0?int.Parse(matches[^1].Groups[1].Value):null;}}}
     }
-    sealed record Endpoint(int Root,long RootCreated,int Pid,long Created,int Port,string Csrf,string Executable);
+    sealed record Endpoint(int Root,long RootCreated,int Pid,long Created,int Port,string Csrf,string Executable,bool Tls=false);
     readonly Dictionary<Guid,Background> backgrounds=[];
     internal Action<string>? FixtureDiagnostic { get; set; }
     readonly Dictionary<Guid,Endpoint> endpoints=[];
@@ -56,13 +58,26 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         finally{process.Dispose();}
     }
     public async Task StopAllAsync(){foreach(var id in backgrounds.Keys.ToArray())await StopAsync(new Account{Id=id});}
-    static HttpClient Client(TimeSpan timeout)=>new(new SocketsHttpHandler{UseProxy=false,AllowAutoRedirect=false,UseCookies=false,Credentials=null}){Timeout=timeout};
+    readonly ConcurrentDictionary<(int Pid,long Created,int Port),string> certificatePins=new();
+    HttpClient Client(Endpoint endpoint,TimeSpan timeout){
+        var handler=new SocketsHttpHandler{UseProxy=false,AllowAutoRedirect=false,UseCookies=false,Credentials=null,ConnectTimeout=TimeSpan.FromSeconds(3)};
+        if(endpoint.Tls)handler.SslOptions.RemoteCertificateValidationCallback=(_,certificate,_,_)=>{
+            // Hub supplies a self-signed localhost certificate. Trust only this
+            // verified native PID + start time + listening port, then pin its cert.
+            // This handler is used solely for a fixed 127.0.0.1 URI; no redirects,
+            // proxies, remote origins or caller-selected endpoints are accepted.
+            if(certificate==null||!Valid(endpoint))return false;
+            var hash=certificate.GetCertHashString(HashAlgorithmName.SHA256);
+            return certificatePins.GetOrAdd((endpoint.Pid,endpoint.Created,endpoint.Port),hash)==hash;
+        };
+        return new HttpClient(handler){Timeout=timeout};
+    }
     static bool SameProcess(int id,long created,string? executable=null){try{using var p=Process.GetProcessById(id);return !p.HasExited&&p.StartTime.ToUniversalTime().ToFileTimeUtc()==created&&(executable==null||NativePlatform.SamePath(p.MainModule!.FileName!,executable));}catch(ArgumentException){return false;}catch(System.ComponentModel.Win32Exception){return false;}}
     bool Valid(Endpoint endpoint)=>SameProcess(endpoint.Root,endpoint.RootCreated)&&SameProcess(endpoint.Pid,endpoint.Created,endpoint.Executable)&&ListeningPorts(endpoint.Pid).Contains(endpoint.Port);
-    async Task<JsonElement> Send(Endpoint endpoint,string method,CancellationToken ct){
+    async Task<JsonElement> Send(Endpoint endpoint,string method,CancellationToken ct,bool discovery=false){
         if(method is not ("GetUserStatus" or "RetrieveUserQuotaSummary" or "Login")||!Valid(endpoint))throw new AppError(ProviderQuota.Changed);
-        using var client=Client(TimeSpan.FromSeconds(method=="Login"?600:20));
-        using var request=new HttpRequestMessage(HttpMethod.Post,$"http://127.0.0.1:{endpoint.Port}/exa.language_server_pb.LanguageServerService/{method}");request.Content=new StringContent("{}",Encoding.UTF8,"application/json");request.Headers.Add("Connect-Protocol-Version","1");request.Headers.Add("X-Codeium-Csrf-Token",endpoint.Csrf);
+        using var client=Client(endpoint,TimeSpan.FromSeconds(discovery?5:method=="Login"?600:20));
+        using var request=new HttpRequestMessage(HttpMethod.Post,$"{(endpoint.Tls?"https":"http")}://127.0.0.1:{endpoint.Port}/exa.language_server_pb.LanguageServerService/{method}");request.Content=new StringContent("{}",Encoding.UTF8,"application/json");request.Headers.Add("Connect-Protocol-Version","1");request.Headers.Add("X-Codeium-Csrf-Token",endpoint.Csrf);
         using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,ct);using var stream=await response.Content.ReadAsStreamAsync(ct);using var memory=new MemoryStream();var buffer=new byte[8192];int size;
         while((size=await stream.ReadAsync(buffer,ct))>0){if(memory.Length+size>1048576)throw new AppError(ProviderQuota.Invalid);memory.Write(buffer,0,size);}
         if(!Valid(endpoint))throw new AppError(ProviderQuota.Changed);
@@ -86,8 +101,11 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
                     if(attempt==0||attempt==59){FixtureDiagnostic?.Invoke("Desktop native candidates: "+children.Length+"; session runtimes: "+owned.Count);foreach(var child in platform.Processes.Where(p=>p.ParentId==root.Id))FixtureDiagnostic?.Invoke("Direct child executable: "+Path.GetFileName(child.Executable));foreach(var child in children)FixtureDiagnostic?.Invoke("Candidate csrf flag: "+(Argument(child.Arguments,"--csrf_token")!=null)+"; listener count: "+ListeningPorts(child.Id).Count);}
                     if(children.Length==1){var child=children[0];var csrf=Argument(child.Arguments,"--csrf_token");if(csrf is {Length:>0 and <=256}&&!csrf.Any(char.IsControl)){
                         foreach(var listening in ListeningPorts(child.Id)){
-                            var value=new Endpoint(root.Id,root.Created,child.Id,child.Created,listening,csrf,native);
-                            try{await Send(value,"GetUserStatus",ct);candidate=value;break;}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){candidate=value;break;}catch(Exception error)when(error is HttpRequestException or TaskCanceledException or JsonException||error is AppError){ct.ThrowIfCancellationRequested();if(attempt==0||attempt==59)FixtureDiagnostic?.Invoke("Native status probe: "+(error is AppError appError?appError.Key:error.GetType().Name));}
+                            foreach(var tls in new[]{false,true}){
+                                var value=new Endpoint(root.Id,root.Created,child.Id,child.Created,listening,csrf,native,tls);
+                                try{await Send(value,"GetUserStatus",ct,true);candidate=value;break;}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){candidate=value;break;}catch(Exception error)when(error is HttpRequestException or TaskCanceledException or JsonException||error is AppError){ct.ThrowIfCancellationRequested();if(attempt==0||attempt==59)FixtureDiagnostic?.Invoke("Native status probe "+(tls?"TLS":"HTTP")+": "+(error is AppError appError?appError.Key:error.GetType().Name));}
+                            }
+                            if(candidate!=null)break;
                         }
                     }}
                 }else if(!IsActive(account))throw new AppError(ProviderQuota.Unavailable);
