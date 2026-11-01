@@ -47,7 +47,7 @@ try {
         Invoke-WebRequest 'https://live.sysinternals.com/handle64.exe' -OutFile $handle
         $handleSignature=Get-AuthenticodeSignature $handle
         if($handleSignature.Status -ne 'Valid' -or $handleSignature.SignerCertificate.Subject -notmatch 'Microsoft'){throw 'Handle diagnostic signature could not be verified'}
-        & $handle -accepteula -nobanner $root | Set-Content (Join-Path $Output 'antigravity-fixture-open-handles.txt')
+        & $handle -accepteula -nobanner -a ([IO.Path]::GetFileName($root)) | Set-Content (Join-Path $Output 'antigravity-fixture-open-handles.txt')
         if(Test-Path (Join-Path $Output 'antigravity-smoke-error.txt')){Get-Content (Join-Path $Output 'antigravity-smoke-error.txt')};throw 'Native Antigravity smoke failed'
     }
     Get-Content (Join-Path $Output 'antigravity-native-result.txt')

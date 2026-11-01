@@ -102,11 +102,12 @@ internal static partial class PreviewRunner {
                 // This signed diagnostic is supplied only by the disposable CI
                 // fixture. Capture handle names while the manager is still alive.
                 if(Environment.GetEnvironmentVariable("AISW_FIXTURE_HANDLE") is {} handle&&File.Exists(handle)){
-                    var start=new ProcessStartInfo(handle){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};foreach(var value in new[]{"-accepteula","-nobanner",root})start.ArgumentList.Add(value);
+                    var start=new ProcessStartInfo(handle){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};foreach(var value in new[]{"-accepteula","-nobanner","-a",a.Id.ToString("D")})start.ArgumentList.Add(value);
                     using var diagnostic=Process.Start(start)!;var text=diagnostic.StandardOutput.ReadToEndAsync();var error=diagnostic.StandardError.ReadToEndAsync();await diagnostic.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));
                     File.WriteAllText(Path.Combine(output,"antigravity-live-fixture-handles.txt"),(await text)+"\n"+(await error));
                 }
                 File.WriteAllText(Path.Combine(output,"antigravity-fixture-attributes.txt"),string.Join("\n",new[]{a,b,c}.Select(account=>account.Name+": "+(Directory.Exists(repo.ProfilePath(account))?File.GetAttributes(repo.ProfilePath(account)).ToString()+"; "+System.IO.FileSystemAclExtensions.GetAccessControl(new DirectoryInfo(repo.ProfilePath(account))).GetSecurityDescriptorSddlForm(System.Security.AccessControl.AccessControlSections.Access|System.Security.AccessControl.AccessControlSections.Owner|System.Security.AccessControl.AccessControlSections.Group):"removed"))));
+                if(Directory.Exists(repo.ProfilePath(a)))File.WriteAllText(Path.Combine(output,"antigravity-fixture-paths.txt"),string.Join("\n",Directory.EnumerateFileSystemEntries(repo.ProfilePath(a),"*",new EnumerationOptions{RecurseSubdirectories=true,AttributesToSkip=FileAttributes.ReparsePoint,IgnoreInaccessible=false}).Take(5000).Select(path=>Path.GetRelativePath(repo.ProfilePath(a),path)+": "+File.GetAttributes(path))));
                 if(primary==null)throw cleanup;
             }
         }
