@@ -97,7 +97,18 @@ internal static partial class PreviewRunner {
             try{await engine.ShutdownAsync();}catch(Exception error){cleanup=error;}
             foreach(var account in new[]{a,b,c}){try{await engine.Platform.ForceStopAsync(account);if(repo.Load().Accounts.Any(x=>x.Id==account.Id))repo.Remove(account,repo.Load());}catch(Exception error){cleanup??=new InvalidOperationException("Cleanup "+account.Name,error);}}
             try{foreach(var target in createdTargets){CheckCredential(target);Require(CredDelete(target,1,0),"Could not delete fixture credential");}}catch(Exception error){cleanup??=error;}finally{Marshal.FreeHGlobal(blob);}
-            if(cleanup!=null){File.WriteAllText(Path.Combine(output,"antigravity-cleanup-error.txt"),cleanup.ToString());if(primary==null)throw cleanup;}
+            if(cleanup!=null){
+                File.WriteAllText(Path.Combine(output,"antigravity-cleanup-error.txt"),cleanup.ToString());
+                // This signed diagnostic is supplied only by the disposable CI
+                // fixture. Capture handle names while the manager is still alive.
+                if(Environment.GetEnvironmentVariable("AISW_FIXTURE_HANDLE") is {} handle&&File.Exists(handle)){
+                    var start=new ProcessStartInfo(handle){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};foreach(var value in new[]{"-accepteula","-nobanner",root})start.ArgumentList.Add(value);
+                    using var diagnostic=Process.Start(start)!;var text=diagnostic.StandardOutput.ReadToEndAsync();var error=diagnostic.StandardError.ReadToEndAsync();await diagnostic.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));
+                    File.WriteAllText(Path.Combine(output,"antigravity-live-fixture-handles.txt"),(await text)+"\n"+(await error));
+                }
+                File.WriteAllText(Path.Combine(output,"antigravity-fixture-attributes.txt"),string.Join("\n",new[]{a,b,c}.Select(account=>account.Name+": "+(Directory.Exists(repo.ProfilePath(account))?File.GetAttributes(repo.ProfilePath(account)).ToString():"removed"))));
+                if(primary==null)throw cleanup;
+            }
         }
             File.WriteAllText(Path.Combine(output,"antigravity-native-result.txt"),"PASS: official Windows Antigravity Desktop and CLI; private vendor file storage selected; two independent fresh native backgrounds and Desktop windows stay signed out with a global synthetic Credential Manager canary present; CLI /usage uses private storage without model input; separate native HTTP/CSRF endpoints; close/reopen and manager restart preserve ownership and data; account directories can be removed after cancelled browser OAuth; closing A preserves B; global canary unchanged; explicit Google browser Login uses a localhost callback and is cancelled before authentication. Live Google sign-in and live subscription quotas are not exercised.\n");
         async Task ExpectSignedOut(Account account,AppEngine? manager=null){try{await (manager??engine).Antigravity.ReadAsync(account,ct);}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){return;}throw new InvalidOperationException("Fresh private profile was not signed out");}

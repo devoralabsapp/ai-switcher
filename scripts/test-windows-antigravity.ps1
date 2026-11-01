@@ -26,6 +26,11 @@ try {
     & curl.exe --fail --location --retry 2 --output $cli $manifest.url
     if($LASTEXITCODE -ne 0){throw 'Official Antigravity CLI download failed'}
     if((Get-FileHash $cli -Algorithm SHA512).Hash.ToLowerInvariant() -ne $manifest.sha512.ToLowerInvariant()){throw 'Official CLI checksum mismatch'}
+    $handle=Join-Path $scope 'handle64.exe'
+    Invoke-WebRequest 'https://live.sysinternals.com/handle64.exe' -OutFile $handle
+    $handleSignature=Get-AuthenticodeSignature $handle
+    if($handleSignature.Status -ne 'Valid' -or $handleSignature.SignerCertificate.Subject -notmatch 'Microsoft'){throw 'Handle diagnostic signature could not be verified'}
+    $env:AISW_FIXTURE_HANDLE=$handle
     "Hub: $($desktop.VersionInfo.ProductVersion); CLI: $($manifest.version); synthetic Credential Manager fixture only" | Set-Content (Join-Path $Output 'antigravity-vendor-versions.txt')
     $process=Start-Process $App -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$Output`"",'--antigravity-smoke-test','--antigravity-executable',"`"$($desktop.FullName)`"",'--antigravity-cli-executable',"`"$cli`"") -PassThru
     $deadline=[DateTime]::UtcNow.AddMinutes(7)
