@@ -17,6 +17,7 @@ enum AntigravitySmokeTest {
         let existing = NSRunningApplication.runningApplications(withBundleIdentifier: AntigravityLaunch.bundleIdentifier)
         var failure: Error?
         do {
+            try verifyKeychainIsolation()
             let first = try await service.open(a), second = try await service.open(b)
             guard first.processIdentifier != second.processIdentifier,
                   !existing.contains(where: { $0.processIdentifier == first.processIdentifier || $0.processIdentifier == second.processIdentifier }) else { throw AntigravityProfileError.launchFailed }
@@ -51,6 +52,29 @@ enum AntigravitySmokeTest {
         if let failure { fputs("FAIL: \(failure.localizedDescription)\n", stderr);Darwin.exit(1) }
         print("PASS: fixture profiles cleaned up; existing Antigravity applications preserved")
         Darwin.exit(0)
+    }
+
+    /// A temporary, unrelated canary proves the process sandbox blocks an
+    /// existing readable Keychain entry. Never touch the vendor's real entries.
+    private static func verifyKeychainIsolation() throws {
+        let service = "ai-switcher-smoke-" + UUID().uuidString, account = "disposable-fixture"
+        func run(_ executable: URL, _ arguments: [String]) throws -> (Int32, Data) {
+            let process = Process(), output = Pipe()
+            process.executableURL = executable;process.arguments = arguments
+            process.standardOutput = output;process.standardError = FileHandle.nullDevice
+            try process.run();let data = output.fileHandleForReading.readDataToEndOfFile();process.waitUntilExit()
+            return (process.terminationStatus, data)
+        }
+        let security = URL(fileURLWithPath: "/usr/bin/security")
+        let add = try run(security, ["add-generic-password", "-s", service, "-a", account, "-w", "synthetic-canary"])
+        guard add.0 == 0 else { throw AntigravityProfileError.unsafeStorage }
+        defer { _ = try? run(security, ["delete-generic-password", "-s", service, "-a", account]) }
+        let read = ["find-generic-password", "-s", service, "-a", account, "-w"]
+        let normal = try run(security, read)
+        guard normal.0 == 0, String(decoding: normal.1, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "synthetic-canary" else { throw AntigravityProfileError.unsafeStorage }
+        let isolated = try run(AntigravityLaunch.sandboxExecutable, AntigravityLaunch.isolatedArguments(executable: security, arguments: read))
+        guard isolated.0 != 0, !String(decoding: isolated.1, as: UTF8.self).contains("synthetic-canary") else { throw AntigravityProfileError.unsafeStorage }
+        print("PASS: an otherwise readable disposable Keychain canary is inaccessible inside the profile sandbox")
     }
 
     private static func verifyLanguageServerHome(parent: pid_t, home: URL) async throws {

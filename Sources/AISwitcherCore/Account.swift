@@ -69,7 +69,12 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var effectiveDefaultAction: AccountAction { usesCodexDesktop ? defaultAction ?? .openDesktop : .openDesktop }
     public var automaticallyConnects: Bool { usesCodexDesktop && connectOnStartup == true }
     public var displayedCodexConnection: CodexConnection? {
-        effectiveAgent.supportsCodexQuota ? (effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection) : (effectiveAgent.usesProviderQuota ? providerQuotaConnection : nil)
+        if usesIsolatedAntigravity, let old = providerQuotaConnection, old.providerSessionKind != AntigravityLaunch.quotaSessionKind {
+            // Older versions could read the shared Keychain. Preserve that cache
+            // internally, but display neither its identity nor its quota here.
+            return nil
+        }
+        return effectiveAgent.supportsCodexQuota ? (effectiveLaunchMode == .desktop ? desktopCodexConnection : codexConnection) : (effectiveAgent.usesProviderQuota ? providerQuotaConnection : nil)
     }
 
     public init(id: UUID = UUID(), name: String, emailHint: String = "", browser: BrowserKind = .chrome,

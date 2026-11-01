@@ -35,6 +35,17 @@ final class AntigravityAccountMetadataTests: XCTestCase {
         XCTAssertEqual(try AntigravityAccountMetadata.consistentIdentity(before: a, after: a, emailHint: "GRAVITY@example.test"), a)
         XCTAssertNil(try AntigravityAccountMetadata.consistentIdentity(before: nil, after: nil, emailHint: "label@example.test").email)
     }
+    func testRecentCLIEmailMetadataWithoutJWTAndInvalidEmails() throws {
+        let data = Data(#"{"auth_method":"consumer","id_token_email":"recent@example.test","token":{"access_token":"must-not-export"}}"#.utf8)
+        let value = try XCTUnwrap(AntigravityAccountMetadata.identity(from: data))
+        XCTAssertEqual(value.email, "recent@example.test")
+        XCTAssertNil(value.accountId)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(value), as: UTF8.self).contains("must-not-export"))
+        for email in ["", "note", "a\nb@example.test"] {
+            let record = try JSONSerialization.data(withJSONObject: ["auth_method":"consumer", "id_token_email":email])
+            XCTAssertNil(AntigravityAccountMetadata.identity(from: record))
+        }
+    }
     @MainActor
     func testProductionReaderAttachesEmailOnlyAfterUsageAndRejectsIdentitySwitch() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ai-switcher-agy-email-" + UUID().uuidString)

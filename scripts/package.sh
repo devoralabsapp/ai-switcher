@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUTPUT="$PROJECT_ROOT/dist"
+OUTPUT="${AISWITCHER_BUILD_OUTPUT:-$PROJECT_ROOT/dist}"
 APP="$OUTPUT/AI Switcher.app"
 
 if [[ ! -x "$APP/Contents/MacOS/AISwitcher" ]]; then

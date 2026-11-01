@@ -89,7 +89,7 @@ struct AccountEditorView: View {
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                     if agent == .antigravity {
-                        Text(L10n.text(editor.account?.usesSharedApplication == true ? "This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session." : "Each new Antigravity account has its own Desktop and CLI sign-in. Sign in once in that account's window or with Connect."))
+                        Text(L10n.text(editor.account?.usesSharedApplication == true ? "This existing entry keeps the shared Antigravity sign-in. Add another account for a separate session." : "Each new Antigravity account has separate Desktop and CLI storage. Choose the same Google account in Desktop and Connect when asked to sign in."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                     }
                 }

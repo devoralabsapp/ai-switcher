@@ -6,7 +6,8 @@ cd "$PROJECT_ROOT"
 export CLANG_MODULE_CACHE_PATH="$PROJECT_ROOT/.build/module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$PROJECT_ROOT/.build/module-cache"
 export SWIFTPM_CUSTOM_CACHE_PATH="$PROJECT_ROOT/.build/cache"
-mkdir -p "$CLANG_MODULE_CACHE_PATH" "$SWIFTPM_CUSTOM_CACHE_PATH" "$PROJECT_ROOT/dist"
+OUTPUT="${AISWITCHER_BUILD_OUTPUT:-$PROJECT_ROOT/dist}"
+mkdir -p "$CLANG_MODULE_CACHE_PATH" "$SWIFTPM_CUSTOM_CACHE_PATH" "$OUTPUT"
 
 if [[ "${1:-}" == "--universal" ]]; then
     swift build -c release --arch arm64 --arch x86_64 --disable-sandbox
@@ -21,7 +22,7 @@ if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
     exit 1
 fi
 
-APP="$PROJECT_ROOT/dist/AI Switcher.app"
+APP="$OUTPUT/AI Switcher.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/AISwitcher"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"

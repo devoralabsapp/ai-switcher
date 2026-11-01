@@ -7,9 +7,11 @@ final class ProviderQuotaService {
     let repository: ProfileRepository
     private var commands: [UUID: ProviderCLICommand] = [:]
     private let antigravityIdentityURL: URL
+    private let antigravityModernIdentityURL: URL?
     init(repository: ProfileRepository, antigravityIdentityURL: URL? = nil) {
         self.repository = repository
         self.antigravityIdentityURL = antigravityIdentityURL ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/jetski-standalone-oauth-token")
+        self.antigravityModernIdentityURL = antigravityIdentityURL == nil ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/antigravity-cli/antigravity-oauth-token") : nil
     }
     /// App bundles and directories can have execute permission on macOS, but are not CLI files.
     static func isCLIExecutable(_ url: URL, agent: AIAgent) -> Bool {
@@ -67,7 +69,15 @@ final class ProviderQuotaService {
     }
     private func command(_ account: Account, executable: URL, arguments: [String], captureStandardError: Bool = false) async throws -> ProviderCLICommand {
         let command = ProviderCLICommand();commands[account.id] = command
-        do { try await command.start(executable: executable, arguments: arguments, environment: environment(account), directory: account.usesIsolatedAntigravity ? repository.antigravityHomeURL(for: account.id) : repository.root, captureStandardError: captureStandardError) }
+        do {
+            let env = try environment(account)
+            if account.usesIsolatedAntigravity {
+                guard FileManager.default.isExecutableFile(atPath: AntigravityLaunch.sandboxExecutable.path) else { throw AntigravityProfileError.unsupportedApp }
+                try await command.start(executable: AntigravityLaunch.sandboxExecutable, arguments: AntigravityLaunch.isolatedArguments(executable: executable, arguments: arguments), environment: env, directory: repository.antigravityHomeURL(for: account.id), captureStandardError: captureStandardError)
+            } else {
+                try await command.start(executable: executable, arguments: arguments, environment: env, directory: repository.root, captureStandardError: captureStandardError)
+            }
+        }
         catch { await command.stop();commands[account.id] = nil;throw error }
         return command
     }
@@ -114,14 +124,24 @@ final class ProviderQuotaService {
             let after = try await identity();guard before.matches(after) else { throw ProviderQuotaError.identityChanged }
             return try ProviderQuotaParser.parse(data, agent: .claude, identity: after)
         }
-        let identityURL = account.usesIsolatedAntigravity ? repository.antigravityIdentityURL(for: account.id) : antigravityIdentityURL
+        let modernCLIIdentityURL = account.usesIsolatedAntigravity ? repository.antigravityCLIIdentityURL(for: account.id) : antigravityModernIdentityURL
+        let legacyIdentityURL = account.usesIsolatedAntigravity ? repository.antigravityIdentityURL(for: account.id) : antigravityIdentityURL
+        func identity() throws -> CodexIdentity? {
+            let cli = modernCLIIdentityURL.flatMap { AntigravityAccountMetadata.read(at: $0) }
+            let desktop = AntigravityAccountMetadata.read(at: legacyIdentityURL)
+            if account.usesIsolatedAntigravity, let a = cli?.email, let b = desktop?.email,
+               a.caseInsensitiveCompare(b) != .orderedSame { throw ProviderQuotaError.identityChanged }
+            return cli ?? desktop
+        }
         if account.usesIsolatedAntigravity { try repository.validateAntigravityOwnership(for: account.id) }
-        let before = AntigravityAccountMetadata.read(at: identityURL)
+        let before = try identity()
         let data = try await run(account, exe: exe, arguments: ProviderCLIConfiguration.antigravityArguments, detectSignOut: true)
         if account.usesIsolatedAntigravity { try repository.validateAntigravityOwnership(for: account.id) }
-        let after = AntigravityAccountMetadata.read(at: identityURL)
+        let after = try identity()
         let identity = try AntigravityAccountMetadata.consistentIdentity(before: before, after: after, emailHint: account.emailHint)
-        return try ProviderQuotaParser.parse(data, agent: .antigravity, identity: identity)
+        let value = try ProviderQuotaParser.parse(data, agent: .antigravity, identity: identity)
+        return CodexConnection(identity: value.identity, quota: value.quota, identityFetchedAt: value.identityFetchedAt,
+                               providerSessionKind: account.usesIsolatedAntigravity ? AntigravityLaunch.quotaSessionKind : nil)
     }
     func prepareSignInScript(_ account: Account, override: String?) async throws -> URL {
         let exe = try await verifiedExecutable(account, override: override)
@@ -136,7 +156,8 @@ final class ProviderQuotaService {
             let keys = ["HOME", "CFFIXED_USER_HOME", "SHELL", "ZDOTDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "PATH", "LANG", "LC_ALL", "TERM", "TMPDIR", "USER", "LOGNAME"]
             let assignments = keys.compactMap { key in env[key].map { quote(key + "=" + $0) } }.joined(separator: " ")
             content += "cd " + quote(repository.antigravityHomeURL(for: account.id).path) + " || exit 1\n"
-            content += "exec /usr/bin/env -i " + assignments + " " + quote(exe.path) + "\n"
+            let launch = [AntigravityLaunch.sandboxExecutable.path] + AntigravityLaunch.isolatedArguments(executable: exe, arguments: [])
+            content += "exec /usr/bin/env -i " + assignments + " " + launch.map(quote).joined(separator: " ") + "\n"
         }
         else {
             content += "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN GEMINI_API_KEY GOOGLE_API_KEY GOOGLE_APPLICATION_CREDENTIALS AGY_ADC_AUTH\n"

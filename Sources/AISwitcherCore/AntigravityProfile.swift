@@ -5,13 +5,22 @@ import Darwin
 /// Both the Desktop language server and the official CLI must use the same private home.
 public enum AntigravityLaunch {
     public static let bundleIdentifier = "com.google.antigravity"
-    public static func arguments(userData: URL) -> [String] { ["--user-data-dir=\(userData.path)"] }
+    public static let isolationArgument = "--ai-switcher-private-keychain=v1"
+    public static let quotaSessionKind = "antigravityPrivateKeychainV1"
+    public static let sandboxExecutable = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+    /// Restrict only these child processes, never the user's Keychain or system settings.
+    /// The vendor token store falls back to private HOME when Keychain is unavailable.
+    public static let sandboxProfile = "(version 1)(allow default)(deny mach-lookup (global-name \"com.apple.securityd\") (global-name \"com.apple.securityd.xpc\") (global-name \"com.apple.securityd.system\") (global-name \"com.apple.SecurityServer\"))"
+    public static func isolatedArguments(executable: URL, arguments: [String]) -> [String] {
+        ["-p", sandboxProfile, executable.path] + arguments
+    }
+    public static func arguments(userData: URL) -> [String] { ["--user-data-dir=\(userData.path)", isolationArgument] }
     public static func ownsProcess(arguments: [String], userData: URL) -> Bool {
         BrowserLaunch.ownsProcess(arguments: arguments, profileURL: userData)
     }
     public static func environment(base: [String: String], home: URL) -> [String: String] {
         var env = base.filter { key, _ in
-            !["AGY_", "ANTIGRAVITY_", "GOOGLE_", "GEMINI_", "CLAUDE_", "ANTHROPIC_", "CODEX_", "ELECTRON_", "NODE_", "XDG_"].contains(where: key.hasPrefix)
+            !["AGY_", "ANTIGRAVITY_", "JETSKI_", "CODEIUM_", "GOOGLE_", "GEMINI_", "CLAUDE_", "ANTHROPIC_", "CODEX_", "ELECTRON_", "NODE_", "XDG_"].contains(where: key.hasPrefix)
                 && !["OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEIUM_API_KEY", "CODEIUM_LANGUAGE_SERVER_BIN", "JETSKI_LS_PORT", "DEV_URL", "SSLKEYLOGFILE", "sslkeylogfile", "BASH_ENV", "ENV", "ZDOTDIR"].contains(key)
         }
         env["HOME"] = home.path
@@ -28,12 +37,13 @@ public enum AntigravityLaunch {
 }
 
 public enum AntigravityProfileError: LocalizedError {
-    case unsafeStorage, unsupportedApp, launchFailed
+    case unsafeStorage, unsupportedApp, launchFailed, sessionNeedsReopen
     public var errorDescription: String? {
         switch self {
         case .unsafeStorage: return L10n.text("The Antigravity profile storage could not be verified. Its data has been preserved.")
         case .unsupportedApp: return L10n.text("This Antigravity version could not be verified for separate profiles. Update Antigravity and try again.")
         case .launchFailed: return L10n.text("Could not open the separate Antigravity session. Try again or update Antigravity.")
+        case .sessionNeedsReopen: return L10n.text("Close this Antigravity account session once, then open it again to apply separate sign-in storage. Your data is kept.")
         }
     }
 }
@@ -43,6 +53,8 @@ extension ProfileRepository {
     public func antigravityUserDataURL(for id: UUID) -> URL { antigravityProfileURL(for: id).appendingPathComponent("UserData") }
     public func antigravityHomeURL(for id: UUID) -> URL { antigravityProfileURL(for: id).appendingPathComponent("Home") }
     public func antigravityIdentityURL(for id: UUID) -> URL { antigravityHomeURL(for: id).appendingPathComponent(".gemini/jetski-standalone-oauth-token") }
+    public func antigravityCLIIdentityURL(for id: UUID) -> URL { antigravityHomeURL(for: id).appendingPathComponent(".gemini/antigravity-cli/antigravity-oauth-token") }
+
 
     private struct AntigravityOwner: Codable { let root: String; let id: UUID }
     private func antigravityDirectories(_ id: UUID) -> [URL] {
@@ -69,9 +81,12 @@ extension ProfileRepository {
         guard try fm.attributesOfItem(atPath: marker.path)[.type] as? FileAttributeType == .typeRegular,
               let owner = try? JSONDecoder().decode(AntigravityOwner.self, from: Data(contentsOf: marker)),
               owner.root == root.path, owner.id == id else { throw AntigravityProfileError.unsafeStorage }
-        let identity = antigravityIdentityURL(for: id)
-        if let values = try? fm.attributesOfItem(atPath: identity.path), values[.type] as? FileAttributeType != .typeRegular {
-            throw AntigravityProfileError.unsafeStorage
+        for identity in [antigravityIdentityURL(for: id), antigravityCLIIdentityURL(for: id)] {
+            if let values = try? fm.attributesOfItem(atPath: identity.path), values[.type] as? FileAttributeType != .typeRegular {
+                throw AntigravityProfileError.unsafeStorage
+            }
+            let parent = identity.deletingLastPathComponent()
+            if fm.fileExists(atPath: parent.path) { try validateAntigravityDirectory(parent) }
         }
     }
     public func prepareAntigravityProfile(for id: UUID) throws {

@@ -35,13 +35,18 @@ final class AgentApplicationService {
         guard account.usesIsolatedAntigravity else { throw AntigravityProfileError.launchFailed }
         guard let app = applicationURL(for: .antigravity), let executable = Bundle(url: app)?.executableURL else { throw AgentLaunchError.notInstalled(AIAgent.antigravity.name) }
         guard let archive = try? Data(contentsOf: app.appendingPathComponent("Contents/Resources/app.asar"), options: .mappedIfSafe),
-              ["requestSingleInstanceLock", "homedir", "getAppDataDir", "shellEnvSync"].allSatisfy({ archive.range(of: Data($0.utf8)) != nil }) else { throw AntigravityProfileError.unsupportedApp }
+              ["requestSingleInstanceLock", "homedir", "getAppDataDir", "shellEnvSync"].allSatisfy({ archive.range(of: Data($0.utf8)) != nil }),
+              let server = try? Data(contentsOf: app.appendingPathComponent("Contents/Resources/bin/language_server"), options: .mappedIfSafe),
+              server.range(of: Data("falling back to file".utf8)) != nil,
+              FileManager.default.isExecutableFile(atPath: AntigravityLaunch.sandboxExecutable.path) else { throw AntigravityProfileError.unsupportedApp }
         try repository.prepareAntigravityProfile(for: account.id)
-        if let running = runningApplication(for: account), hasWindow(account),
-           running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) { return running }
+        if let running = runningApplication(for: account) {
+            guard ManagedApplications.arguments(for: running.processIdentifier).contains(AntigravityLaunch.isolationArgument) else { throw AntigravityProfileError.sessionNeedsReopen }
+            if hasWindow(account), running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) { return running }
+        }
         let process = Process()
-        process.executableURL = executable
-        process.arguments = AntigravityLaunch.arguments(userData: repository.antigravityUserDataURL(for: account.id))
+        process.executableURL = AntigravityLaunch.sandboxExecutable
+        process.arguments = AntigravityLaunch.isolatedArguments(executable: executable, arguments: AntigravityLaunch.arguments(userData: repository.antigravityUserDataURL(for: account.id)))
         process.environment = AntigravityLaunch.environment(base: ProcessInfo.processInfo.environment, home: repository.antigravityHomeURL(for: account.id))
         process.currentDirectoryURL = repository.antigravityHomeURL(for: account.id)
         process.standardInput = FileHandle.nullDevice;process.standardOutput = launchDiagnostics ?? FileHandle.nullDevice;process.standardError = launchDiagnostics ?? FileHandle.nullDevice

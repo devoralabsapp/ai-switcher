@@ -580,3 +580,9 @@
 "Each new Antigravity account has its own Desktop and CLI sign-in. Sign in once in that account's window or with Connect." = "Mỗi tài khoản Antigravity mới có đăng nhập Desktop và CLI riêng. Đăng nhập một lần trong cửa sổ tài khoản đó hoặc bằng nút Kết nối.";
 
 "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles keep Desktop and CLI sign-in in the same private home; existing shared entries keep their login. Connect reads quota without opening Desktop or sending a model prompt." = "ChatGPT đọc hạn mức Codex từ phiên Desktop. Claude dùng đăng nhập xem hạn mức riêng từng hồ sơ. Hồ sơ Antigravity mới dùng chung một thư mục riêng cho đăng nhập Desktop và CLI; mục cũ giữ nguyên đăng nhập chung. Kết nối đọc hạn mức không mở Desktop và không gửi câu hỏi AI.";
+
+"Close this Antigravity account session once, then open it again to apply separate sign-in storage. Your data is kept." = "Hãy đóng phiên tài khoản Antigravity này một lần rồi mở lại để áp dụng kho đăng nhập riêng. Dữ liệu được giữ nguyên.";
+
+"Connect again to refresh this profile's isolated quota." = "Kết nối lại để đọc hạn mức riêng của hồ sơ này.";
+
+"Each new Antigravity account has separate Desktop and CLI storage. Choose the same Google account in Desktop and Connect when asked to sign in." = "Mỗi tài khoản Antigravity mới có kho Desktop và CLI riêng. Chọn cùng một tài khoản Google khi Desktop hoặc nút Kết nối yêu cầu đăng nhập.";
