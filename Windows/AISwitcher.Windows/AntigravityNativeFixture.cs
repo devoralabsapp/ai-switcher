@@ -72,7 +72,7 @@ internal static partial class PreviewRunner {
             }
             await engine.Antigravity.StopAsync(a);CheckCanary();
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
-            Phase("Official CLI usage");
+            Phase("Official CLI usage");Require(GetConsoleCP()==0,"GUI manager retained a controlling console");
             var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.Environment["CI"]="true";info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
             using(var command=Process.Start(info)!){
                 command.StandardInput.Close();var captured=new StringBuilder();
@@ -102,6 +102,7 @@ internal static partial class PreviewRunner {
         void CheckCredential(string target){Require(CredRead(target,1,0,out var pointer),"Fixture credential disappeared");try{var value=Marshal.PtrToStructure<FixtureCredential>(pointer);var bytes=new byte[value.BlobSize];Marshal.Copy(value.Blob,bytes,0,bytes.Length);Require(bytes.SequenceEqual(synthetic),"Private session changed shared Credential Manager storage");}finally{CredFree(pointer);}}
     }
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct FixtureCredential {public uint Flags,Type;public string? TargetName,Comment;public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;public uint BlobSize;public IntPtr Blob;public uint Persist,AttributeCount;public IntPtr Attributes;public string? TargetAlias,UserName;}
+    [DllImport("kernel32.dll")]static extern uint GetConsoleCP();
     [DllImport("advapi32.dll",EntryPoint="CredReadW",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CredRead(string target,uint type,uint flags,out IntPtr credential);
     [DllImport("advapi32.dll",EntryPoint="CredWriteW",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CredWrite(ref FixtureCredential credential,uint flags);
     [DllImport("advapi32.dll",EntryPoint="CredDeleteW",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CredDelete(string target,uint type,uint flags);

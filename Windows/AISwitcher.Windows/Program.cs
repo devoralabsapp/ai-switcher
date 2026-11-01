@@ -21,6 +21,10 @@ internal sealed class Program:Application {
     string traySignature="";
     FileStream? lease;SilentTrayIcon? tray;DispatcherTimer? timer;AppEngine? engine;MainWindow? manager;Guid? notificationAccount;
     [STAThread]public static int Main(string[] args){
+        // This is a GUI app. When started from PowerShell, do not retain its
+        // console: provider CLIs can reattach to the parent and mistake a quota
+        // subprocess for an interactive login, even with CREATE_NO_WINDOW.
+        FreeConsole();
         if(args.Contains("--process-fixture")){RunFixture(args);return 0;}
         if(args.Contains("--antigravity-smoke-test")||args.Contains("--account-handoff-smoke-test")||args.Contains("--render-previews")||args.Contains("--ui-smoke-test")||args.Contains("--backend-smoke-test")||args.Contains("--stdio-smoke-test")||args.Contains("--store-runtime-smoke-test")||args.Contains("--store-runtime-reopen-smoke-test"))return PreviewRunner.Run(args);
         var app=new Program();app.Run();return 0;
@@ -81,6 +85,7 @@ internal sealed class Program:Application {
         }
         var app=new Application{ShutdownMode=args.Contains("--hide-on-close-fixture")?ShutdownMode.OnExplicitShutdown:ShutdownMode.OnLastWindowClose};var window=new Window{Title="AI Switcher disposable profile fixture",Width=400,Height=250,Content=new System.Windows.Controls.TextBlock{Text="Disposable Windows process fixture",Margin=new Thickness(25)}};window.Closing+=(_,e)=>{if(args.Contains("--hide-on-close-fixture")){e.Cancel=true;window.Hide();}};if(args.Contains("--spawn-headless-on-exit-fixture"))app.Exit+=(_,_)=>SpawnHeadless();app.Run(window);
     }
+    [DllImport("kernel32.dll")]static extern bool FreeConsole();
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern uint RegisterWindowMessage(string value);
     [DllImport("user32.dll")]static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr wParam,IntPtr lParam);
 }

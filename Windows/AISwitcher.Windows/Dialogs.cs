@@ -61,7 +61,7 @@ internal sealed partial class MainWindow {
             modeField.Visibility=selected is Agent.Claude or Agent.Chatgpt?Visibility.Visible:Visibility.Collapsed;browserField.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
             signInField.Visibility=selected==Agent.Antigravity&&original==null?Visibility.Visible:Visibility.Collapsed;
             openAfter.Content=L[selected==Agent.Antigravity?"Sign in after adding":"Open after adding"];
-            shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=Support(new Account{Agent=selected,LaunchMode=effective});
+            shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=selected==Agent.Antigravity&&original==null?L["Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data."]:Support(original??new Account{Agent=selected,LaunchMode=effective});
         }
         agent.SelectionChanged+=(_,_)=>{UpdateFields();if(agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;};mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();if(original==null&&agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
