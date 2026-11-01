@@ -21,14 +21,22 @@ internal static partial class PreviewRunner {
         repo.Save(new(){Accounts=[a,b]});var prefs=new Preferences();prefs.Executables["workspace"]=source;
         foreach(var account in new[]{a,b}){repo.PrepareQuota(account);repo.PrepareProfile(account);}
         await SharedWorkspace.PrepareAsync(a,repo,prefs);
-        using var mock=new HandoffResponses();await using(var first=await HandoffRpc.Create(cli,repo,a,prefs,mock.Url,"one")){
+        await SharedWorkspace.PrepareAsync(b,repo,prefs);
+        using var mock=new HandoffResponses();
+        // B is already connected before A exhausts quota, matching a warm target
+        // session. Closing a session must not require logging either account out.
+        await using(var warmTarget=await HandoffRpc.Create(cli,repo,b,prefs,mock.Url,"two")){
+        await using(var first=await HandoffRpc.Create(cli,repo,a,prefs,mock.Url,"one")){
             var linked=await first.Call("project/create",new{idempotencyKey="fixture-local-project",name="Project A",roots=new[]{new{path=project}},metadata=new Dictionary<string,string>{{"codex.localProjectId","fixture-local-project"},{"codex.chatGptBacking","{\"accountId\":\"fixture-account-one\",\"userId\":\"fixture-user-one\",\"projectId\":\"g-p-fixture\"}"},{"fixture.keep","preserved"}}});
             File.WriteAllText(Path.Combine(root,"source-project-id"),linked.GetProperty("project").GetProperty("id").GetString());
             var started=await first.Call("thread/start",new{model="fixture-model",cwd=project});var id=started.GetProperty("thread").GetProperty("id").GetString()!;
             await first.Call("turn/start",new{threadId=id,input=new[]{new{type="text",text="Fictional account handoff regression. Reply with fixture text only."}}});
             var completed=await first.WaitTurn();Require(completed.GetProperty("turn").GetProperty("status").GetString()=="failed","Fixture account 1 did not hit its simulated quota");
             await first.Call("thread/metadata/update",new{threadId=id,projectId=linked.GetProperty("project").GetProperty("id").GetString()});
-            await first.Call("account/logout",null);File.WriteAllText(Path.Combine(root,"source-thread-id"),id);
+            File.WriteAllText(Path.Combine(root,"source-thread-id"),id);
+            await warmTarget.Call("thread/resume",new{threadId=id,excludeTurns=true});
+        }
+        // Handoff renews B's old thread client instead of bringing it to the front.
         }
         SharedWorkspace.Archive(a,repo);
         var thread=File.ReadAllText(Path.Combine(root,"source-thread-id"));
@@ -51,7 +59,7 @@ internal static partial class PreviewRunner {
         }
         Require(mock.FirstAccountRejected&&mock.SecondAccountAccepted,"The real CLI did not send each turn with the correct fictional account");
         SharedWorkspace.Archive(b,repo);
-        File.WriteAllText(Path.Combine(output,"account-handoff-result.txt"),"PASS: real native Windows Codex; two private fictional ChatGPT identities; loopback-only quota failure for account 1; logout and close account 1; detach native local project account metadata automatically; resume the SAME conversation/project/session ID under account 2 without selecting or forking; subsequent Responses request authenticates as account 2 and completes; source/target authentication stays separate. No real account or external model call.\n");
+        File.WriteAllText(Path.Combine(output,"account-handoff-result.txt"),"PASS: real native Windows Codex; two private fictional ChatGPT identities; account 2 connected before account 1 exhausts quota and loads the original thread; loopback-only quota failure for account 1; close both runtimes WITHOUT logout; renew account 2; detach native local project account metadata automatically; resume the SAME conversation/project/session ID under account 2 without selecting or forking; subsequent Responses request authenticates as account 2 and completes; source/target authentication stays separate. No real account or external model call.\n");
     }
     sealed class HandoffRpc:IAsyncDisposable {
         readonly StdioTransport transport;readonly Queue<JsonElement> notifications=[];int id;
