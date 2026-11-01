@@ -114,7 +114,7 @@ Test("Deletion keeps other profiles intact",()=>{var repo=Repo("delete");var a=P
 Test("Windows deletion waits for a short-lived native file lease without losing metadata",()=>{
     if(!OperatingSystem.IsWindows())return;
     var repo=Repo("delete-transient-lease");var a=Profile();repo.PrepareProfile(a);var snapshot=new Snapshot{Accounts=[a]};repo.Save(snapshot);
-    var lease=DetachedFixtureNative.CreateFile(repo.ProfilePath(a),0x80,3,IntPtr.Zero,3,0x02000000,IntPtr.Zero);
+    var lease=DetachedFixtureNative.CreateFile(repo.ProfilePath(a),1,3,IntPtr.Zero,3,0x02000000,IntPtr.Zero);
     if(lease.IsInvalid)throw new IOException("Could not create a native directory lease",new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error()));
     var release=Task.Run(async()=>{await Task.Delay(250);lease.Dispose();});
     var elapsed=System.Diagnostics.Stopwatch.StartNew();try{repo.Remove(a,snapshot);True(elapsed.ElapsedMilliseconds>=200);True(!Directory.Exists(repo.ProfilePath(a)));Equal(repo.Load().Accounts.Count,0);}finally{lease.Dispose();release.GetAwaiter().GetResult();}
