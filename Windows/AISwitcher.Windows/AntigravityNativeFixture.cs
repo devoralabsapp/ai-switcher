@@ -74,17 +74,17 @@ internal static partial class PreviewRunner {
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
             Phase("Official CLI usage");Require(GetConsoleCP()==0,"GUI manager retained a controlling console");
             var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.Environment["CI"]="true";info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
-            using(var command=Process.Start(info)!){
-                command.StandardInput.Close();var captured=new StringBuilder();
-                void Capture(object sender,DataReceivedEventArgs e){if(e.Data!=null)lock(captured){if(captured.Length<1048576)captured.AppendLine(e.Data[..Math.Min(e.Data.Length,1048576-captured.Length)]);}}
-                command.OutputDataReceived+=Capture;command.ErrorDataReceived+=Capture;command.BeginOutputReadLine();command.BeginErrorReadLine();
+            await using(var command=DetachedCommand.Start(info)){
+                command.Input.Close();var captured=new StringBuilder();
+                async Task Capture(StreamReader reader){var buffer=new char[4096];int count;while((count=await reader.ReadAsync(buffer,ct))>0)lock(captured){if(captured.Length+count>1048576)throw new InvalidOperationException("CLI probe output too large");captured.Append(buffer,0,count);}}
+                var stdout=Capture(command.Output);var stderr=Capture(command.Error);
                 void Diagnose(){lock(captured){var text=captured.ToString();var terms=new[]{"file-based token storage","WSL environment","not signed in","not logged in","sign in","login","authenticate","authentication","no controlling terminal","not authenticated","print mode","updat","WSL","wslpath","terminal","keyring","error","permission","timeout","Listening","onboarding","color scheme"};File.WriteAllText(Path.Combine(output,"antigravity-cli-diagnostics.txt"),"Output chars: "+text.Length+"\n"+string.Join("\n",terms.Where(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase))));}}
-                try{await command.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(45),ct);}catch{Diagnose();if(!command.HasExited){command.Kill(true);await command.WaitForExitAsync();}throw;}
+                try{await command.Process.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(30),ct);await Task.WhenAll(stdout,stderr);}catch{Diagnose();if(!command.Process.HasExited){command.Process.Kill(true);await command.Process.WaitForExitAsync();}throw;}
                 Diagnose();string text;lock(captured)text=captured.ToString();
                 var log=Path.Combine(AntigravityProfile.Home(repo,c),".gemini","antigravity-cli","cli.log");Repository.RejectLinks(log);
                 if(File.Exists(log)){using var reader=File.OpenRead(log);var bytes=new byte[524288];var count=reader.Read(bytes,0,bytes.Length);text+="\n"+Encoding.UTF8.GetString(bytes,0,count);}
                 Require(text.Length<1572864&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
-                Require(new[]{"not signed in","not logged in","sign in","login","authenticate","authentication"}.Any(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase)),"Fresh private CLI was not signed out");
+                Require(ProviderQuota.AntigravityRequiresSignIn(text),"Fresh private CLI was not signed out");
                 Require(!File.Exists(AntigravityProfile.CliIdentity(repo,c)),"CLI imported a global identity into the fresh profile");
             }
             CheckCanary();

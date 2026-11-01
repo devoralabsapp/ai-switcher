@@ -45,6 +45,7 @@ internal sealed class ProviderQuotaService {
     }
     static async Task StopProcess(Process process){try{if(!process.HasExited){process.Kill(true);await process.WaitForExitAsync();}}catch(InvalidOperationException){}finally{process.Dispose();}}
     async Task<string> Run(Account a,string executable,string[] args,CancellationToken ct){
+        if(a.Agent==Agent.Antigravity&&args.SequenceEqual(ProviderQuota.AntigravityArguments))return await RunDetachedQuota(a,executable,args,ct);
         var signOut=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var detect=a.Agent==Agent.Antigravity&&args.SequenceEqual(ProviderQuota.AntigravityArguments);
         var process=Start(a,executable,args,line=>{if(detect&&ProviderQuota.AntigravityRequiresSignIn(line))signOut.TrySetResult();});
@@ -61,6 +62,25 @@ internal sealed class ProviderQuotaService {
             var text=await collect;if(detect&&ProviderQuota.AntigravityRequiresSignIn(text))throw new AppError(ProviderQuota.SignedOut);return text;
             async Task StopBeforeDrain(){if(!process.HasExited){process.Kill(true);await process.WaitForExitAsync();}}
         }finally{commands[a.Id].Remove(process);await StopProcess(process);}
+    }
+    async Task<string> RunDetachedQuota(Account account,string executable,string[] arguments,CancellationToken ct){
+        if(account.UsesPrivateAntigravity&&!AntigravityProfile.SupportsPrivateStorage(executable))throw new AppError(AntigravityProfile.Unsupported);
+        var info=ChildEnvironment.StartInfo(executable,arguments,EnvironmentFor(account),account.UsesPrivateAntigravity?AntigravityProfile.Home(repo,account):repo.Root);
+        await using var command=DetachedCommand.Start(info);if(!commands.TryGetValue(account.Id,out var owned))commands[account.Id]=owned=[];owned.Add(command.Process);
+        try{
+            command.Input.Close();
+            async Task<string> Read(System.IO.StreamReader reader,bool error){
+                var result=new StringBuilder();var buffer=new char[4096];int count;
+                while((count=await reader.ReadAsync(buffer,ct))>0){if(result.Length+count>1048576)throw new AppError(ProviderQuota.Invalid);result.Append(buffer,0,count);if(error&&ProviderQuota.AntigravityRequiresSignIn(result.ToString()))throw new AppError(ProviderQuota.SignedOut);}
+                return result.ToString();
+            }
+            var output=Read(command.Output,false);var diagnostic=Read(command.Error,true);
+            // Observe either pipe's failure before waiting for an interactive OAuth
+            // timeout. Raw diagnostics are never persisted or shown to the user.
+            var first=await Task.WhenAny(output,diagnostic);await first;
+            var text=await output;_=await diagnostic;await command.Process.WaitForExitAsync(ct);
+            if(ProviderQuota.AntigravityRequiresSignIn(text))throw new AppError(ProviderQuota.SignedOut);return text;
+        }finally{owned.Remove(command.Process);}
     }
     async Task<JsonElement> Control(Process process,string subtype,CancellationToken ct){
         var id=Guid.NewGuid().ToString("N");

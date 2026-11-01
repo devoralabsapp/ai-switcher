@@ -4,6 +4,9 @@ using System.Text.Json;
 using System.Threading.Channels;
 using AISwitcher.Core;
 
+if(args.FirstOrDefault()=="--detached-fixture"){
+    Console.WriteLine(JsonSerializer.Serialize(new{console=DetachedFixtureNative.GetConsoleCP(),arguments=args.Skip(1).ToArray(),value=Environment.GetEnvironmentVariable("AISW_FIXTURE_VALUE"),input=await Console.In.ReadLineAsync()}));Console.Error.WriteLine("detached-stderr");return 0;
+}
 if(Path.GetFileNameWithoutExtension(Environment.ProcessPath)?.StartsWith("codex-fixture",StringComparison.Ordinal)==true){if(args.SequenceEqual(new[]{"--version"}))Console.WriteLine("codex-cli 0.164.0");else await Fixture("unauthed");return 0;}
 if(Path.GetFileNameWithoutExtension(Environment.ProcessPath)?.StartsWith("provider-fixture",StringComparison.Ordinal)==true){try{await ProviderFixture(args);}catch(Exception e){File.AppendAllText("provider-fixture-trace.txt",e.ToString()+Environment.NewLine);throw;}return 0;}
 if(args.FirstOrDefault()=="--rpc-fixture") { await Fixture(args.ElementAtOrDefault(1)??"normal");return 0; }
@@ -19,6 +22,17 @@ Repository Repo(string name)=>new(Path.Combine(root,name),Path.Combine(root,name
 Account Profile(string name="A",Agent agent=Agent.Chatgpt,LaunchMode mode=LaunchMode.Desktop)=>new(){Name=name,Agent=agent,LaunchMode=mode};
 var now=DateTimeOffset.UtcNow;
 Account WithQuota(string name,double used,double secondary=40,TimeSpan? age=null,long? reset=null){var limits=new Limits("identity",new("codex",null,new(used,300,reset??now.AddHours(2).ToUnixTimeSeconds()),new(secondary,10080,now.AddDays(3).ToUnixTimeSeconds())),null);return Profile(name)with{DesktopConnection=new(new("fixture@example.test","plus","identity"),new(limits,now-(age??TimeSpan.Zero)))};}
+Test("Detached Windows argument quoting preserves empty, spaced, quoted and trailing-slash values",()=>{
+    Equal(DetachedCommand.Quote(""),"\"\"");Equal(DetachedCommand.Quote("simple"),"simple");Equal(DetachedCommand.Quote("a b"),"\"a b\"");Equal(DetachedCommand.Quote("a\"b"),"\"a\\\"b\"");Throws(()=>DetachedCommand.Quote("bad\0value"));
+});
+AsyncTest("Detached Windows commands have no console and preserve private environment, Unicode arguments, input and separate outputs",async()=>{
+    if(!OperatingSystem.IsWindows())return;
+    var values=new[]{"","a b","quoted\"value",@"C:\A B\","tài khoản"};var env=new Dictionary<string,string>{{"SystemRoot",Environment.GetEnvironmentVariable("SystemRoot")!},{"AISW_FIXTURE_VALUE","private fixture"}};
+    var info=ChildEnvironment.StartInfo(Environment.ProcessPath!,new[]{"--detached-fixture"}.Concat(values),env,root);
+    await using var command=DetachedCommand.Start(info);await command.Input.WriteLineAsync("fixture input");command.Input.Close();
+    using var ct=new CancellationTokenSource(TimeSpan.FromSeconds(10));var output=command.Output.ReadToEndAsync(ct.Token);var error=command.Error.ReadToEndAsync(ct.Token);await command.Process.WaitForExitAsync(ct.Token);
+    using var doc=JsonDocument.Parse(await output);Equal(doc.RootElement.GetProperty("console").GetUInt32(),0u);True(doc.RootElement.GetProperty("arguments").EnumerateArray().Select(x=>x.GetString()).SequenceEqual(values));Equal(doc.RootElement.GetProperty("value").GetString(),"private fixture");Equal(doc.RootElement.GetProperty("input").GetString(),"fixture input");True((await error).Contains("detached-stderr"));
+});
 Test("Antigravity preserves legacy sign-in and permits multiple private profiles",()=>{
     var repo=Repo("antigravity-profiles");var legacy=Profile("Legacy",Agent.Antigravity);var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};var b=Profile("B",Agent.Antigravity)with{AntigravityUsesPrivateHome=true,AntigravitySignInMethod=AntigravitySignInMethod.Cli};
     repo.Save(new(){Accounts=[legacy,a,b]});True(repo.Load().Accounts[0].UsesSharedApplication);True(a.UsesAntigravityDesktopQuota);True(b.UsesProviderCli);True(!a.UsesProviderCli);True(!a.UsesSharedApplication);
@@ -203,3 +217,5 @@ static async Task ProviderFixture(string[] args){
         Console.WriteLine(JsonSerializer.Serialize(new{type="control_response",response=new{subtype="success",request_id=x.GetProperty("request_id").GetString(),response=value}}));await Console.Out.FlushAsync();
     }
 }
+
+internal static class DetachedFixtureNative { [System.Runtime.InteropServices.DllImport("kernel32.dll")]internal static extern uint GetConsoleCP(); }
