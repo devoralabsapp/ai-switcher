@@ -295,7 +295,7 @@ struct Dashboard: View {
             } else if model.preferences.workspaceLayout == .quotaTable {
                 QuotaOverviewView(model: model)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 245), spacing: appearanceTheme.isPlayfulRetro ? 20 : 16, alignment: .top)], spacing: appearanceTheme.isPlayfulRetro ? 20 : 16) {
+                AccountColumnsLayout(spacing: appearanceTheme.isPlayfulRetro ? 20 : 16) {
                     ForEach(model.visibleAccounts) { account in AccountCard(model: model, account: account) }
                 }
             }

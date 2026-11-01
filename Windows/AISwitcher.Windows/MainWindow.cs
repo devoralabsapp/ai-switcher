@@ -84,7 +84,7 @@ internal sealed partial class MainWindow:Window {
         var visible=Visible().ToArray();
         if(visible.Length==0){var content=Stack(Text(L[engine.Snapshot.Accounts.Count==0?"Add your first account":"No matching accounts"],19,true),Space(10),Text(L["Personal, work, or study — give each account a recognizable name."],12,false,T.Secondary),Space(16),Button(L["Add account"],()=>EditAccount(),true,T));workspace.Children.Add(Panel(content,T));return;}
         if(engine.Preferences.WorkspaceLayout==WorkspaceLayout.QuotaTable){RenderTable(visible);return;}
-        var wrap=new WrapPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Stretch};foreach(var a in visible){var card=AccountCard(a);card.Width=254;card.Margin=new Thickness(0,0,14,18);wrap.Children.Add(card);}workspace.Children.Add(wrap);
+        var cards=new AccountColumnsPanel();foreach(var a in visible)cards.Children.Add(AccountCard(a));workspace.Children.Add(cards);
     }
     Border AccountCard(Account a){
         var favorite=Button(a.IsFavorite?"★":"☆",()=>engine.ToggleFavorite(a));favorite.Padding=new Thickness(5,3,5,3);var menu=Button("⋯",()=>{});menu.Padding=new Thickness(7,3,7,3);var context=AccountMenu(a);menu.ContextMenu=context;menu.Click+=(_,_)=>{context.PlacementTarget=menu;context.IsOpen=true;};

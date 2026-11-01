@@ -75,3 +75,5 @@ Xem [hướng dẫn build và chi tiết kỹ thuật](README.md).
 ### Theme theo dịp lễ
 
 Halloween, Christmas, Tết Nguyên Đán và Black Friday có bảng màu và hình vector riêng ở banner, bộ chọn theme, thanh bên và viền thẻ tài khoản. macOS và Windows dùng chung dữ liệu màu và hình minh họa. Chi tiết trang trí không chặn thao tác, không đổi dữ liệu tài khoản. Chọn trong Giao diện & Ngôn ngữ; lựa chọn được lưu cho lần mở sau.
+
+Khi chuyển account ChatGPT qua AI Switcher trong cùng workspace local dùng chung, ứng dụng tự làm mới phiên Desktop/backend đang có của account đích trước khi mở. Không cần bấm Restart session thủ công sau khi account trước hết quota. Mở lại account hiện tại vẫn giữ cửa sổ đang chạy. Nếu ứng dụng từ chối đóng, thao tác chuyển dừng lại để bạn xử lý trong cửa sổ của nó. Đăng nhập, project và lịch sử chat được giữ nguyên. Các thẻ account xếp theo cột độc lập để giảm khoảng trống.

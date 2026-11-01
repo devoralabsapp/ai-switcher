@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using AISwitcher.Core;
 
+if(Path.GetFileNameWithoutExtension(Environment.ProcessPath)?.StartsWith("codex-fixture",StringComparison.Ordinal)==true){if(args.SequenceEqual(new[]{"--version"}))Console.WriteLine("codex-cli 0.164.0");else await Fixture("unauthed");return 0;}
 if(Path.GetFileNameWithoutExtension(Environment.ProcessPath)?.StartsWith("provider-fixture",StringComparison.Ordinal)==true){try{await ProviderFixture(args);}catch(Exception e){File.AppendAllText("provider-fixture-trace.txt",e.ToString()+Environment.NewLine);throw;}return 0;}
 if(args.FirstOrDefault()=="--rpc-fixture") { await Fixture(args.ElementAtOrDefault(1)??"normal");return 0; }
 var tests=new List<(string Name,Func<Task> Run)>();
@@ -18,6 +19,19 @@ Repository Repo(string name)=>new(Path.Combine(root,name),Path.Combine(root,name
 Account Profile(string name="A",Agent agent=Agent.Chatgpt,LaunchMode mode=LaunchMode.Desktop)=>new(){Name=name,Agent=agent,LaunchMode=mode};
 var now=DateTimeOffset.UtcNow;
 Account WithQuota(string name,double used,double secondary=40,TimeSpan? age=null,long? reset=null){var limits=new Limits("identity",new("codex",null,new(used,300,reset??now.AddHours(2).ToUnixTimeSeconds()),new(secondary,10080,now.AddDays(3).ToUnixTimeSeconds())),null);return Profile(name)with{DesktopConnection=new(new("fixture@example.test","plus","identity"),new(limits,now-(age??TimeSpan.Zero)))};}
+Test("Workspace activation renews changed accounts and survives manager restart without editing authentication or history",()=>{
+    var repo=Repo("workspace-activation");var source=Path.Combine(root,"workspace-source");var database=Path.Combine(root,"workspace-db");var a=Guid.NewGuid();var b=Guid.NewGuid();
+    Directory.CreateDirectory(source);File.WriteAllText(Path.Combine(source,"auth.json"),"private authentication fixture");File.WriteAllText(Path.Combine(source,"chat.jsonl"),"original conversation");
+    True(WorkspaceActivation.NeedsRestart(repo,source,database,b));WorkspaceActivation.Record(repo,source,database,a);True(WorkspaceActivation.NeedsRestart(repo,source,database,b));
+    WorkspaceActivation.Record(repo,source,database,b);True(!WorkspaceActivation.NeedsRestart(new Repository(repo.Root),source,database,b));True(WorkspaceActivation.NeedsRestart(repo,source,database,a));
+    True(WorkspaceActivation.NeedsRestart(repo,source,database+"-other",b));WorkspaceActivation.Invalidate(repo,source,database);True(WorkspaceActivation.NeedsRestart(repo,source,database,b));
+    Equal(File.ReadAllText(Path.Combine(source,"auth.json")),"private authentication fixture");Equal(File.ReadAllText(Path.Combine(source,"chat.jsonl")),"original conversation");
+});
+Test("Workspace activation refuses symbolic links and malformed records",()=>{
+    var repo=Repo("workspace-activation-links");var source=Path.Combine(root,"links-source");var db=Path.Combine(root,"links-db");var id=Guid.NewGuid();WorkspaceActivation.Record(repo,source,db,id);
+    var marker=Directory.GetFiles(Path.Combine(repo.Root,"WorkspaceActivations"),"*.json").Single();File.WriteAllText(marker,"{");Throws(()=>WorkspaceActivation.NeedsRestart(repo,source,db,id));
+    var outside=Path.Combine(root,"outside-activation");File.WriteAllText(outside,"preserved");File.Delete(marker);File.CreateSymbolicLink(marker,outside);Throws(()=>WorkspaceActivation.Record(repo,source,db,id));Throws(()=>WorkspaceActivation.Invalidate(repo,source,db));Equal(File.ReadAllText(outside),"preserved");
+});
 Test("Store executables and aliases are recognized without confusing sibling paths",()=>{True(WindowsExecutable.IsStorePath(@"C:\Program Files\WindowsApps\OpenAI.Codex_26\app\Codex.exe"));True(WindowsExecutable.IsStorePath(@"C:\Users\A\AppData\Local\Microsoft\WindowsApps\codex.exe"));True(!WindowsExecutable.IsStorePath(@"C:\Users\A\WindowsAppsBackup\codex.exe"));});
 Test("Codex version output rejects GUI labels and unrelated executables",()=>{True(WindowsExecutable.IsCodexVersion("codex-cli 0.164.0\r\n"));True(WindowsExecutable.IsCodexVersion("codex-cli 0.150.0-alpha.8"));True(!WindowsExecutable.IsCodexVersion("Codex 26.1021"));True(!WindowsExecutable.IsCodexVersion("not codex-cli 0.164.0"));});
 Test("PE inspection distinguishes GUI, console, corrupt and non-PE files before execution",()=>{var path=Path.Combine(root,"test.exe");var data=new byte[200];data[0]=77;data[1]=90;System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(60),64);data[64]=80;data[65]=69;data[88]=0x0b;data[89]=2;data[156]=2;File.WriteAllBytes(path,data);True(!WindowsExecutable.IsConsole(path));data[156]=3;File.WriteAllBytes(path,data);True(WindowsExecutable.IsConsole(path));data[60]=250;File.WriteAllBytes(path,data);True(!WindowsExecutable.IsConsole(path));File.WriteAllText(path,"#!/bin/sh\nexit 0");True(!WindowsExecutable.IsConsole(path));});

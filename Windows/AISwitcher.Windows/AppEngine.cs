@@ -31,6 +31,7 @@ internal sealed class AppEngine {
     public event Action<Account,IReadOnlyList<QuotaAlert>>? QuotaAlert;
     sealed record Operation(CancellationTokenSource Cancellation,TaskCompletionSource Completion);
     readonly Dictionary<Guid,Operation> operations=[];
+    readonly SemaphoreSlim sharedWorkspaceOperation=new(1,1);
     public bool StoppingAll { get; private set; }
     readonly CancellationTokenSource lifetime=new();bool observing;DateTimeOffset lastSweep=DateTimeOffset.MinValue;
     public AppEngine(string root){
@@ -81,13 +82,26 @@ internal sealed class AppEngine {
     async Task Run(Account a,Func<CancellationToken,Task> action,bool report=true){
         if(ReadOnly||StoppingAll||InstallingProviders.Contains(a.Agent)||lifetime.IsCancellationRequested||!Snapshot.Accounts.Any(x=>x.Id==a.Id)||!Busy.Add(a.Id))return;
         using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);var operation=new Operation(cancellation,new(TaskCreationOptions.RunContinuationsAsynchronously));operations[a.Id]=operation;Notify();
-        try{Errors.Remove(a.Id);await action(cancellation.Token);}catch(OperationCanceledException)when(!cancellation.IsCancellationRequested){Errors[a.Id]=L["The provider quota request timed out. Try again."];}catch(OperationCanceledException){}catch(Exception error){FixtureFailure?.Invoke(error);Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
-        finally{Busy.Remove(a.Id);try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}operations.Remove(a.Id);operation.Completion.TrySetResult();Notify();}
+        var locked=false;
+        try{Errors.Remove(a.Id);if(a.UsesCodexDesktop&&a.SharesLocalWorkspace){await sharedWorkspaceOperation.WaitAsync(cancellation.Token);locked=true;}cancellation.Token.ThrowIfCancellationRequested();await action(cancellation.Token);}catch(OperationCanceledException)when(!cancellation.IsCancellationRequested){Errors[a.Id]=L["The provider quota request timed out. Try again."];}catch(OperationCanceledException){}catch(Exception error){FixtureFailure?.Invoke(error);Errors[a.Id]=Message(error);if(report)Error?.Invoke(Message(error));}
+        finally{Busy.Remove(a.Id);try{await Platform.RefreshProcessesAsync();}catch{LifecycleError=L["Process status could not be checked. Retry from Session diagnostics."];}if(locked)sharedWorkspaceOperation.Release();operations.Remove(a.Id);operation.Completion.TrySetResult();Notify();}
     }
+    internal async Task PrepareWorkspaceActivationAsync(Account a,CancellationToken ct=default){
+        if(!a.UsesCodexDesktop||!a.SharesLocalWorkspace||!WorkspaceActivation.NeedsRestart(Repository,SharedWorkspace.Source(Preferences),SharedWorkspace.Database(Preferences),a.Id))return;
+        await Platform.RefreshProcessesAsync();ct.ThrowIfCancellationRequested();
+        if(Platform.HasOwnedProcesses(a)||Backend.IsActive(a)||Backend.HasSocket(a)){
+            // An existing window or app-server may retain an older thread client.
+            // Finish the selected profile's ordinary quit flow before reusing it.
+            await Platform.CloseAsync(a);ct.ThrowIfCancellationRequested();await Backend.StopAsync(a,ct);await Platform.VerifyClosedAsync(a);
+        }
+    }
+    internal void RecordWorkspaceActivation(Account a){if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)WorkspaceActivation.Record(Repository,SharedWorkspace.Source(Preferences),SharedWorkspace.Database(Preferences),a.Id);}
+    void InvalidateWorkspaceActivation(Account a){if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)WorkspaceActivation.Invalidate(Repository,SharedWorkspace.Source(Preferences),SharedWorkspace.Database(Preferences));}
     public Task OpenAsync(Account a)=>Run(a,async ct=>{
         string? backgroundError=null;
-        if(a.UsesCodexDesktop){Repository.PrepareQuota(a);Repository.PrepareProfile(a);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);try{await Backend.StartAsync(a,ct);}catch(Exception error)when(error is AppError or System.ComponentModel.Win32Exception){backgroundError=Message(error);}}
+        if(a.UsesCodexDesktop){Repository.PrepareQuota(a);Repository.PrepareProfile(a);await PrepareWorkspaceActivationAsync(a,ct);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);try{await Backend.StartAsync(a,ct);}catch(Exception error)when(error is AppError or System.ComponentModel.Win32Exception){backgroundError=Message(error);}}
         await Platform.OpenAsync(a,useLocalDaemon:Backend.UsesLocalDaemon(a),ct:ct);var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
+        RecordWorkspaceActivation(a);
         if(backgroundError!=null)Errors[a.Id]=backgroundError;
     });
     public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;return Run(a,async ct=>{if(!a.Agent.ProviderQuota())await Backend.StartAsync(a,ct);await ReadAsync(a,ct);},report);}
@@ -133,8 +147,8 @@ internal sealed class AppEngine {
             if(a.UsesCodexDesktop){Current(a).DesktopConnection=null;Repository.Save(Snapshot);}throw;
         }
     }
-    public Task CloseAsync(Account a)=>Run(a,async ct=>{if(a.Agent.ProviderQuota())await Provider.DisconnectAsync(a);if(a.Agent.IsShared())return;await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);await Platform.VerifyClosedAsync(a);});
-    public Task RestartAsync(Account a){if(!a.UsesCodexDesktop)return Task.CompletedTask;return Run(a,async ct=>{await Platform.CloseAsync(a);await Backend.StopAsync(a);await Backend.StartAsync(a,ct);await ReadAsync(a,ct);});}
+    public Task CloseAsync(Account a)=>Run(a,async ct=>{if(a.Agent.ProviderQuota())await Provider.DisconnectAsync(a);if(a.Agent.IsShared())return;await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);await Platform.VerifyClosedAsync(a);InvalidateWorkspaceActivation(a);});
+    public Task RestartAsync(Account a){if(!a.UsesCodexDesktop)return Task.CompletedTask;return Run(a,async ct=>{await Platform.CloseAsync(a);await Backend.StopAsync(a);await Platform.VerifyClosedAsync(a);InvalidateWorkspaceActivation(a);await Backend.StartAsync(a,ct);await ReadAsync(a,ct);});}
     public Task DeleteAsync(Account a)=>Run(a,async ct=>{await Platform.RefreshProcessesAsync();if(Running(a)&&!a.Agent.IsShared())throw new AppError("Close this session before deleting its profile.");if(a.UsesCodexDesktop)SharedWorkspace.Archive(a,Repository);Snapshot=Repository.Remove(a,Snapshot);});
     public Task BrowserLoginAsync(Account a,Func<Identity,Task<bool>> confirm,CancellationToken externalCt)=>Run(a,async operationCt=>{
         using var linked=CancellationTokenSource.CreateLinkedTokenSource(operationCt,externalCt);var ct=linked.Token;

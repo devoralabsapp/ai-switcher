@@ -97,3 +97,5 @@ Halloween, Christmas, Tet Holiday and Black Friday each have a distinct palette,
 ### Install missing Claude / Antigravity CLI
 
 Click **Install & connect** on the provider card or in Details. AI Switcher opens PowerShell and runs the official native installer with ordinary user permissions, then checks the CLI version and attempts to connect. The action is hidden when a CLI is already detected. No npm or app restart is needed. Install failures remain visible in PowerShell and the app. Background refresh never installs software; quitting the manager leaves the visible installer running. Installation and provider sign-in are separate steps.
+
+Switching ChatGPT accounts through AI Switcher in a shared local workspace renews the selected account’s existing Desktop/backend before opening it. Reopening the current account keeps its window. A refused ordinary quit aborts the switch. Sign-in, projects and conversation history are preserved; taskbar-only switches do not trigger this handoff. Account cards use independent responsive columns.

@@ -50,9 +50,6 @@ struct ProviderQuotaSummaryView: View {
                     }
                 }
                 if let error = model.quotaErrors[account.id] { Text(error.localizedDescription).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
-                if account.usesIsolatedAntigravity, let old = account.providerQuotaConnection, old.providerSessionKind != AntigravityLaunch.quotaSessionKind {
-                    Text(L10n.text("Connect again to refresh this profile's isolated quota.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
-                }
                 if model.installingProviderAgents.contains(account.effectiveAgent) {
                     HStack { ProgressView().controlSize(.mini);Text(L10n.format("Installing %@ CLI…", account.effectiveAgent.name)).font(theme.font(size: 11)) }
                     Text(L10n.text("Installation is running in Terminal. This app will connect when it finishes.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
