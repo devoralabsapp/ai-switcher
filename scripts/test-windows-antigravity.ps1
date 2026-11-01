@@ -35,7 +35,16 @@ try {
         if(Test-Path $phaseFile){$phase=(Get-Content $phaseFile -Tail 1);if($phase -ne $lastPhase){Write-Host "Native Antigravity phase: $phase";$lastPhase=$phase}}
         if([DateTime]::UtcNow -gt $deadline){$process.Kill();throw 'Native Antigravity smoke timed out'}
     }
-    if($process.ExitCode -ne 0){if(Test-Path (Join-Path $Output 'antigravity-smoke-error.txt')){Get-Content (Join-Path $Output 'antigravity-smoke-error.txt')};throw 'Native Antigravity smoke failed'}
+    if($process.ExitCode -ne 0){
+        # Disposable CI profiles only. Read open-handle names, never file contents
+        # or process command lines (which could contain an OAuth URL).
+        $handle=Join-Path $scope 'handle64.exe'
+        Invoke-WebRequest 'https://live.sysinternals.com/handle64.exe' -OutFile $handle
+        $handleSignature=Get-AuthenticodeSignature $handle
+        if($handleSignature.Status -ne 'Valid' -or $handleSignature.SignerCertificate.Subject -notmatch 'Microsoft'){throw 'Handle diagnostic signature could not be verified'}
+        & $handle -accepteula -nobanner $root | Set-Content (Join-Path $Output 'antigravity-fixture-open-handles.txt')
+        if(Test-Path (Join-Path $Output 'antigravity-smoke-error.txt')){Get-Content (Join-Path $Output 'antigravity-smoke-error.txt')};throw 'Native Antigravity smoke failed'
+    }
     Get-Content (Join-Path $Output 'antigravity-native-result.txt')
 }finally{
     if(Test-Path $root){Remove-Item $root -Recurse -Force}
