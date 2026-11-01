@@ -36,7 +36,10 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         if(!AntigravityProfile.SupportsPrivateStorage(native))throw new AppError(AntigravityProfile.Unsupported);
         var csrf=Guid.NewGuid().ToString();var version=FileVersionInfo.GetVersionInfo(app).ProductVersion??"2";
         var args=new[]{"--standalone","--override_ide_name","antigravity","--subclient_type","hub","--override_ide_version",version,"--override_user_agent_name","antigravity","--http_server_port","0","--csrf_token",csrf,"--app_data_dir","antigravity","--api_server_url","https://generativelanguage.googleapis.com","--cloud_code_endpoint","https://daily-cloudcode-pa.googleapis.com","--exit_on_stdin_close"};
-        var info=ChildEnvironment.StartInfo(native,args,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,account),AntigravityProfile.Home(repo,account));
+        // Windows' browser launcher inherits the current directory and can keep
+        // it locked after OAuth cancellation. Keep CWD outside account storage;
+        // the explicit private environment still controls every native auth path.
+        var info=ChildEnvironment.StartInfo(native,args,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,account),Path.GetDirectoryName(native)!);
         info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
         var process=new Process{StartInfo=info};var backend=new Background(process,csrf);
         void Output(object sender,DataReceivedEventArgs e){if(e.Data==null)return;if(FixtureDiagnostic!=null){if(e.Data.Contains("file-based token storage"))FixtureDiagnostic("native file storage: "+(e.Data.Contains("WSL environment")?"WSL":"other"));if(e.Data.Contains("listening"))FixtureDiagnostic("native listener startup");if(e.Data.Contains("Unknown command line flag"))FixtureDiagnostic("unsupported native flag");}lock(backend.Startup){if(e.Data.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal))backend.PrivateStore=true;if(backend.Startup.Length<65536)backend.Startup.AppendLine(e.Data[..Math.Min(e.Data.Length,65536-backend.Startup.Length)]);}}

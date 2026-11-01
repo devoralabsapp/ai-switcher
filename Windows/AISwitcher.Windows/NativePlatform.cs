@@ -175,7 +175,10 @@ internal sealed partial class NativePlatform {
         if(account.UsesPrivateAntigravity)arguments.Add(AntigravityProfile.MarkerArgument);
         if(account.EffectiveMode==LaunchMode.Browser)arguments.AddRange(["--no-first-run","--no-default-browser-check","--disable-background-mode","--app="+(url??account.Agent.Url()).AbsoluteUri]);
         ct.ThrowIfCancellationRequested();
-        using var child=Process.Start(ChildEnvironment.StartInfo(exe,arguments,env,repository.ProfilePath(account)))??throw new AppError("Could not open the AI agent window. Try again or check the browser.");
+        // An OAuth browser may outlive Antigravity. Do not let it inherit and lock
+        // the profile directory as its working directory on Windows.
+        var workingDirectory=account.UsesPrivateAntigravity?Path.GetDirectoryName(exe)!:repository.ProfilePath(account);
+        using var child=Process.Start(ChildEnvironment.StartInfo(exe,arguments,env,workingDirectory))??throw new AppError("Could not open the AI agent window. Try again or check the browser.");
         FixtureStarted?.Invoke(child.Id);
         for(var i=0;i<120;i++){
             await Task.Delay(250,ct);await RefreshProcessesAsync();var running=Owned(account);if(running?.HasWindow==true){Activate(running.Id);return;}
