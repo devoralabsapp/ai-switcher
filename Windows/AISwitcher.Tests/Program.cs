@@ -114,9 +114,10 @@ Test("Deletion keeps other profiles intact",()=>{var repo=Repo("delete");var a=P
 Test("Windows deletion waits for a short-lived native file lease without losing metadata",()=>{
     if(!OperatingSystem.IsWindows())return;
     var repo=Repo("delete-transient-lease");var a=Profile();repo.PrepareProfile(a);var snapshot=new Snapshot{Accounts=[a]};repo.Save(snapshot);
-    var lease=new FileStream(Path.Combine(repo.ProfilePath(a),"native-lease"),FileMode.Create,FileAccess.ReadWrite,FileShare.ReadWrite);
+    var lease=DetachedFixtureNative.CreateFile(repo.ProfilePath(a),0x80,3,IntPtr.Zero,3,0x02000000,IntPtr.Zero);
+    if(lease.IsInvalid)throw new IOException("Could not create a native directory lease",new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error()));
     var release=Task.Run(async()=>{await Task.Delay(250);lease.Dispose();});
-    try{repo.Remove(a,snapshot);True(!Directory.Exists(repo.ProfilePath(a)));Equal(repo.Load().Accounts.Count,0);}finally{lease.Dispose();release.GetAwaiter().GetResult();}
+    var elapsed=System.Diagnostics.Stopwatch.StartNew();try{repo.Remove(a,snapshot);True(elapsed.ElapsedMilliseconds>=200);True(!Directory.Exists(repo.ProfilePath(a)));Equal(repo.Load().Accounts.Count,0);}finally{lease.Dispose();release.GetAwaiter().GetResult();}
 });
 Test("Metadata save failure rolls staged data back",()=>{var repo=Repo("rollback");var a=Profile();repo.PrepareProfile(a);var snapshot=new Snapshot{Accounts=[a]};repo.Save(snapshot);File.Delete(repo.MetadataPath);Directory.CreateDirectory(repo.MetadataPath);Throws(()=>repo.Remove(a,snapshot));True(Directory.Exists(repo.ProfilePath(a)));});
 Test("Lease prevents two managers writing the same root",()=>{var repo=Repo("lease");using var lease=repo.AcquireLease();Throws(()=>{using var other=repo.AcquireLease();});});
@@ -225,4 +226,7 @@ static async Task ProviderFixture(string[] args){
     }
 }
 
-internal static class DetachedFixtureNative { [System.Runtime.InteropServices.DllImport("kernel32.dll")]internal static extern uint GetConsoleCP(); }
+internal static class DetachedFixtureNative {
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]internal static extern uint GetConsoleCP();
+    [System.Runtime.InteropServices.DllImport("kernel32.dll",EntryPoint="CreateFileW",CharSet=System.Runtime.InteropServices.CharSet.Unicode,SetLastError=true)]internal static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(string path,uint access,uint share,IntPtr security,uint disposition,uint flags,IntPtr template);
+}
