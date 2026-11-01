@@ -52,6 +52,9 @@ Test("Antigravity identity-only data does not invent quota; signed-out, invalid 
     var status=JsonDocument.Parse("""{"userStatus":{"email":"free@example.test"}}""").RootElement;var empty=JsonDocument.Parse("""{"response":{"groups":[]}}""").RootElement;var connection=AntigravityProfile.Parse(status,empty,status);True(connection.Quota==null);True(connection.Identity.PlanType==null);
     Throws(()=>AntigravityProfile.Status(JsonDocument.Parse("{}").RootElement));var bad=JsonDocument.Parse("""{"response":{"groups":[{"buckets":[{"bucketId":"g","remainingFraction":1.2}]}]}}""").RootElement;Throws(()=>AntigravityProfile.Parse(status,bad,status));
 });
+Test("Antigravity native compatibility checks cross chunk boundaries and notice version changes",()=>{
+    var path=Path.Combine(root,"compatibility-native.exe");var data=new byte[1048576-4];File.WriteAllBytes(path,data);File.AppendAllText(path,"WSL_INTEROP Using file-based token storage because %s detected .gemini");True(AntigravityProfile.SupportsPrivateStorage(path));File.WriteAllText(path,"Unsupported native version");True(!AntigravityProfile.SupportsPrivateStorage(path));
+});
 Test("Antigravity saved email is display metadata only and private email changes remain detectable",()=>{
     var file=Path.Combine(root,"antigravity-metadata.json");File.WriteAllText(file,"""{"auth_method":"consumer","id_token_email":"a@example.test","token":{"access_token":"synthetic-do-not-display"}}""");Equal(AntigravityProfile.ReadIdentity(file)?.Email,"a@example.test");File.WriteAllText(file,"""{"auth_method":"consumer","id_token_email":"invalid"}""");True(AntigravityProfile.ReadIdentity(file)==null);
 });

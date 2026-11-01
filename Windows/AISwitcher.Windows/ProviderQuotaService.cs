@@ -38,6 +38,7 @@ internal sealed class ProviderQuotaService {
     Process Start(Account a,string executable,IEnumerable<string> args,Action<string>? diagnostic=null){
         if(a.UsesPrivateAntigravity&&!AntigravityProfile.SupportsPrivateStorage(executable))throw new AppError(AntigravityProfile.Unsupported);
         var info=ChildEnvironment.StartInfo(executable,args,EnvironmentFor(a),a.UsesPrivateAntigravity?AntigravityProfile.Home(repo,a):repo.Root);info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+        if(a.Agent==Agent.Antigravity&&args.SequenceEqual(ProviderQuota.AntigravityArguments))info.Environment["CI"]="true";
         var process=new Process{StartInfo=info};process.ErrorDataReceived+=(_,e)=>{if(e.Data!=null)diagnostic?.Invoke(e.Data);};
         if(!process.Start())throw new AppError(ProviderQuota.Invalid);process.BeginErrorReadLine();
         if(!commands.TryGetValue(a.Id,out var children))commands[a.Id]=children=[];children.Add(process);return process;

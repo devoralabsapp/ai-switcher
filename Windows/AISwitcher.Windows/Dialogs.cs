@@ -18,7 +18,7 @@ internal sealed partial class MainWindow {
         var stack=Stack(Text(a.Name,23,true),Space(5),Text(a.Agent.Name()+" · "+engine.Status(a),12,false,T.Secondary),Space(20));
         if(!a.Agent.HasQuota()){stack.Children.Add(Text(Support(a)));stack.Children.Add(Space(20));stack.Children.Add(Button(L.Format("Open %@",a.Agent.Name()),()=>_=engine.OpenAsync(a),true,T));}
         else{
-            stack.Children.Add(QuotaSummary(a,true));if(engine.Errors.TryGetValue(a.Id,out var error)){stack.Children.Add(Space(12));stack.Children.Add(Text(error));}
+            stack.Children.Add(QuotaSummary(a,true));
             stack.Children.Add(Space(18));
             if(a.Agent.ProviderQuota()){
                 var connect=Button(L["Connect account session"],async()=>{await engine.ConnectAsync(a);Build();},true,T);connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);

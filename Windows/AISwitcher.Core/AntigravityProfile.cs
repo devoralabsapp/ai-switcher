@@ -1,4 +1,5 @@
 using System.Text;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -33,10 +34,20 @@ public static class AntigravityProfile {
         env["AGY_CLI_DISABLE_AUTO_UPDATE"]="true";
         return env;
     }
+    static readonly ConcurrentDictionary<string,(long Length,long Modified,bool Supported)> compatibility=new(StringComparer.OrdinalIgnoreCase);
     public static bool SupportsPrivateStorage(string executable){
-        if(!File.Exists(executable))return false;
-        var bytes=File.ReadAllBytes(executable);
-        return new[]{"WSL_INTEROP","Using file-based token storage because %s detected",".gemini"}.All(term=>bytes.AsSpan().IndexOf(Encoding.ASCII.GetBytes(term))>=0);
+        Repository.RejectLinks(executable);var info=new FileInfo(executable);if(!info.Exists)return false;
+        var length=info.Length;var modified=info.LastWriteTimeUtc.Ticks;
+        if(compatibility.TryGetValue(info.FullName,out var cached)&&cached.Length==length&&cached.Modified==modified)return cached.Supported;
+        var terms=new[]{"WSL_INTEROP","Using file-based token storage because %s detected",".gemini"}.Select(Encoding.ASCII.GetBytes).ToArray();var found=new bool[terms.Length];
+        var overlap=terms.Max(x=>x.Length)-1;var buffer=new byte[1048576+overlap];var carry=0;
+        using(var file=File.OpenRead(executable)){
+            int read;while((read=file.Read(buffer,carry,1048576))>0){var total=carry+read;for(var i=0;i<terms.Length;i++)if(!found[i])found[i]=buffer.AsSpan(0,total).IndexOf(terms[i])>=0;
+                if(found.All(x=>x))break;carry=Math.Min(total,overlap);buffer.AsSpan(total-carry,carry).CopyTo(buffer);
+            }
+        }
+        info.Refresh();if(!info.Exists||info.Length!=length||info.LastWriteTimeUtc.Ticks!=modified)return false;
+        var supported=found.All(x=>x);compatibility[info.FullName]=(length,modified,supported);return supported;
     }
     public static bool ValidEmail(string? email)=>email is {Length:>3 and <=320}&&Regex.IsMatch(email,@"^[^\s@]+@[^\s@]+\.[^\s@]+$");
     public static Identity? ReadIdentity(string path){

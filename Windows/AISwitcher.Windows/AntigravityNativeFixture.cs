@@ -20,15 +20,17 @@ internal static partial class PreviewRunner {
         var a=new Account{Name="Native Antigravity A",Agent=Agent.Antigravity,AntigravityUsesPrivateHome=true};var b=a with{Id=Guid.NewGuid(),Name="Native Antigravity B"};var c=a with{Id=Guid.NewGuid(),Name="Native Antigravity CLI",AntigravitySignInMethod=AntigravitySignInMethod.Cli};
         foreach(var account in new[]{a,b,c}){Require(engine.SaveAccount(account),"Could not save private Antigravity fixture");repo.PrepareProfile(account);}
         engine.Preferences.Executables["antigravity"]=desktop;engine.Preferences.Executables["antigravityCli"]=cli;engine.SavePreferences();
-        var target="antigravity:gemini";var synthetic=Encoding.UTF8.GetBytes("{\"auth_method\":\"consumer\",\"id_token_email\":\"shared-canary@example.test\",\"token\":{\"access_token\":\"synthetic-fixture-no-access\",\"refresh_token\":\"synthetic-fixture-no-access\"}}");
+        var targets=new[]{"gemini:antigravity","gemini:antigravity-cli","antigravity:gemini"};var synthetic=Encoding.UTF8.GetBytes("{\"auth_method\":\"consumer\",\"id_token_email\":\"shared-canary@example.test\",\"token\":{\"access_token\":\"synthetic-fixture-no-access\",\"refresh_token\":\"synthetic-fixture-no-access\"}}");
         // Never read, overwrite or delete a pre-existing credential. This probe is
         // only allowed on the disposable CI VM and creates its own synthetic item.
-        if(CredRead(target,1,0,out var existing)){CredFree(existing);throw new InvalidOperationException("Fixture refused an existing Antigravity credential");}
-        var blob=Marshal.AllocHGlobal(synthetic.Length);bool wrote=false;Exception? primary=null;var phase="Credential Manager canary";
+        foreach(var target in targets)if(CredRead(target,1,0,out var existing)){CredFree(existing);throw new InvalidOperationException("Fixture refused an existing Antigravity credential");}
+        var blob=Marshal.AllocHGlobal(synthetic.Length);var createdTargets=new List<string>();Exception? primary=null;var phase="Credential Manager canary";
         void Phase(string value){phase=value;File.AppendAllText(Path.Combine(output,"antigravity-phases.txt"),value+"\n");}
         try{
-            Marshal.Copy(synthetic,0,blob,synthetic.Length);var credential=new FixtureCredential{Type=1,TargetName=target,UserName="gemini",BlobSize=(uint)synthetic.Length,Blob=blob,Persist=2};
-            wrote=CredWrite(ref credential,0);Require(wrote,"Disposable CI Credential Manager canary could not be created; error "+Marshal.GetLastWin32Error());
+            Marshal.Copy(synthetic,0,blob,synthetic.Length);
+            foreach(var target in targets){var credential=new FixtureCredential{Type=1,TargetName=target,UserName=target.Split(':')[1],BlobSize=(uint)synthetic.Length,Blob=blob,Persist=2};
+                Require(CredWrite(ref credential,0),"Disposable CI Credential Manager canary could not be created; error "+Marshal.GetLastWin32Error());createdTargets.Add(target);
+            }
             Phase("Two native backgrounds");
             foreach(var account in new[]{a,b}){
                 await engine.Antigravity.ConnectAsync(account,ct);Require(engine.Antigravity.IsActive(account),"Native private backend did not stay running");await ExpectSignedOut(account);
@@ -71,7 +73,7 @@ internal static partial class PreviewRunner {
             await engine.Antigravity.StopAsync(a);CheckCanary();
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
             Phase("Official CLI usage");
-            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.Environment["CI"]="true";info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
             using(var command=Process.Start(info)!){
                 command.StandardInput.Close();var captured=new StringBuilder();
                 void Capture(object sender,DataReceivedEventArgs e){if(e.Data!=null)lock(captured){if(captured.Length<1048576)captured.AppendLine(e.Data[..Math.Min(e.Data.Length,1048576-captured.Length)]);}}
@@ -79,7 +81,9 @@ internal static partial class PreviewRunner {
                 void Diagnose(){lock(captured){var text=captured.ToString();var terms=new[]{"file-based token storage","WSL environment","not signed in","not logged in","sign in","login","authenticate","authentication","no controlling terminal","not authenticated","print mode","updat","WSL","wslpath","terminal","keyring","error","permission","timeout","Listening","onboarding","color scheme"};File.WriteAllText(Path.Combine(output,"antigravity-cli-diagnostics.txt"),"Output chars: "+text.Length+"\n"+string.Join("\n",terms.Where(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase))));}}
                 try{await command.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(45),ct);}catch{Diagnose();if(!command.HasExited){command.Kill(true);await command.WaitForExitAsync();}throw;}
                 Diagnose();string text;lock(captured)text=captured.ToString();
-                Require(text.Length<1048576&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
+                var log=Path.Combine(AntigravityProfile.Home(repo,c),".gemini","antigravity-cli","cli.log");Repository.RejectLinks(log);
+                if(File.Exists(log)){using var reader=File.OpenRead(log);var bytes=new byte[524288];var count=reader.Read(bytes,0,bytes.Length);text+="\n"+Encoding.UTF8.GetString(bytes,0,count);}
+                Require(text.Length<1572864&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
                 Require(new[]{"not signed in","not logged in","sign in","login","authenticate","authentication"}.Any(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase)),"Fresh private CLI was not signed out");
                 Require(!File.Exists(AntigravityProfile.CliIdentity(repo,c)),"CLI imported a global identity into the fresh profile");
             }
@@ -90,11 +94,12 @@ internal static partial class PreviewRunner {
             Exception? cleanup=null;
             try{await engine.ShutdownAsync();}catch(Exception error){cleanup=error;}
             foreach(var account in new[]{a,b,c}){try{await engine.Platform.ForceStopAsync(account);if(repo.Load().Accounts.Any(x=>x.Id==account.Id))repo.Remove(account,repo.Load());}catch(Exception error){cleanup??=error;}}
-            try{if(wrote){CheckCanary();Require(CredDelete(target,1,0),"Could not delete fixture credential");}}catch(Exception error){cleanup??=error;}finally{Marshal.FreeHGlobal(blob);}
+            try{foreach(var target in createdTargets){CheckCredential(target);Require(CredDelete(target,1,0),"Could not delete fixture credential");}}catch(Exception error){cleanup??=error;}finally{Marshal.FreeHGlobal(blob);}
             if(cleanup!=null){File.WriteAllText(Path.Combine(output,"antigravity-cleanup-error.txt"),cleanup.ToString());if(primary==null)throw cleanup;}
         }
         async Task ExpectSignedOut(Account account,AppEngine? manager=null){try{await (manager??engine).Antigravity.ReadAsync(account,ct);}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){return;}throw new InvalidOperationException("Fresh private profile was not signed out");}
-        void CheckCanary(){Require(CredRead(target,1,0,out var pointer),"Fixture credential disappeared");try{var value=Marshal.PtrToStructure<FixtureCredential>(pointer);var bytes=new byte[value.BlobSize];Marshal.Copy(value.Blob,bytes,0,bytes.Length);Require(bytes.SequenceEqual(synthetic),"Private session changed shared Credential Manager storage");}finally{CredFree(pointer);}}
+        void CheckCanary(){foreach(var target in targets)CheckCredential(target);}
+        void CheckCredential(string target){Require(CredRead(target,1,0,out var pointer),"Fixture credential disappeared");try{var value=Marshal.PtrToStructure<FixtureCredential>(pointer);var bytes=new byte[value.BlobSize];Marshal.Copy(value.Blob,bytes,0,bytes.Length);Require(bytes.SequenceEqual(synthetic),"Private session changed shared Credential Manager storage");}finally{CredFree(pointer);}}
     }
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct FixtureCredential {public uint Flags,Type;public string? TargetName,Comment;public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;public uint BlobSize;public IntPtr Blob;public uint Persist,AttributeCount;public IntPtr Attributes;public string? TargetAlias,UserName;}
     [DllImport("advapi32.dll",EntryPoint="CredReadW",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CredRead(string target,uint type,uint flags,out IntPtr credential);
