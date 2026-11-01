@@ -15,7 +15,7 @@ internal sealed partial class NativePlatform {
         return processes.Where(p=>family.ContainsKey((p.Id,p.Created))&&SamePath(p.Executable,family[(p.Id,p.Created)].Executable)&&IsSessionRuntime(account,p)).ToArray();
     }
     bool IsSessionRuntime(Account account,OwnedProcess process){
-        if(IsAgentExecutable(account,process.Executable))return true;
+        if(IsAgentExecutable(account,process.Executable)||IsOAuthBrowser(account,process))return true;
         // Native Codex helpers inherit ownership from a verified live parent or its
         // exact exit lifetime. Matching a global executable name is never sufficient.
         var name=Path.GetFileName(process.Executable);

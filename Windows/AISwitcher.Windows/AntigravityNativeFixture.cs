@@ -24,7 +24,7 @@ internal static partial class PreviewRunner {
         // Never read, overwrite or delete a pre-existing credential. This probe is
         // only allowed on the disposable CI VM and creates its own synthetic item.
         foreach(var target in targets)if(CredRead(target,1,0,out var existing)){CredFree(existing);throw new InvalidOperationException("Fixture refused an existing Antigravity credential");}
-        var blob=Marshal.AllocHGlobal(synthetic.Length);var createdTargets=new List<string>();Exception? primary=null;var phase="Credential Manager canary";
+        var blob=Marshal.AllocHGlobal(synthetic.Length);var createdTargets=new List<string>();Exception? primary=null;var phase="Credential Manager canary";Process? unrelatedBrowser=null;
         void Phase(string value){phase=value;File.AppendAllText(Path.Combine(output,"antigravity-phases.txt"),value+"\n");}
         try{
             Marshal.Copy(synthetic,0,blob,synthetic.Length);
@@ -55,6 +55,8 @@ internal static partial class PreviewRunner {
             await engine.CloseAsync(b);Require(!engine.Running(b),"Close B left a native helper running");
             // Explicit Login must keep a local callback; no Google credentials or consent are entered.
             Phase("Browser localhost callback");
+            var browser=await engine.Platform.FindExecutableAsync("edge")??throw new InvalidOperationException("Edge is required for the browser ownership fixture");var unrelatedData=Path.Combine(root,"unrelated-browser");Directory.CreateDirectory(unrelatedData);
+            unrelatedBrowser=Process.Start(ChildEnvironment.StartInfo(browser,new[]{"--user-data-dir="+unrelatedData,"--no-first-run","--disable-background-mode","about:blank"},ChildEnvironment.Create(NativePlatform.EnvironmentValues()),Environment.GetFolderPath(Environment.SpecialFolder.System)))!;
             await engine.Antigravity.ConnectAsync(a,ct);using(var loginCancellation=CancellationTokenSource.CreateLinkedTokenSource(ct)){
                 var login=engine.Antigravity.SignInAsync(a,loginCancellation.Token);var observed=false;
                 for(var i=0;i<60&&!observed;i++){
@@ -70,7 +72,9 @@ internal static partial class PreviewRunner {
                 loginCancellation.Cancel();try{await login;}catch(OperationCanceledException){}
                 Require(observed,"Official Windows browser login did not expose a Google destination with localhost callback");
             }
-            await engine.Antigravity.StopAsync(a);CheckCanary();
+            IReadOnlyList<OwnedProcess> oauth=[];for(var i=0;i<40;i++){await engine.Platform.RefreshProcessesAsync();oauth=await engine.Platform.AntigravityOAuthBrowsersAsync(a);if(oauth.Count>0)break;await Task.Delay(250,ct);}
+            Require(oauth.Count>0,"Private browser storage was not attributed to the selected profile");Require(oauth.All(p=>p.Id!=unrelatedBrowser.Id),"Unrelated browser was adopted as a private OAuth window");
+            await engine.CloseAsync(a);Require(!engine.Running(a),"Cancelled OAuth left private browser or native processes running");Require(!unrelatedBrowser.HasExited,"Closing Antigravity stopped an unrelated browser");CheckCanary();
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
             Phase("Official CLI usage");Require(GetConsoleCP()==0,"GUI manager retained a controlling console");
             // glog's default cli.log is a link. Ask the official CLI for an
@@ -95,6 +99,7 @@ internal static partial class PreviewRunner {
         finally{
             Exception? cleanup=null;
             try{await engine.ShutdownAsync();}catch(Exception error){cleanup=error;}
+            if(unrelatedBrowser!=null){try{if(!unrelatedBrowser.HasExited){unrelatedBrowser.Kill(true);await unrelatedBrowser.WaitForExitAsync();}}catch(ArgumentException){}finally{unrelatedBrowser.Dispose();}}
             foreach(var account in new[]{a,b,c}){try{await engine.Platform.ForceStopAsync(account);if(repo.Load().Accounts.Any(x=>x.Id==account.Id))repo.Remove(account,repo.Load());}catch(Exception error){cleanup??=new InvalidOperationException("Cleanup "+account.Name,error);}}
             try{foreach(var target in createdTargets){CheckCredential(target);Require(CredDelete(target,1,0),"Could not delete fixture credential");}}catch(Exception error){cleanup??=error;}finally{Marshal.FreeHGlobal(blob);}
             if(cleanup!=null){

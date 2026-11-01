@@ -66,7 +66,7 @@ internal sealed partial class NativePlatform {
         if(account.UsesSharedApplication)return;
         await FindExecutableAsync(ExecutableKey(account));
         for(var pass=0;pass<3;pass++){
-            await RefreshProcessesAsync();Owned(account);
+            await RefreshProcessesAsync();Owned(account);await AntigravityOAuthBrowsersAsync(account);
             if(!tracked.TryGetValue(account.Id,out var family))return;
             if(!Directory.Exists(repository.ProfilePath(account)))throw new AppError("Profile storage could not be verified.");
             repository.ValidateOwned(repository.ProfilePath(account),account.Id);
@@ -205,7 +205,7 @@ internal sealed partial class NativePlatform {
                 exitedParents[(owned.Id,owned.Created)]=process.ExitTime.ToUniversalTime().ToFileTimeUtc();
             }
         }
-        await CompleteCloseAsync(account);
+        await CloseAntigravityOAuthBrowsersAsync(account);await CompleteCloseAsync(account);
     }
     internal static string AntigravityServerPath(string exe)=>Path.Combine(Path.GetDirectoryName(exe)!,"resources","bin","language_server.exe");
     static void Activate(int pid){using var process=Process.GetProcessById(pid);var window=process.MainWindowHandle;if(window!=IntPtr.Zero){ShowWindow(window,9);SetForegroundWindow(window);}}
