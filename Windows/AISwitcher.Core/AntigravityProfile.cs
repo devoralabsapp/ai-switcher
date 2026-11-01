@@ -30,6 +30,7 @@ public static class AntigravityProfile {
         // No SSH/headless flags: browser OAuth must retain its localhost callback.
         // Native vendor integration tests verify this branch on each release.
         env["WSL_INTEROP"]="AI-Switcher-private-file-storage";
+        env["AGY_CLI_DISABLE_AUTO_UPDATE"]="true";
         return env;
     }
     public static bool SupportsPrivateStorage(string executable){

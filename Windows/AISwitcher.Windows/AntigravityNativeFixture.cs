@@ -37,18 +37,6 @@ internal static partial class PreviewRunner {
             Require(!File.Exists(AntigravityProfile.DesktopIdentity(repo,a))&&!File.Exists(AntigravityProfile.DesktopIdentity(repo,b)),"Fresh profiles imported a global sign-in");
             var sentinel=Path.Combine(AntigravityProfile.Home(repo,a),"keep-fixture.txt");File.WriteAllText(sentinel,"preserved");
             await engine.Antigravity.StopAsync(a);Require(engine.Antigravity.IsActive(b),"Stopping A affected B's native backend");await engine.Antigravity.StopAsync(b);
-            // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
-            Phase("Official CLI usage");
-            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
-            using(var command=Process.Start(info)!){
-                command.StandardInput.Close();var stdout=command.StandardOutput.ReadToEndAsync(ct);var stderr=command.StandardError.ReadToEndAsync(ct);
-                try{await command.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(45),ct);}catch{if(!command.HasExited)command.Kill(true);throw;}
-                var text=(await stdout)+(await stderr);
-                Require(text.Length<1048576&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
-                Require(new[]{"not signed in","not logged in","sign in","login","authenticate","authentication"}.Any(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase)),"Fresh private CLI was not signed out");
-                Require(!File.Exists(AntigravityProfile.CliIdentity(repo,c)),"CLI imported a global identity into the fresh profile");
-            }
-            CheckCanary();
             // Both real Electron windows must own different user-data/native auth homes.
             Phase("Desktop A and B");
             await engine.OpenAsync(a);Require(engine.Platform.Owned(a)?.HasWindow==true,"Native Desktop A failed to open: "+engine.Errors.GetValueOrDefault(a.Id));
@@ -63,6 +51,21 @@ internal static partial class PreviewRunner {
             await ExpectSignedOut(a,restarted);await ExpectSignedOut(b,restarted);
             await engine.CloseAsync(a);Require(!engine.Running(a)&&engine.Running(b),"Closing reopened A affected B");
             await engine.CloseAsync(b);Require(!engine.Running(b),"Close B left a native helper running");
+            // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
+            Phase("Official CLI usage");
+            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+            using(var command=Process.Start(info)!){
+                command.StandardInput.Close();var captured=new StringBuilder();
+                void Capture(object sender,DataReceivedEventArgs e){if(e.Data!=null)lock(captured){if(captured.Length<1048576)captured.AppendLine(e.Data[..Math.Min(e.Data.Length,1048576-captured.Length)]);}}
+                command.OutputDataReceived+=Capture;command.ErrorDataReceived+=Capture;command.BeginOutputReadLine();command.BeginErrorReadLine();
+                void Diagnose(){lock(captured){var text=captured.ToString();var terms=new[]{"file-based token storage","WSL environment","not signed in","not logged in","sign in","login","authenticate","authentication","no controlling terminal","not authenticated","print mode","updat","WSL","wslpath","terminal","keyring","error","permission","timeout","Listening","onboarding","color scheme"};File.WriteAllText(Path.Combine(output,"antigravity-cli-diagnostics.txt"),"Output chars: "+text.Length+"\n"+string.Join("\n",terms.Where(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase))));}}
+                try{await command.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(45),ct);}catch{Diagnose();if(!command.HasExited){command.Kill(true);await command.WaitForExitAsync();}throw;}
+                Diagnose();string text;lock(captured)text=captured.ToString();
+                Require(text.Length<1048576&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
+                Require(new[]{"not signed in","not logged in","sign in","login","authenticate","authentication"}.Any(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase)),"Fresh private CLI was not signed out");
+                Require(!File.Exists(AntigravityProfile.CliIdentity(repo,c)),"CLI imported a global identity into the fresh profile");
+            }
+            CheckCanary();
             // Explicit Login must keep a local callback; no Google credentials or consent are entered.
             Phase("Browser localhost callback");
             await engine.Antigravity.ConnectAsync(a,ct);using(var loginCancellation=CancellationTokenSource.CreateLinkedTokenSource(ct)){
