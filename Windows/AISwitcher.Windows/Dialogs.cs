@@ -63,7 +63,7 @@ internal sealed partial class MainWindow {
             openAfter.Content=L[selected==Agent.Antigravity?"Sign in after adding":"Open after adding"];
             shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=Support(new Account{Agent=selected,LaunchMode=effective});
         }
-        agent.SelectionChanged+=(_,_)=>UpdateFields();mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();
+        agent.SelectionChanged+=(_,_)=>{UpdateFields();if(agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;};mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();if(original==null&&agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
             var selected=agentValues[agent.SelectedIndex];
             var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedIndex,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true,AntigravityUsesPrivateHome=original?.AntigravityUsesPrivateHome??(original==null&&selected==Agent.Antigravity?true:null),AntigravitySignInMethod=original?.AntigravitySignInMethod??(original==null&&selected==Agent.Antigravity?(AntigravitySignInMethod)signInMethod.SelectedIndex:null)};

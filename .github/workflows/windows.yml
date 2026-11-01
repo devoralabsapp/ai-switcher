@@ -9,6 +9,10 @@ on:
         description: Existing draft preview release to receive verified Windows assets
         type: string
         default: ''
+      antigravity_probe_only:
+        description: Run the isolated official Antigravity probe without the broader UI and Store suites
+        type: boolean
+        default: false
       daemon_probe:
         description: Attempt the ordinary-user daemon probe (hosted runner may block Task Scheduler)
         type: boolean
@@ -53,7 +57,7 @@ jobs:
         run: ../scripts/build-windows.ps1 -Runtime '${{ matrix.runtime }}'
       - name: Exercise native Windows UI and owned process lifecycle
         id: ui
-        if: matrix.runtime == 'win-x64'
+        if: matrix.runtime == 'win-x64' && !inputs.antigravity_probe_only
         run: |
           $root=Join-Path $env:TEMP ('ai-switcher-smoke.'+[Guid]::NewGuid().ToString('N'))
           $output=Join-Path $PWD 'artifacts/previews'
@@ -66,7 +70,7 @@ jobs:
           Get-Content (Join-Path $output 'ui-smoke-result.txt')
           Remove-Item -Recurse -Force $root
       - name: Exercise official Antigravity private sessions, CLI storage and browser callback
-        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && (steps.ui.outcome == 'success' || inputs.antigravity_probe_only) }}
         run: |
           $output=Join-Path $PWD 'artifacts/previews/antigravity'
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
@@ -80,7 +84,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Verify standalone EXE with real native Codex RPC (signed out)
-        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' && !inputs.antigravity_probe_only }}
         run: |
           $tools=Join-Path $env:TEMP ('ai-switcher-codex.'+[Guid]::NewGuid().ToString('N'))
           npm install --prefix $tools --no-audit --no-fund '@openai/codex@0.164.0'
@@ -104,13 +108,13 @@ jobs:
           if('${{ inputs.daemon_probe }}' -eq 'true'){../scripts/test-windows-backend.ps1 -App $app -Tools $tools -Output $output}
           Remove-Item -Recurse -Force $tools
       - name: Exercise real ChatGPT Store profiles, cache reuse and manager restart
-        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' && !inputs.antigravity_probe_only }}
         run: |
           $output=Join-Path $PWD 'artifacts/previews'
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
           ../scripts/test-windows-store-runtime.ps1 -App $app -Output $output
       - name: Exercise real Claude Store profiles, cache reuse and manager restart
-        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.runtime == 'win-x64' && steps.publish.outcome == 'success' && steps.ui.outcome == 'success' && !inputs.antigravity_probe_only }}
         run: |
           $output=Join-Path $PWD 'artifacts/previews/claude'
           $app=Join-Path $PWD 'artifacts/AI-Switcher-Windows-win-x64.exe'
@@ -136,7 +140,7 @@ jobs:
           retention-days: 14
   release-assets:
     needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != '' && !inputs.antigravity_probe_only
     runs-on: windows-2025
     timeout-minutes: 15
     permissions:

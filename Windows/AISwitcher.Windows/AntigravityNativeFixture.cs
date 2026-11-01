@@ -16,7 +16,7 @@ internal static partial class PreviewRunner {
         Require(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")=="true","Antigravity native Windows smoke requires an isolated CI runner.");
         Require(File.Exists(desktop)&&File.Exists(cli),"Official Antigravity Desktop and CLI are required");
         using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(5));var ct=timeout.Token;
-        var engine=new AppEngine(Path.Combine(root,"manager"));var repo=engine.Repository;
+        var engine=new AppEngine(Path.Combine(root,"manager"));var repo=engine.Repository;engine.Antigravity.FixtureDiagnostic=message=>File.AppendAllText(Path.Combine(output,"antigravity-startup.txt"),message+"\n");
         var a=new Account{Name="Native Antigravity A",Agent=Agent.Antigravity,AntigravityUsesPrivateHome=true};var b=a with{Id=Guid.NewGuid(),Name="Native Antigravity B"};var c=a with{Id=Guid.NewGuid(),Name="Native Antigravity CLI",AntigravitySignInMethod=AntigravitySignInMethod.Cli};
         foreach(var account in new[]{a,b,c}){Require(engine.SaveAccount(account),"Could not save private Antigravity fixture");repo.PrepareProfile(account);}
         engine.Preferences.Executables["antigravity"]=desktop;engine.Preferences.Executables["antigravityCli"]=cli;engine.SavePreferences();
@@ -24,10 +24,12 @@ internal static partial class PreviewRunner {
         // Never read, overwrite or delete a pre-existing credential. This probe is
         // only allowed on the disposable CI VM and creates its own synthetic item.
         if(CredRead(target,1,0,out var existing)){CredFree(existing);throw new InvalidOperationException("Fixture refused an existing Antigravity credential");}
-        var blob=Marshal.AllocHGlobal(synthetic.Length);bool wrote=false;
+        var blob=Marshal.AllocHGlobal(synthetic.Length);bool wrote=false;Exception? primary=null;var phase="Credential Manager canary";
+        void Phase(string value){phase=value;File.AppendAllText(Path.Combine(output,"antigravity-phases.txt"),value+"\n");}
         try{
             Marshal.Copy(synthetic,0,blob,synthetic.Length);var credential=new FixtureCredential{Type=1,TargetName=target,UserName="gemini",BlobSize=(uint)synthetic.Length,Blob=blob,Persist=2};
             wrote=CredWrite(ref credential,0);Require(wrote,"Disposable CI Credential Manager canary could not be created; error "+Marshal.GetLastWin32Error());
+            Phase("Two native backgrounds");
             foreach(var account in new[]{a,b}){
                 await engine.Antigravity.ConnectAsync(account,ct);Require(engine.Antigravity.IsActive(account),"Native private backend did not stay running");await ExpectSignedOut(account);
             }
@@ -36,6 +38,7 @@ internal static partial class PreviewRunner {
             var sentinel=Path.Combine(AntigravityProfile.Home(repo,a),"keep-fixture.txt");File.WriteAllText(sentinel,"preserved");
             await engine.Antigravity.StopAsync(a);Require(engine.Antigravity.IsActive(b),"Stopping A affected B's native backend");await engine.Antigravity.StopAsync(b);
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
+            Phase("Official CLI usage");
             var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
             using(var command=Process.Start(info)!){
                 command.StandardInput.Close();var stdout=command.StandardOutput.ReadToEndAsync(ct);var stderr=command.StandardError.ReadToEndAsync(ct);
@@ -47,17 +50,21 @@ internal static partial class PreviewRunner {
             }
             CheckCanary();
             // Both real Electron windows must own different user-data/native auth homes.
+            Phase("Desktop A and B");
             await engine.OpenAsync(a);Require(engine.Platform.Owned(a)?.HasWindow==true,"Native Desktop A failed to open: "+engine.Errors.GetValueOrDefault(a.Id));
             await engine.OpenAsync(b);Require(engine.Platform.Owned(b)?.HasWindow==true,"Native Desktop B failed to open: "+engine.Errors.GetValueOrDefault(b.Id));
             Require(engine.Platform.Owned(a)?.Id!=engine.Platform.Owned(b)?.Id,"Desktop B focused A's window");await ExpectSignedOut(a);await ExpectSignedOut(b);CheckCanary();
+            Phase("Desktop close and reopen");
             await engine.CloseAsync(a);Require(!engine.Running(a)&&engine.Running(b),"Close A did not stop its full runtime or affected B");
             await engine.OpenAsync(a);Require(engine.Platform.Owned(a)?.HasWindow==true&&File.ReadAllText(sentinel)=="preserved","Reopening Antigravity lost profile storage");
             // A fresh manager must rediscover the exact saved native process and HTTP listener.
+            Phase("Manager rediscovery");
             var restarted=new AppEngine(repo.Root);await restarted.Platform.FindExecutableAsync("antigravity");await restarted.Platform.RefreshProcessesAsync();
             await ExpectSignedOut(a,restarted);await ExpectSignedOut(b,restarted);
             await engine.CloseAsync(a);Require(!engine.Running(a)&&engine.Running(b),"Closing reopened A affected B");
             await engine.CloseAsync(b);Require(!engine.Running(b),"Close B left a native helper running");
             // Explicit Login must keep a local callback; no Google credentials or consent are entered.
+            Phase("Browser localhost callback");
             await engine.Antigravity.ConnectAsync(a,ct);using(var loginCancellation=CancellationTokenSource.CreateLinkedTokenSource(ct)){
                 var login=engine.Antigravity.SignInAsync(a,loginCancellation.Token);var observed=false;
                 for(var i=0;i<60&&!observed;i++){
@@ -75,9 +82,13 @@ internal static partial class PreviewRunner {
             }
             await engine.Antigravity.StopAsync(a);CheckCanary();
             File.WriteAllText(Path.Combine(output,"antigravity-native-result.txt"),"PASS: official Windows Antigravity Desktop and CLI; private vendor file storage selected; two independent fresh native backgrounds and Desktop windows stay signed out with a global synthetic Credential Manager canary present; CLI /usage uses private storage without model input; separate native HTTP/CSRF endpoints; close/reopen and manager restart preserve ownership and data; closing A preserves B; global canary unchanged; explicit Google browser Login uses a localhost callback and is cancelled before authentication. Live Google sign-in and live subscription quotas are not exercised.\n");
-        }finally{
-            await engine.ShutdownAsync();foreach(var account in new[]{a,b,c}){await engine.Platform.ForceStopAsync(account);if(repo.Load().Accounts.Any(x=>x.Id==account.Id))repo.Remove(account,repo.Load());}
-            if(wrote){CheckCanary();Require(CredDelete(target,1,0),"Could not delete fixture credential");}Marshal.FreeHGlobal(blob);
+        }catch(Exception error){primary=error;File.WriteAllText(Path.Combine(output,"antigravity-primary-error.txt"),phase+"\n"+error);throw;}
+        finally{
+            Exception? cleanup=null;
+            try{await engine.ShutdownAsync();}catch(Exception error){cleanup=error;}
+            foreach(var account in new[]{a,b,c}){try{await engine.Platform.ForceStopAsync(account);if(repo.Load().Accounts.Any(x=>x.Id==account.Id))repo.Remove(account,repo.Load());}catch(Exception error){cleanup??=error;}}
+            try{if(wrote){CheckCanary();Require(CredDelete(target,1,0),"Could not delete fixture credential");}}catch(Exception error){cleanup??=error;}finally{Marshal.FreeHGlobal(blob);}
+            if(cleanup!=null){File.WriteAllText(Path.Combine(output,"antigravity-cleanup-error.txt"),cleanup.ToString());if(primary==null)throw cleanup;}
         }
         async Task ExpectSignedOut(Account account,AppEngine? manager=null){try{await (manager??engine).Antigravity.ReadAsync(account,ct);}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){return;}throw new InvalidOperationException("Fresh private profile was not signed out");}
         void CheckCanary(){Require(CredRead(target,1,0,out var pointer),"Fixture credential disappeared");try{var value=Marshal.PtrToStructure<FixtureCredential>(pointer);var bytes=new byte[value.BlobSize];Marshal.Copy(value.Blob,bytes,0,bytes.Length);Require(bytes.SequenceEqual(synthetic),"Private session changed shared Credential Manager storage");}finally{CredFree(pointer);}}

@@ -152,7 +152,7 @@ internal sealed class AppEngine {
             finally{InstallingProviders.Remove(a.Agent);installationTasks.Remove(a.Agent);Notify();}
         }
     }
-    public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,ct=>ReadAsync(a,ct),report);}
+    public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,async ct=>{if(report&&a.UsesAntigravityDesktopQuota&&!Antigravity.IsActive(a)&&Platform.Owned(a)==null){Repository.PrepareProfile(a);await Antigravity.ConnectAsync(a,ct);}await ReadAsync(a,ct);},report);}
     async Task ReadAsync(Account a,CancellationToken ct){
         Checks[a.Id]=DateTimeOffset.UtcNow;
         try{
