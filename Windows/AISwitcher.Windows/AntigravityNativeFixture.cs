@@ -72,8 +72,9 @@ internal static partial class PreviewRunner {
                 loginCancellation.Cancel();try{await login;}catch(OperationCanceledException){}
                 Require(observed,"Official Windows browser login did not expose a Google destination with localhost callback");
             }
-            IReadOnlyList<OwnedProcess> oauth=[];for(var i=0;i<40;i++){await engine.Platform.RefreshProcessesAsync();oauth=await engine.Platform.AntigravityOAuthBrowsersAsync(a);if(oauth.Count>0)break;await Task.Delay(250,ct);}
+            IReadOnlyList<OwnedProcess> oauth=[];for(var i=0;i<40;i++){await engine.ObserveAsync(false);oauth=await engine.Platform.AntigravityOAuthBrowsersAsync(a);if(oauth.Count>0)break;await Task.Delay(250,ct);}
             Require(oauth.Count>0,"Private browser storage was not attributed to the selected profile");Require(oauth.All(p=>p.Id!=unrelatedBrowser.Id),"Unrelated browser was adopted as a private OAuth window");
+            await engine.Antigravity.StopAsync(a);await engine.ObserveAsync(false);Require(engine.Running(a),"Private OAuth browser must retain a closeable session after cancellation");
             await engine.CloseAsync(a);Require(!engine.Running(a),"Cancelled OAuth left private browser or native processes running");Require(!unrelatedBrowser.HasExited,"Closing Antigravity stopped an unrelated browser");CheckCanary();
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
             Phase("Official CLI usage");Require(GetConsoleCP()==0,"GUI manager retained a controlling console");

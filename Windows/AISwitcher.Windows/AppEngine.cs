@@ -185,6 +185,7 @@ internal sealed class AppEngine {
         try{
             await Platform.RefreshProcessesAsync();LifecycleError=null;
             foreach(var a in Snapshot.Accounts.Where(x=>x.UsesCodexDesktop&&!Busy.Contains(x.Id)))await Backend.DiscoverAsync(a);
+            foreach(var a in Snapshot.Accounts.Where(x=>x.UsesPrivateAntigravity&&!Busy.Contains(x.Id)))await Platform.AntigravityOAuthBrowsersAsync(a);
             Notify();if(!refresh||StoppingAll)return;
             var sweep=DateTimeOffset.UtcNow-lastSweep>TimeSpan.FromMinutes(5);
             foreach(var account in Snapshot.Accounts.ToArray()){
