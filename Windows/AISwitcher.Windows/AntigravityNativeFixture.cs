@@ -73,7 +73,10 @@ internal static partial class PreviewRunner {
             await engine.Antigravity.StopAsync(a);CheckCanary();
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
             Phase("Official CLI usage");Require(GetConsoleCP()==0,"GUI manager retained a controlling console");
-            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.Environment["CI"]="true";info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+            // glog's default cli.log is a link. Ask the official CLI for an
+            // ordinary, profile-owned log rather than following that alias.
+            var log=Path.Combine(AntigravityProfile.Home(repo,c),"native-fixture.log");Repository.RejectLinks(log);
+            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments.Concat(new[]{"--log-file",log}),AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.Environment["CI"]="true";info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
             await using(var command=DetachedCommand.Start(info)){
                 command.Input.Close();var captured=new StringBuilder();
                 async Task Capture(StreamReader reader){var buffer=new char[4096];int count;while((count=await reader.ReadAsync(buffer,ct))>0)lock(captured){if(captured.Length+count>1048576)throw new InvalidOperationException("CLI probe output too large");captured.Append(buffer,0,count);}}
@@ -81,7 +84,7 @@ internal static partial class PreviewRunner {
                 void Diagnose(){lock(captured){var text=captured.ToString();var terms=new[]{"file-based token storage","WSL environment","not signed in","not logged in","sign in","login","authenticate","authentication","no controlling terminal","not authenticated","print mode","updat","WSL","wslpath","terminal","keyring","error","permission","timeout","Listening","onboarding","color scheme"};File.WriteAllText(Path.Combine(output,"antigravity-cli-diagnostics.txt"),"Output chars: "+text.Length+"\n"+string.Join("\n",terms.Where(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase))));}}
                 try{await command.Process.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(30),ct);await Task.WhenAll(stdout,stderr);}catch{Diagnose();if(!command.Process.HasExited){command.Process.Kill(true);await command.Process.WaitForExitAsync();}throw;}
                 Diagnose();string text;lock(captured)text=captured.ToString();
-                var log=Path.Combine(AntigravityProfile.Home(repo,c),".gemini","antigravity-cli","cli.log");Repository.RejectLinks(log);
+                Repository.RejectLinks(log);
                 if(File.Exists(log)){using var reader=File.OpenRead(log);var bytes=new byte[524288];var count=reader.Read(bytes,0,bytes.Length);text+="\n"+Encoding.UTF8.GetString(bytes,0,count);}
                 Require(text.Length<1572864&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
                 Require(ProviderQuota.AntigravityRequiresSignIn(text),"Fresh private CLI was not signed out");
@@ -93,7 +96,7 @@ internal static partial class PreviewRunner {
         finally{
             Exception? cleanup=null;
             try{await engine.ShutdownAsync();}catch(Exception error){cleanup=error;}
-            foreach(var account in new[]{a,b,c}){try{await engine.Platform.ForceStopAsync(account);if(repo.Load().Accounts.Any(x=>x.Id==account.Id))repo.Remove(account,repo.Load());}catch(Exception error){cleanup??=error;}}
+            foreach(var account in new[]{a,b,c}){try{await engine.Platform.ForceStopAsync(account);if(repo.Load().Accounts.Any(x=>x.Id==account.Id))repo.Remove(account,repo.Load());}catch(Exception error){cleanup??=new InvalidOperationException("Cleanup "+account.Name,error);}}
             try{foreach(var target in createdTargets){CheckCredential(target);Require(CredDelete(target,1,0),"Could not delete fixture credential");}}catch(Exception error){cleanup??=error;}finally{Marshal.FreeHGlobal(blob);}
             if(cleanup!=null){File.WriteAllText(Path.Combine(output,"antigravity-cleanup-error.txt"),cleanup.ToString());if(primary==null)throw cleanup;}
         }

@@ -19,7 +19,7 @@ Windows 11 là môi trường kiểm tra chính. Bản preview chưa ký số; f
 ## Những phần đã có
 
 - Hồ sơ ChatGPT Desktop và Claude Desktop với thư mục dữ liệu riêng cho từng tài khoản; mở lại đúng cửa sổ và đóng đúng phiên.
-- Chrome, Edge, Brave cho ChatGPT, Claude, Gemini, Perplexity, DeepSeek. Antigravity mở ứng dụng đã cài và dùng đăng nhập chung của ứng dụng.
+- Chrome, Edge, Brave cho ChatGPT, Claude, Gemini, Perplexity, DeepSeek. Antigravity hỗ trợ nhiều hồ sơ riêng, đăng nhập Google trên trình duyệt hoặc CLI, email/gói và quota từng nhóm model; mục dùng chung cũ được giữ nguyên.
 - Bộ lọc agent bên trái, tìm kiếm, yêu thích, gần đây và màu riêng cho hồ sơ.
 - Tiếng Việt/Anh và 11 theme: Light, Dark, Terminal, Code, Dracula, Playful Retro Neo-Brutalism, Terminal Black, Halloween, Christmas, Tet Holiday, Black Friday.
 - Nút Quota-only cạnh Add account; tắt chế độ này tự về Account cards.
