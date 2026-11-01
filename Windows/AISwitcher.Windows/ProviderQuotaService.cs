@@ -137,7 +137,7 @@ internal sealed class ProviderQuotaService {
     public async Task<Connection> SignInAsync(Account account,CancellationToken ct){
         var executable=Executable(account.Agent);if(account.UsesPrivateAntigravity&&!AntigravityProfile.SupportsPrivateStorage(executable))throw new AppError(AntigravityProfile.Unsupported);
         var env=EnvironmentFor(account);var script="& '"+executable.Replace("'","''")+"'"+(account.Agent==Agent.Claude?" auth login":"");
-        var info=ChildEnvironment.StartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"WindowsPowerShell","v1.0","powershell.exe"),new[]{"-NoProfile","-NoExit","-EncodedCommand",Convert.ToBase64String(Encoding.Unicode.GetBytes(script))},env,account.UsesPrivateAntigravity?Path.GetDirectoryName(executable)!:repo.Root);info.CreateNoWindow=false;
+        var info=ChildEnvironment.StartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"WindowsPowerShell","v1.0","powershell.exe"),new[]{"-NoProfile","-NoExit","-EncodedCommand",Convert.ToBase64String(Encoding.Unicode.GetBytes(script))},env,account.UsesPrivateAntigravity?Environment.GetFolderPath(Environment.SpecialFolder.System):repo.Root);info.CreateNoWindow=false;
         var process=Process.Start(info)??throw new AppError(ProviderQuota.SignedOut);if(!commands.TryGetValue(account.Id,out var children))commands[account.Id]=children=[];children.Add(process);
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct);timeout.CancelAfter(TimeSpan.FromMinutes(10));
         try{

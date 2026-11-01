@@ -177,7 +177,7 @@ internal sealed partial class NativePlatform {
         ct.ThrowIfCancellationRequested();
         // An OAuth browser may outlive Antigravity. Do not let it inherit and lock
         // the profile directory as its working directory on Windows.
-        var workingDirectory=account.UsesPrivateAntigravity?Path.GetDirectoryName(exe)!:repository.ProfilePath(account);
+        var workingDirectory=account.UsesPrivateAntigravity?Environment.GetFolderPath(Environment.SpecialFolder.System):repository.ProfilePath(account);
         using var child=Process.Start(ChildEnvironment.StartInfo(exe,arguments,env,workingDirectory))??throw new AppError("Could not open the AI agent window. Try again or check the browser.");
         FixtureStarted?.Invoke(child.Id);
         for(var i=0;i<120;i++){
