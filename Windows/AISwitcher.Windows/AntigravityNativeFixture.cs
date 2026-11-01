@@ -106,7 +106,7 @@ internal static partial class PreviewRunner {
                     using var diagnostic=Process.Start(start)!;var text=diagnostic.StandardOutput.ReadToEndAsync();var error=diagnostic.StandardError.ReadToEndAsync();await diagnostic.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(20));
                     File.WriteAllText(Path.Combine(output,"antigravity-live-fixture-handles.txt"),(await text)+"\n"+(await error));
                 }
-                File.WriteAllText(Path.Combine(output,"antigravity-fixture-attributes.txt"),string.Join("\n",new[]{a,b,c}.Select(account=>account.Name+": "+(Directory.Exists(repo.ProfilePath(account))?File.GetAttributes(repo.ProfilePath(account)).ToString():"removed"))));
+                File.WriteAllText(Path.Combine(output,"antigravity-fixture-attributes.txt"),string.Join("\n",new[]{a,b,c}.Select(account=>account.Name+": "+(Directory.Exists(repo.ProfilePath(account))?File.GetAttributes(repo.ProfilePath(account)).ToString()+"; "+System.IO.FileSystemAclExtensions.GetAccessControl(new DirectoryInfo(repo.ProfilePath(account))).GetSecurityDescriptorSddlForm(System.Security.AccessControl.AccessControlSections.Access|System.Security.AccessControl.AccessControlSections.Owner|System.Security.AccessControl.AccessControlSections.Group):"removed"))));
                 if(primary==null)throw cleanup;
             }
         }

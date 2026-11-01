@@ -87,13 +87,23 @@ public sealed class Repository {
         if (!File.Exists(config)) File.WriteAllText(config, "cli_auth_credentials_store = \"file\"\n[analytics]\nenabled = false\n");
     }
     public IEnumerable<string> AllProfilePaths(Guid id) => new[] { "Profiles", "Claude", "Desktop", "Codex", "Antigravity" }.Select(x => Path.Combine(Root, x, id.ToString("D"))).Append(BackendPath(id));
+    void MoveOwned(string source,string destination,Guid id) {
+        // Native Windows apps and their file-system filters can finish releasing
+        // a directory just after process exit. Retry only transient access/sharing
+        // failures; never change permissions or bypass the ownership checks.
+        for(var attempt=0;;attempt++){
+            ValidateOwned(source,id);RejectLinks(destination);
+            try{Directory.Move(source,destination);return;}
+            catch(IOException error)when(OperatingSystem.IsWindows()&&attempt<10&&(error.HResult&0xffff) is 5 or 32){Thread.Sleep(100);}
+        }
+    }
     public Snapshot Remove(Account account, Snapshot snapshot) {
         var moved = new List<(string Source, string Staged)>();
         foreach (var path in AllProfilePaths(account.Id)) ValidateOwned(path, account.Id);
         try {
             foreach (var path in AllProfilePaths(account.Id).Where(Directory.Exists)) {
                 var staged = Path.Combine(Path.GetDirectoryName(path)!, ".removed-" + Guid.NewGuid().ToString("N"));
-                Directory.Move(path, staged); moved.Add((path, staged));
+                MoveOwned(path,staged,account.Id); moved.Add((path, staged));
             }
             var updated = snapshot with { Accounts = snapshot.Accounts.Where(x => x.Id != account.Id).ToList(), LastOpenedId = snapshot.LastOpenedId == account.Id ? null : snapshot.LastOpenedId };
             Save(updated);
@@ -104,7 +114,7 @@ public sealed class Repository {
             // Restore staged directories only if metadata still references this account.
             bool stillReferenced;
             try { stillReferenced = Load().Accounts.Any(x => x.Id == account.Id); } catch { stillReferenced = true; }
-            if (stillReferenced) foreach (var item in moved.AsEnumerable().Reverse()) if (Directory.Exists(item.Staged) && !Directory.Exists(item.Source)) Directory.Move(item.Staged, item.Source);
+            if (stillReferenced) foreach (var item in moved.AsEnumerable().Reverse()) if (Directory.Exists(item.Staged) && !Directory.Exists(item.Source)) MoveOwned(item.Staged,item.Source,account.Id);
             throw;
         }
     }

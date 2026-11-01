@@ -111,6 +111,13 @@ Test("Existing unowned directory cannot be adopted",()=>{var repo=Repo("unowned"
 Test("Ownership marker binds both root and account",()=>{var repo=Repo("owner");var a=Profile();repo.PrepareProfile(a);var marker=Path.Combine(repo.ProfilePath(a),"ai-switcher-profile.json");File.WriteAllText(marker,"{\"root\":\"wrong\",\"id\":\""+a.Id+"\"}");Throws(()=>repo.PrepareProfile(a));Throws(()=>repo.Remove(a,new(){Accounts=[a]}));});
 Test("Symlinked profile directory is rejected without following target",()=>{var repo=Repo("link");var a=Profile();var target=Path.Combine(root,"outside");Directory.CreateDirectory(target);Directory.CreateDirectory(Path.GetDirectoryName(repo.ProfilePath(a))!);Directory.CreateSymbolicLink(repo.ProfilePath(a),target);Throws(()=>repo.PrepareProfile(a));True(Directory.Exists(target));});
 Test("Deletion keeps other profiles intact",()=>{var repo=Repo("delete");var a=Profile("A");var b=Profile("B",Agent.Claude);repo.PrepareProfile(a);repo.PrepareProfile(b);var snapshot=new Snapshot{Accounts=[a,b]};repo.Save(snapshot);repo.Remove(a,snapshot);Equal(repo.Load().Accounts.Single().Id,b.Id);True(Directory.Exists(repo.DataPath(b)));True(!Directory.Exists(repo.ProfilePath(a)));});
+Test("Windows deletion waits for a short-lived native file lease without losing metadata",()=>{
+    if(!OperatingSystem.IsWindows())return;
+    var repo=Repo("delete-transient-lease");var a=Profile();repo.PrepareProfile(a);var snapshot=new Snapshot{Accounts=[a]};repo.Save(snapshot);
+    var lease=new FileStream(Path.Combine(repo.ProfilePath(a),"native-lease"),FileMode.Create,FileAccess.ReadWrite,FileShare.ReadWrite);
+    var release=Task.Run(async()=>{await Task.Delay(250);lease.Dispose();});
+    try{repo.Remove(a,snapshot);True(!Directory.Exists(repo.ProfilePath(a)));Equal(repo.Load().Accounts.Count,0);}finally{lease.Dispose();release.GetAwaiter().GetResult();}
+});
 Test("Metadata save failure rolls staged data back",()=>{var repo=Repo("rollback");var a=Profile();repo.PrepareProfile(a);var snapshot=new Snapshot{Accounts=[a]};repo.Save(snapshot);File.Delete(repo.MetadataPath);Directory.CreateDirectory(repo.MetadataPath);Throws(()=>repo.Remove(a,snapshot));True(Directory.Exists(repo.ProfilePath(a)));});
 Test("Lease prevents two managers writing the same root",()=>{var repo=Repo("lease");using var lease=repo.AcquireLease();Throws(()=>{using var other=repo.AcquireLease();});});
 Test("Browser/Desktop switching preserves separate storage",()=>{var repo=Repo("modes");var desktop=Profile(agent:Agent.Claude);var browser=desktop with{LaunchMode=LaunchMode.Browser};repo.PrepareProfile(desktop);repo.PrepareProfile(browser);True(repo.DataPath(desktop)!=repo.DataPath(browser));True(Directory.Exists(repo.DataPath(desktop)));});
