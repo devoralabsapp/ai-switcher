@@ -25,6 +25,10 @@ Test("Antigravity preserves legacy sign-in and permits multiple private profiles
     Throws(()=>new Snapshot{Accounts=[legacy,Profile("Duplicate shared",Agent.Antigravity)]}.Validate());repo.PrepareProfile(a);repo.PrepareProfile(b);True(repo.DataPath(a)!=repo.DataPath(b));True(AntigravityProfile.Home(repo,a)!=AntigravityProfile.Home(repo,b));
     File.WriteAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep"),"B");repo.Remove(a,repo.Load());Equal(File.ReadAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep")),"B");
 });
+Test("Fresh Antigravity skips only the irrelevant IDE migration prompt and preserves existing UI settings",()=>{
+    var repo=Repo("antigravity-new-ui");var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};repo.PrepareProfile(a);var path=Path.Combine(repo.DataPath(a),"app_storage.json");using(var doc=JsonDocument.Parse(File.ReadAllText(path))){Equal(doc.RootElement.EnumerateObject().Count(),1);Equal(doc.RootElement.GetProperty("ide-install-wizard-shown").GetString(),"true");}
+    File.WriteAllText(path,"{\"user-setting\":\"preserve\"}");repo.PrepareProfile(a);Equal(File.ReadAllText(path),"{\"user-setting\":\"preserve\"}");
+});
 Test("Antigravity private environment excludes inherited auth and places native Windows home aliases in one profile",()=>{
     var repo=Repo("antigravity-env");var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};
     var env=AntigravityProfile.Environment(new Dictionary<string,string>{{"PATH","system path"},{"SystemRoot","system"},{"USERPROFILE","global home"},{"APPDATA","global data"},{"JETSKI_OAUTH_TOKEN","must not inherit"},{"ANTIGRAVITY_CREDENTIAL_SCOPE","global"},{"GOOGLE_API_KEY","secret"},{"SSH_CONNECTION","remote"},{"NODE_OPTIONS","inject"}},repo,a);

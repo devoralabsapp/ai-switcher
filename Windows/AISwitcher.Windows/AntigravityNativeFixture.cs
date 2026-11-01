@@ -16,7 +16,7 @@ internal static partial class PreviewRunner {
         Require(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")=="true","Antigravity native Windows smoke requires an isolated CI runner.");
         Require(File.Exists(desktop)&&File.Exists(cli),"Official Antigravity Desktop and CLI are required");
         using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(5));var ct=timeout.Token;
-        var engine=new AppEngine(Path.Combine(root,"manager"));var repo=engine.Repository;engine.Antigravity.FixtureDiagnostic=message=>File.AppendAllText(Path.Combine(output,"antigravity-startup.txt"),message+"\n");
+        var engine=new AppEngine(Path.Combine(root,"manager"));var repo=engine.Repository;var diagnosticLock=new object();engine.Antigravity.FixtureDiagnostic=message=>{lock(diagnosticLock)File.AppendAllText(Path.Combine(output,"antigravity-startup.txt"),message+"\n");};
         var a=new Account{Name="Native Antigravity A",Agent=Agent.Antigravity,AntigravityUsesPrivateHome=true};var b=a with{Id=Guid.NewGuid(),Name="Native Antigravity B"};var c=a with{Id=Guid.NewGuid(),Name="Native Antigravity CLI",AntigravitySignInMethod=AntigravitySignInMethod.Cli};
         foreach(var account in new[]{a,b,c}){Require(engine.SaveAccount(account),"Could not save private Antigravity fixture");repo.PrepareProfile(account);}
         engine.Preferences.Executables["antigravity"]=desktop;engine.Preferences.Executables["antigravityCli"]=cli;engine.SavePreferences();

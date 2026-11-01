@@ -101,7 +101,7 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
                     if(attempt==0||attempt==59){FixtureDiagnostic?.Invoke("Desktop native candidates: "+children.Length+"; session runtimes: "+owned.Count);foreach(var child in platform.Processes.Where(p=>p.ParentId==root.Id))FixtureDiagnostic?.Invoke("Direct child executable: "+Path.GetFileName(child.Executable));foreach(var child in children)FixtureDiagnostic?.Invoke("Candidate csrf flag: "+(Argument(child.Arguments,"--csrf_token")!=null)+"; listener count: "+ListeningPorts(child.Id).Count);}
                     if(children.Length==1){var child=children[0];var csrf=Argument(child.Arguments,"--csrf_token");if(csrf is {Length:>0 and <=256}&&!csrf.Any(char.IsControl)){
                         foreach(var listening in ListeningPorts(child.Id)){
-                            foreach(var tls in new[]{false,true}){
+                            foreach(var tls in child.Arguments.Contains("--https_server_port")?new[]{true,false}:new[]{false,true}){
                                 var value=new Endpoint(root.Id,root.Created,child.Id,child.Created,listening,csrf,native,tls);
                                 try{await Send(value,"GetUserStatus",ct,true);candidate=value;break;}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){candidate=value;break;}catch(Exception error)when(error is HttpRequestException or TaskCanceledException or JsonException||error is AppError){ct.ThrowIfCancellationRequested();if(attempt==0||attempt==59)FixtureDiagnostic?.Invoke("Native status probe "+(tls?"TLS":"HTTP")+": "+(error is AppError appError?appError.Key:error.GetType().Name));}
                             }

@@ -68,10 +68,17 @@ public sealed class Repository {
         File.WriteAllText(Path.Combine(home, "ai-switcher-profile.json"), JsonSerializer.Serialize(new Owner(Root, id), Json.Options));
     }
     public void PrepareProfile(Account account) {
-        account.Validate(); PrepareOwned(ProfilePath(account), account.Id);
+        account.Validate(); var fresh=!Directory.Exists(ProfilePath(account));PrepareOwned(ProfilePath(account), account.Id);
         if (account.EffectiveMode == LaunchMode.Desktop) EnsureDirectory(DataPath(account));
         if (account.Agent == Agent.Claude && account.EffectiveMode == LaunchMode.Desktop) EnsureDirectory(CodeConfig(account));
-        if(account.UsesPrivateAntigravity){foreach(var path in AntigravityProfile.Directories(this,account)){RejectLinks(path);Directory.CreateDirectory(path);}}
+        if(account.UsesPrivateAntigravity){
+            foreach(var path in AntigravityProfile.Directories(this,account)){RejectLinks(path);Directory.CreateDirectory(path);}
+            // This brand-new home has no old IDE data to migrate. The background
+            // Hub creates .gemini/antigravity, which otherwise triggers the vendor's
+            // optional IDE migration wizard on the first Desktop launch.
+            // Set only its migration UI flag; never consent/auth/onboarding state.
+            if(fresh){var storage=Path.Combine(DataPath(account),"app_storage.json");RejectLinks(storage);File.WriteAllText(storage,"{\"ide-install-wizard-shown\":\"true\"}");}
+        }
     }
     public void PrepareQuota(Account account) {
         if (!account.Agent.HasQuota()) throw new AppError("Quota is not available for this agent.");
