@@ -17,6 +17,10 @@ public static class ProviderQuota {
         // JSONL must stay compact on Windows too; stripping LF from pretty CRLF JSON leaves record separators.
         return JsonSerializer.Serialize(new{type="control_request",request_id=id,request});
     }
+    public static bool AntigravityRequiresSignIn(string diagnostics){
+        var text=diagnostics.Length>16384?diagnostics[^16384..]:diagnostics;
+        return new[]{"error: authentication required. run ","print mode: not logged in and no controlling terminal","not authenticated: no stored credentials found","you are not logged into antigravity."}.Any(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase));
+    }
     public const string Unavailable="The provider has not returned subscription quota. Previous data is kept.";
     public const string Invalid="The provider quota response could not be verified. Previous data is kept.";
     public const string SignedOut="The provider session is signed out. Connect account session to sign in.";

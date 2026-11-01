@@ -28,7 +28,13 @@ try {
     if((Get-FileHash $cli -Algorithm SHA512).Hash.ToLowerInvariant() -ne $manifest.sha512.ToLowerInvariant()){throw 'Official CLI checksum mismatch'}
     "Hub: $($desktop.VersionInfo.ProductVersion); CLI: $($manifest.version); synthetic Credential Manager fixture only" | Set-Content (Join-Path $Output 'antigravity-vendor-versions.txt')
     $process=Start-Process $App -ArgumentList @('--data-dir',"`"$root`"",'--output',"`"$Output`"",'--antigravity-smoke-test','--antigravity-executable',"`"$($desktop.FullName)`"",'--antigravity-cli-executable',"`"$cli`"") -PassThru
-    if(-not $process.WaitForExit(420000)){$process.Kill();throw 'Native Antigravity smoke timed out'}
+    $deadline=[DateTime]::UtcNow.AddMinutes(7)
+    $lastPhase=''
+    while(-not $process.WaitForExit(2000)){
+        $phaseFile=Join-Path $Output 'antigravity-phases.txt'
+        if(Test-Path $phaseFile){$phase=(Get-Content $phaseFile -Tail 1);if($phase -ne $lastPhase){Write-Host "Native Antigravity phase: $phase";$lastPhase=$phase}}
+        if([DateTime]::UtcNow -gt $deadline){$process.Kill();throw 'Native Antigravity smoke timed out'}
+    }
     if($process.ExitCode -ne 0){if(Test-Path (Join-Path $Output 'antigravity-smoke-error.txt')){Get-Content (Join-Path $Output 'antigravity-smoke-error.txt')};throw 'Native Antigravity smoke failed'}
     Get-Content (Join-Path $Output 'antigravity-native-result.txt')
 }finally{

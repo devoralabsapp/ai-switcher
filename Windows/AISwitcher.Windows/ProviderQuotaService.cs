@@ -35,20 +35,30 @@ internal sealed class ProviderQuotaService {
         if(a.Agent==Agent.Claude){var desktop=a with{LaunchMode=LaunchMode.Desktop};repo.PrepareProfile(desktop);NativePlatform.ProtectDirectory(repo.ProfilePath(desktop));env["CLAUDE_CONFIG_DIR"]=Config(a);}
         return env;
     }
-    Process Start(Account a,string executable,IEnumerable<string> args){
+    Process Start(Account a,string executable,IEnumerable<string> args,Action<string>? diagnostic=null){
         if(a.UsesPrivateAntigravity&&!AntigravityProfile.SupportsPrivateStorage(executable))throw new AppError(AntigravityProfile.Unsupported);
         var info=ChildEnvironment.StartInfo(executable,args,EnvironmentFor(a),a.UsesPrivateAntigravity?AntigravityProfile.Home(repo,a):repo.Root);info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
-        var process=new Process{StartInfo=info};process.ErrorDataReceived+=(_,_)=>{};
+        var process=new Process{StartInfo=info};process.ErrorDataReceived+=(_,e)=>{if(e.Data!=null)diagnostic?.Invoke(e.Data);};
         if(!process.Start())throw new AppError(ProviderQuota.Invalid);process.BeginErrorReadLine();
         if(!commands.TryGetValue(a.Id,out var children))commands[a.Id]=children=[];children.Add(process);return process;
     }
     static async Task StopProcess(Process process){try{if(!process.HasExited){process.Kill(true);await process.WaitForExitAsync();}}catch(InvalidOperationException){}finally{process.Dispose();}}
     async Task<string> Run(Account a,string executable,string[] args,CancellationToken ct){
-        var process=Start(a,executable,args);
+        var signOut=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var detect=a.Agent==Agent.Antigravity&&args.SequenceEqual(ProviderQuota.AntigravityArguments);
+        var process=Start(a,executable,args,line=>{if(detect&&ProviderQuota.AntigravityRequiresSignIn(line))signOut.TrySetResult();});
         try{
             process.StandardInput.Close();var data=new StringBuilder();var buffer=new char[4096];int count;
-            while((count=await process.StandardOutput.ReadAsync(buffer,ct))>0){if(data.Length+count>1048576)throw new AppError(ProviderQuota.Invalid);data.Append(buffer,0,count);}
-            await process.WaitForExitAsync(ct);return data.ToString();
+            async Task<string> Collect(){
+                while((count=await process.StandardOutput.ReadAsync(buffer,ct))>0){if(data.Length+count>1048576)throw new AppError(ProviderQuota.Invalid);data.Append(buffer,0,count);}
+                await process.WaitForExitAsync(ct);return data.ToString();
+            }
+            var collect=Collect();
+            if(await Task.WhenAny(collect,signOut.Task)==signOut.Task){
+                ct.ThrowIfCancellationRequested();await StopBeforeDrain();try{await collect;}catch(IOException){}catch(OperationCanceledException){}throw new AppError(ProviderQuota.SignedOut);
+            }
+            var text=await collect;if(detect&&ProviderQuota.AntigravityRequiresSignIn(text))throw new AppError(ProviderQuota.SignedOut);return text;
+            async Task StopBeforeDrain(){if(!process.HasExited){process.Kill(true);await process.WaitForExitAsync();}}
         }finally{commands[a.Id].Remove(process);await StopProcess(process);}
     }
     async Task<JsonElement> Control(Process process,string subtype,CancellationToken ct){

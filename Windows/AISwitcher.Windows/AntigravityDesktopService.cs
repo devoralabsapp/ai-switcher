@@ -78,14 +78,16 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
                 using var current=Process.GetCurrentProcess();candidate=new(current.Id,current.StartTime.ToUniversalTime().ToFileTimeUtc(),background.Process.Id,background.Process.StartTime.ToUniversalTime().ToFileTimeUtc(),port,background.Csrf,background.Process.StartInfo.FileName);
             }else{
                 await platform.RefreshProcessesAsync();var root=platform.Owned(account);
+                if(attempt==0||attempt==59)FixtureDiagnostic?.Invoke("Desktop root: "+(root==null?"missing":"present"));
                 if(root!=null){
                     if(!root.Arguments.Contains(AntigravityProfile.MarkerArgument))throw new AppError("Close this Antigravity account session once, then open it again to apply separate sign-in storage. Your data is kept.");
                     var app=await platform.FindExecutableAsync("antigravity");if(app==null)throw new AppError(AntigravityProfile.Unsupported);
-                    var native=NativePlatform.AntigravityServerPath(app);var children=platform.SessionProcesses(account).Where(p=>NativePlatform.SamePath(p.Executable,native)).ToArray();
+                    var native=NativePlatform.AntigravityServerPath(app);var owned=platform.SessionProcesses(account);var children=owned.Where(p=>NativePlatform.SamePath(p.Executable,native)).ToArray();
+                    if(attempt==0||attempt==59){FixtureDiagnostic?.Invoke("Desktop native candidates: "+children.Length+"; session runtimes: "+owned.Count);foreach(var child in platform.Processes.Where(p=>p.ParentId==root.Id))FixtureDiagnostic?.Invoke("Direct child executable: "+Path.GetFileName(child.Executable));foreach(var child in children)FixtureDiagnostic?.Invoke("Candidate csrf flag: "+(Argument(child.Arguments,"--csrf_token")!=null)+"; listener count: "+ListeningPorts(child.Id).Count);}
                     if(children.Length==1){var child=children[0];var csrf=Argument(child.Arguments,"--csrf_token");if(csrf is {Length:>0 and <=256}&&!csrf.Any(char.IsControl)){
                         foreach(var listening in ListeningPorts(child.Id)){
                             var value=new Endpoint(root.Id,root.Created,child.Id,child.Created,listening,csrf,native);
-                            try{await Send(value,"GetUserStatus",ct);candidate=value;break;}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){candidate=value;break;}catch(Exception error)when(error is HttpRequestException or TaskCanceledException or JsonException||error is AppError){ct.ThrowIfCancellationRequested();}
+                            try{await Send(value,"GetUserStatus",ct);candidate=value;break;}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){candidate=value;break;}catch(Exception error)when(error is HttpRequestException or TaskCanceledException or JsonException||error is AppError){ct.ThrowIfCancellationRequested();if(attempt==0||attempt==59)FixtureDiagnostic?.Invoke("Native status probe: "+(error is AppError appError?appError.Key:error.GetType().Name));}
                         }
                     }}
                 }else if(!IsActive(account))throw new AppError(ProviderQuota.Unavailable);

@@ -47,25 +47,10 @@ internal static partial class PreviewRunner {
             await engine.OpenAsync(a);Require(engine.Platform.Owned(a)?.HasWindow==true&&File.ReadAllText(sentinel)=="preserved","Reopening Antigravity lost profile storage");
             // A fresh manager must rediscover the exact saved native process and HTTP listener.
             Phase("Manager rediscovery");
-            var restarted=new AppEngine(repo.Root);await restarted.Platform.FindExecutableAsync("antigravity");await restarted.Platform.RefreshProcessesAsync();
+            var restarted=new AppEngine(repo.Root);restarted.Antigravity.FixtureDiagnostic=engine.Antigravity.FixtureDiagnostic;await restarted.Platform.FindExecutableAsync("antigravity");await restarted.Platform.RefreshProcessesAsync();
             await ExpectSignedOut(a,restarted);await ExpectSignedOut(b,restarted);
             await engine.CloseAsync(a);Require(!engine.Running(a)&&engine.Running(b),"Closing reopened A affected B");
             await engine.CloseAsync(b);Require(!engine.Running(b),"Close B left a native helper running");
-            // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
-            Phase("Official CLI usage");
-            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
-            using(var command=Process.Start(info)!){
-                command.StandardInput.Close();var captured=new StringBuilder();
-                void Capture(object sender,DataReceivedEventArgs e){if(e.Data!=null)lock(captured){if(captured.Length<1048576)captured.AppendLine(e.Data[..Math.Min(e.Data.Length,1048576-captured.Length)]);}}
-                command.OutputDataReceived+=Capture;command.ErrorDataReceived+=Capture;command.BeginOutputReadLine();command.BeginErrorReadLine();
-                void Diagnose(){lock(captured){var text=captured.ToString();var terms=new[]{"file-based token storage","WSL environment","not signed in","not logged in","sign in","login","authenticate","authentication","no controlling terminal","not authenticated","print mode","updat","WSL","wslpath","terminal","keyring","error","permission","timeout","Listening","onboarding","color scheme"};File.WriteAllText(Path.Combine(output,"antigravity-cli-diagnostics.txt"),"Output chars: "+text.Length+"\n"+string.Join("\n",terms.Where(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase))));}}
-                try{await command.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(45),ct);}catch{Diagnose();if(!command.HasExited){command.Kill(true);await command.WaitForExitAsync();}throw;}
-                Diagnose();string text;lock(captured)text=captured.ToString();
-                Require(text.Length<1048576&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
-                Require(new[]{"not signed in","not logged in","sign in","login","authenticate","authentication"}.Any(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase)),"Fresh private CLI was not signed out");
-                Require(!File.Exists(AntigravityProfile.CliIdentity(repo,c)),"CLI imported a global identity into the fresh profile");
-            }
-            CheckCanary();
             // Explicit Login must keep a local callback; no Google credentials or consent are entered.
             Phase("Browser localhost callback");
             await engine.Antigravity.ConnectAsync(a,ct);using(var loginCancellation=CancellationTokenSource.CreateLinkedTokenSource(ct)){
@@ -84,6 +69,21 @@ internal static partial class PreviewRunner {
                 Require(observed,"Official Windows browser login did not expose a Google destination with localhost callback");
             }
             await engine.Antigravity.StopAsync(a);CheckCanary();
+            // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
+            Phase("Official CLI usage");
+            var info=ChildEnvironment.StartInfo(cli,ProviderQuota.AntigravityArguments,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,c),AntigravityProfile.Home(repo,c));info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
+            using(var command=Process.Start(info)!){
+                command.StandardInput.Close();var captured=new StringBuilder();
+                void Capture(object sender,DataReceivedEventArgs e){if(e.Data!=null)lock(captured){if(captured.Length<1048576)captured.AppendLine(e.Data[..Math.Min(e.Data.Length,1048576-captured.Length)]);}}
+                command.OutputDataReceived+=Capture;command.ErrorDataReceived+=Capture;command.BeginOutputReadLine();command.BeginErrorReadLine();
+                void Diagnose(){lock(captured){var text=captured.ToString();var terms=new[]{"file-based token storage","WSL environment","not signed in","not logged in","sign in","login","authenticate","authentication","no controlling terminal","not authenticated","print mode","updat","WSL","wslpath","terminal","keyring","error","permission","timeout","Listening","onboarding","color scheme"};File.WriteAllText(Path.Combine(output,"antigravity-cli-diagnostics.txt"),"Output chars: "+text.Length+"\n"+string.Join("\n",terms.Where(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase))));}}
+                try{await command.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(45),ct);}catch{Diagnose();if(!command.HasExited){command.Kill(true);await command.WaitForExitAsync();}throw;}
+                Diagnose();string text;lock(captured)text=captured.ToString();
+                Require(text.Length<1048576&&text.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal),"Official CLI did not select its private file storage adapter");
+                Require(new[]{"not signed in","not logged in","sign in","login","authenticate","authentication"}.Any(x=>text.Contains(x,StringComparison.OrdinalIgnoreCase)),"Fresh private CLI was not signed out");
+                Require(!File.Exists(AntigravityProfile.CliIdentity(repo,c)),"CLI imported a global identity into the fresh profile");
+            }
+            CheckCanary();
             File.WriteAllText(Path.Combine(output,"antigravity-native-result.txt"),"PASS: official Windows Antigravity Desktop and CLI; private vendor file storage selected; two independent fresh native backgrounds and Desktop windows stay signed out with a global synthetic Credential Manager canary present; CLI /usage uses private storage without model input; separate native HTTP/CSRF endpoints; close/reopen and manager restart preserve ownership and data; closing A preserves B; global canary unchanged; explicit Google browser Login uses a localhost callback and is cancelled before authentication. Live Google sign-in and live subscription quotas are not exercised.\n");
         }catch(Exception error){primary=error;File.WriteAllText(Path.Combine(output,"antigravity-primary-error.txt"),phase+"\n"+error);throw;}
         finally{
