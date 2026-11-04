@@ -5,6 +5,48 @@ import XCTest
 final class AntigravityProfileTests: XCTestCase {
     private func fixtureRoot() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("Antigravity's Profiles \(UUID())") }
 
+    func testEditingPreview23ProjectReplacesOnlyItsManagedFolderAndKeepsHistory() throws {
+        let root = fixtureRoot()
+        let fm = FileManager.default
+        defer { try? fm.removeItem(at: root) }
+        let repo = ProfileRepository(root: root.appendingPathComponent("Manager"))
+        let folders = try ["Original", "Replacement #2", "User folder"].map { name in
+            let folder = root.appendingPathComponent(name, isDirectory: true)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            return try repo.antigravityLocalProjectFolder(folder.path)
+        }
+        var account = Account(name: "Existing", agent: .antigravity, antigravityUsesPrivateHome: true)
+        account.antigravityLocalProjectFolder = folders[0].path
+        try repo.prepareAntigravityProfile(for: account.id)
+        try repo.prepareAntigravityLocalProject(for: account)
+        let marker = repo.antigravityProfileURL(for: account.id).appendingPathComponent("local-project-initialized")
+        try Data().write(to: marker)
+        let id = account.id.uuidString.lowercased()
+        let project = repo.antigravityHomeURL(for: account.id).appendingPathComponent(".gemini/config/projects/\(id).json")
+        let definition: [String: Any] = [
+            "id": id, "name": "My project", "projectConversations": ["conversations": [["conversationId": "existing-chat"]]],
+            "projectResources": ["resources": [folders[0], folders[2]].map { ["folderUri": $0.absoluteString] }]
+        ]
+        try JSONSerialization.data(withJSONObject: definition).write(to: project)
+        try repo.preserveAntigravityLocalProjectSelection(for: account)
+        account.antigravityLocalProjectFolder = folders[1].path
+        try repo.prepareAntigravityLocalProject(for: account)
+
+        func assertFolders(_ expected: [URL]) throws {
+            let updated = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: project)) as? [String: Any])
+            XCTAssertEqual(updated["id"] as? String, id)
+            XCTAssertEqual(updated["name"] as? String, "My project")
+            XCTAssertEqual(updated["projectConversations"] as? [String: [[String: String]]], definition["projectConversations"] as? [String: [[String: String]]])
+            let resources = updated["projectResources"] as? [String: [[String: String]]]
+            XCTAssertEqual(resources?["resources"]?.compactMap { $0["folderUri"] }, expected.map(\.absoluteString))
+        }
+        try assertFolders([folders[2], folders[1]])
+        account.antigravityLocalProjectFolder = nil
+        try repo.prepareAntigravityLocalProject(for: account)
+        try assertFolders([folders[2]])
+        XCTAssertTrue(folders.allSatisfy { fm.fileExists(atPath: $0.path) })
+    }
+
     func testLocalProjectUsesTheSameFolderAcrossProfilesAndSeedsOnlyOnce() throws {
         let root = fixtureRoot()
         let fm = FileManager.default

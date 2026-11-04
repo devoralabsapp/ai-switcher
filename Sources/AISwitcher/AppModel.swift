@@ -391,12 +391,15 @@ final class AppModel: ObservableObject {
     func saveAccount(_ account: Account) -> Bool {
         guard !loadFailed else { return false }
         var account = account
-        if account.effectiveAgent == .antigravity, !accounts.contains(where: { $0.id == account.id }) {
+        let previous = accounts.first(where: { $0.id == account.id })
+        if account.effectiveAgent == .antigravity, previous == nil {
             account.antigravityUsesPrivateHome = true
         }
         do {
             try account.validate()
-            if account.usesIsolatedAntigravity, !accounts.contains(where: { $0.id == account.id }),
+            let projectChanged = (previous?.usesIsolatedAntigravity ?? account.usesIsolatedAntigravity)
+                && previous?.antigravityLocalProjectFolder != account.antigravityLocalProjectFolder
+            if projectChanged,
                let folder = account.antigravityLocalProjectFolder {
                 account.antigravityLocalProjectFolder = try repository.antigravityLocalProjectFolder(folder).path
             }
@@ -412,11 +415,14 @@ final class AppModel: ObservableObject {
                 edited.antigravityUsesPrivateHome = updated.accounts[index].antigravityUsesPrivateHome
                 edited.antigravitySignInMethod = updated.accounts[index].antigravitySignInMethod
                 if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode
-                    || edited.usesSharedLocalWorkspace != updated.accounts[index].usesSharedLocalWorkspace {
+                    || edited.usesSharedLocalWorkspace != updated.accounts[index].usesSharedLocalWorkspace || projectChanged {
                     guard !hasRunningSession(account), !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
                         throw DesktopProfileError.profileRunning
                     }
                     quotaErrors[account.id] = nil
+                }
+                if projectChanged {
+                    try repository.preserveAntigravityLocalProjectSelection(for: updated.accounts[index])
                 }
                 edited.providerQuotaConnection = updated.accounts[index].providerQuotaConnection
                 edited.codexConnection = updated.accounts[index].codexConnection

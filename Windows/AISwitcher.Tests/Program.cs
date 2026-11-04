@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using AISwitcher.Core;
 
@@ -60,6 +61,34 @@ Test("Antigravity sharing registers the same local folder in independent project
     File.Delete(Project(a));
     AntigravityProfile.PrepareLocalProject(repo, a);
     True(!File.Exists(Project(a)));
+
+    var marker = Path.Combine(repo.ProfilePath(b), "local-project-initialized");
+    File.WriteAllText(marker, "");
+    var saved = JsonNode.Parse(File.ReadAllText(Project(b)))!.AsObject();
+    saved["projectConversations"] = JsonNode.Parse("""{"conversations":[{"conversationId":"existing-chat"}]}""");
+    var extra = Path.Combine(root, "Another project folder");
+    var replacement = Path.Combine(root, "Thư mục #2");
+    Directory.CreateDirectory(extra);
+    Directory.CreateDirectory(replacement);
+    saved["projectResources"]!["resources"]!.AsArray().Add(new JsonObject { ["folderUri"] = new Uri(extra).AbsoluteUri });
+    File.WriteAllText(Project(b), saved.ToJsonString());
+
+    AntigravityProfile.PreserveLocalProjectSelection(repo, b);
+    var edited = b with { AntigravityLocalProjectFolder = replacement };
+    AntigravityProfile.PrepareLocalProject(repo, edited);
+    AssertFolders(extra, replacement);
+    AntigravityProfile.PrepareLocalProject(repo, edited with { AntigravityLocalProjectFolder = null });
+    AssertFolders(extra);
+
+    void AssertFolders(params string[] expected)
+    {
+        var updated = JsonNode.Parse(File.ReadAllText(Project(b)))!;
+        Equal((string?)updated["id"], b.Id.ToString("D"));
+        True(JsonNode.DeepEquals(updated["projectConversations"], saved["projectConversations"]));
+        var resources = updated["projectResources"]!["resources"]!.AsArray();
+        True(resources.Select(r => new Uri((string)r!["folderUri"]!).LocalPath).SequenceEqual(expected));
+    }
+
     repo.Remove(a, repo.Load());
     True(File.Exists(Project(b)) && Directory.Exists(folder));
     Throws(() => AntigravityProfile.LocalProjectFolder(repo, root));

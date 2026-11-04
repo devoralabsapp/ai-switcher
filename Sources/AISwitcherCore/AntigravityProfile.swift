@@ -142,17 +142,46 @@ extension ProfileRepository {
         return folder
     }
 
-    /// Register a native local project once, before Desktop reads its project store.
-    /// Only a folder URI is shared. Antigravity owns edits to the project afterward.
-    public func prepareAntigravityLocalProject(for account: Account) throws {
-        guard account.usesIsolatedAntigravity, let path = account.antigravityLocalProjectFolder else { return }
-        try validateAntigravityOwnership(for: account.id)
+    private func localProjectMarker(for account: Account) -> URL {
+        antigravityProfileURL(for: account.id).appendingPathComponent("local-project-initialized")
+    }
+
+    private func readLocalProjectFile(_ url: URL) throws -> Data? {
         let fm = FileManager.default
-        let marker = antigravityProfileURL(for: account.id).appendingPathComponent("local-project-initialized")
-        if let type = try? fm.attributesOfItem(atPath: marker.path)[.type] {
-            guard type as? FileAttributeType == .typeRegular else { throw AntigravityProfileError.unsafeStorage }
-            return
+        do {
+            let attributes = try fm.attributesOfItem(atPath: url.path)
+            guard attributes[.type] as? FileAttributeType == .typeRegular else {
+                throw AntigravityProfileError.unsafeStorage
+            }
+            return try Data(contentsOf: url)
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+            return nil
         }
+    }
+
+    /// Preview 23 used an empty marker. Record its applied folder before saving an edit.
+    public func preserveAntigravityLocalProjectSelection(for account: Account) throws {
+        guard account.usesIsolatedAntigravity, let folder = account.antigravityLocalProjectFolder else { return }
+        try validateAntigravityOwnership(for: account.id)
+        let marker = localProjectMarker(for: account)
+        if try readLocalProjectFile(marker)?.isEmpty == true {
+            try JSONEncoder().encode(folder).write(to: marker, options: .atomic)
+        }
+    }
+
+    /// Apply changes before Desktop starts, keeping the native project ID and chat metadata.
+    public func prepareAntigravityLocalProject(for account: Account) throws {
+        guard account.usesIsolatedAntigravity else { return }
+        let path = account.antigravityLocalProjectFolder
+        try validateAntigravityOwnership(for: account.id)
+        let marker = localProjectMarker(for: account)
+        let applied = try readLocalProjectFile(marker)
+        if applied?.isEmpty == true { return }
+        let previous = try applied.flatMap { try JSONDecoder().decode(String?.self, from: $0) }
+        guard previous != path else { return }
+
+        let folder = try path.map(antigravityLocalProjectFolder)
+        let fm = FileManager.default
         let config = antigravityHomeURL(for: account.id).appendingPathComponent(".gemini/config")
         let projects = config.appendingPathComponent("projects")
         for directory in [config, projects] {
@@ -161,12 +190,37 @@ extension ProfileRepository {
             }
             try validateAntigravityDirectory(directory)
         }
+
         let id = account.id.uuidString.lowercased()
         let project = projects.appendingPathComponent(id + ".json")
-        if let type = try? fm.attributesOfItem(atPath: project.path)[.type] {
-            guard type as? FileAttributeType == .typeRegular else { throw AntigravityProfileError.unsafeStorage }
-        } else {
-            let folder = try antigravityLocalProjectFolder(path)
+        let existing = try readLocalProjectFile(project)
+        if let existing {
+            guard var definition = try JSONSerialization.jsonObject(with: existing) as? [String: Any],
+                  (definition["id"] as? String)?.lowercased() == id else {
+                throw AntigravityProfileError.unsafeStorage
+            }
+            var projectResources = definition["projectResources"] as? [String: Any] ?? [:]
+            var resources = projectResources["resources"] as? [[String: Any]] ?? []
+            if (definition["projectResources"] != nil && !(definition["projectResources"] is [String: Any]))
+                || (projectResources["resources"] != nil && !(projectResources["resources"] is [[String: Any]])) {
+                throw AntigravityProfileError.unsafeStorage
+            }
+            func matches(_ resource: [String: Any], _ path: String) -> Bool {
+                guard let uri = resource["folderUri"] as? String, let url = URL(string: uri), url.isFileURL else { return false }
+                return url.standardizedFileURL.path == URL(fileURLWithPath: path).standardizedFileURL.path
+            }
+            let oldCount = resources.count
+            if let previous, let index = resources.firstIndex(where: { matches($0, previous) }) {
+                resources.remove(at: index)
+            }
+            let needsFolder = folder.map { folder in !resources.contains { matches($0, folder.path) } } ?? false
+            if needsFolder, let folder { resources.append(["folderUri": folder.absoluteString]) }
+            if needsFolder || oldCount != resources.count {
+                projectResources["resources"] = resources
+                definition["projectResources"] = projectResources
+                try JSONSerialization.data(withJSONObject: definition).write(to: project, options: .atomic)
+            }
+        } else if let folder {
             let definition: [String: Any] = [
                 "id": id, "name": folder.lastPathComponent,
                 "projectResources": ["resources": [["folderUri": folder.absoluteString]]]
@@ -176,6 +230,6 @@ extension ProfileRepository {
             try JSONSerialization.data(withJSONObject: definition).write(to: temporary, options: .withoutOverwriting)
             try fm.linkItem(at: temporary, to: project)
         }
-        try Data().write(to: marker, options: .atomic)
+        try JSONEncoder().encode(path).write(to: marker, options: .atomic)
     }
 }

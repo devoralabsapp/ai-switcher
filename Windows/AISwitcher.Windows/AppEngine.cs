@@ -72,12 +72,15 @@ internal sealed class AppEngine {
         if(ReadOnly||StoppingAll)return false;
         try{
             edited.Validate();var old=Snapshot.Accounts.FirstOrDefault(x=>x.Id==edited.Id);
+            var projectChanged = (old?.UsesPrivateAntigravity ?? edited.UsesPrivateAntigravity)
+                && old?.AntigravityLocalProjectFolder != edited.AntigravityLocalProjectFolder;
+            if (projectChanged && edited.AntigravityLocalProjectFolder is {} folder)
+                edited = edited with { AntigravityLocalProjectFolder = AntigravityProfile.LocalProjectFolder(Repository, folder) };
             if(old!=null){if(old.Agent!=edited.Agent||old.Browser!=edited.Browser)throw new AppError("The agent of an existing profile cannot change. Create a new profile instead.");
-                if((old.EffectiveMode!=edited.EffectiveMode||old.SharesLocalWorkspace!=edited.SharesLocalWorkspace)&&(Running(old)||Busy.Contains(old.Id)))throw new AppError("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes.");
+                if((old.EffectiveMode!=edited.EffectiveMode||old.SharesLocalWorkspace!=edited.SharesLocalWorkspace||projectChanged)&&(Running(old)||Busy.Contains(old.Id)))throw new AppError("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes.");
+                if (projectChanged) AntigravityProfile.PreserveLocalProjectSelection(Repository, old);
                 edited=edited with{ProviderConnection=old.ProviderConnection,DesktopConnection=old.DesktopConnection,BrowserConnection=old.BrowserConnection,LastOpenedAt=old.LastOpenedAt};
             }
-            else if(edited.UsesPrivateAntigravity && edited.AntigravityLocalProjectFolder is {} folder)
-                edited = edited with { AntigravityLocalProjectFolder = AntigravityProfile.LocalProjectFolder(Repository, folder) };
             var updated=Snapshot with{Accounts=Snapshot.Accounts.Where(x=>x.Id!=edited.Id).Append(edited).OrderBy(x=>x.CreatedAt).ToList()};Repository.Save(updated);Snapshot=updated;Notify();return true;
         }catch(Exception error){Error?.Invoke(Message(error));return false;}
     }

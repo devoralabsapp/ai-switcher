@@ -19,7 +19,7 @@ struct AccountEditorView: View {
     @State private var connectOnStartup: Bool
     @State private var agent: AIAgent
     @State private var antigravitySignInMethod: AntigravitySignInMethod
-    @State private var sharesAntigravityProject = false
+    @State private var sharesAntigravityProject: Bool
     @State private var antigravityProjectFolder: URL?
     @FocusState private var nameFocused: Bool
 
@@ -36,10 +36,14 @@ struct AccountEditorView: View {
         _connectOnStartup = State(initialValue: editor.account?.automaticallyConnects ?? false)
         _agent = State(initialValue: editor.account?.effectiveAgent ?? editor.defaultAgent)
         _antigravitySignInMethod = State(initialValue: editor.account?.antigravitySignInMethod ?? .browser)
+        let savedFolder = editor.account?.antigravityLocalProjectFolder
+        _sharesAntigravityProject = State(initialValue: savedFolder != nil)
+        _antigravityProjectFolder = State(initialValue: savedFolder.map { URL(fileURLWithPath: $0) })
         _openAfterSave = State(initialValue: !model.preferences.quotaOnlyMode)
     }
 
     private var isNew: Bool { editor.account == nil }
+    private var canShareAntigravityProject: Bool { agent == .antigravity && (isNew || editor.account?.usesIsolatedAntigravity == true) }
     private var selectedMode: LaunchMode { agent == .chatgpt || agent == .claude ? launchMode : agent.isSharedApplication ? .desktop : .browser }
     private var modeLocked: Bool {
         editor.account.map { model.hasRunningSession($0) || model.launchingIDs.contains($0.id) || model.quotaBusyIDs.contains($0.id) || model.pendingConnections[$0.id] != nil } ?? false
@@ -47,7 +51,7 @@ struct AccountEditorView: View {
     private var valid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 48 && email.count <= 160
             && (selectedMode == .desktop || !isNew || model.browserService.applicationURL(for: browser) != nil)
-            && (agent != .antigravity || !sharesAntigravityProject || antigravityProjectFolder != nil)
+            && (!canShareAntigravityProject || !sharesAntigravityProject || antigravityProjectFolder != nil)
     }
 
     var body: some View {
@@ -101,15 +105,24 @@ struct AccountEditorView: View {
                             Picker(L10n.text("Sign-in method"), selection: $antigravitySignInMethod) {
                                 ForEach(AntigravitySignInMethod.allCases) { Text($0.title).tag($0) }
                             }.accessibilityIdentifier("antigravitySignInMethod")
-                            Toggle(L10n.text("Share local project"), isOn: $sharesAntigravityProject)
-                                .accessibilityIdentifier("antigravityShareLocalProject")
-                            if sharesAntigravityProject {
-                                Text(L10n.text("Choose the same folder for each Antigravity account that should work on the project. Each account keeps its own chat history."))
-                                    .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
-                                Button(L10n.text("Choose folder…")) { chooseAntigravityProjectFolder() }
-                                if let folder = antigravityProjectFolder {
-                                    Text(folder.path).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        }
+                        if canShareAntigravityProject {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Toggle(L10n.text("Share local project"), isOn: $sharesAntigravityProject)
+                                    .accessibilityIdentifier("antigravityShareLocalProject")
+                                if sharesAntigravityProject {
+                                    Text(L10n.text("Choose the same folder for each Antigravity account that should work on the project. Each account keeps its own chat history."))
+                                        .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                                    Button(L10n.text("Choose folder…")) { chooseAntigravityProjectFolder() }
+                                    if let folder = antigravityProjectFolder {
+                                        Text(folder.path).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                                    }
                                 }
+                            }
+                            .disabled(modeLocked)
+                            if modeLocked {
+                                Text(L10n.text("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."))
+                                    .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                             }
                         }
                     }
@@ -257,6 +270,8 @@ struct AccountEditorView: View {
         if isNew && agent == .antigravity { account.antigravityUsesPrivateHome = true }
         if isNew && agent == .antigravity {
             account.antigravitySignInMethod = antigravitySignInMethod
+        }
+        if canShareAntigravityProject {
             account.antigravityLocalProjectFolder = sharesAntigravityProject ? antigravityProjectFolder?.path : nil
         }
         account.sharesLocalWorkspace = agent == .chatgpt && sharesLocalWorkspace
