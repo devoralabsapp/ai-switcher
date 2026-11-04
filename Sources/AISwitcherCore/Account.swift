@@ -59,6 +59,7 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     /// Nil keeps existing Antigravity entries on their original shared sign-in.
     public var antigravityUsesPrivateHome: Bool?
     public var antigravitySignInMethod: AntigravitySignInMethod?
+    public var antigravityLocalProjectFolder: String?
 
     public var effectiveAgent: AIAgent { agent ?? .chatgpt }
     public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent == .claude ? launchMode ?? .browser : effectiveAgent.isSharedApplication ? .desktop : .browser }

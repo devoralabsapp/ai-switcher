@@ -603,3 +603,7 @@
 "Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data." = "Chọn đăng nhập Google trên trình duyệt hoặc dùng Antigravity CLI chính thức. Mỗi tài khoản có dữ liệu đăng nhập riêng.";
 
 "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. Antigravity offers Google browser sign-in or official CLI sign-in when adding an account. Browser sign-in also works with that account’s Desktop session. Connect reuses saved sign-in in the background; no model prompt is sent." = "ChatGPT đọc hạn mức Codex từ phiên Desktop. Claude dùng đăng nhập xem hạn mức riêng từng hồ sơ. Khi thêm tài khoản Antigravity, bạn có thể đăng nhập Google trên trình duyệt hoặc bằng CLI chính thức. Đăng nhập trình duyệt cũng dùng được với phiên Desktop của tài khoản đó. Kết nối dùng lại phiên đã lưu ở nền; không gửi câu hỏi AI.";
+"Share local project" = "Chia sẻ project local";
+"Choose the same folder for each Antigravity account that should work on the project. Each account keeps its own chat history." = "Chọn cùng một thư mục cho các tài khoản Antigravity cần làm việc trên project này. Mỗi tài khoản có lịch sử chat riêng.";
+"Choose an existing local project folder outside AI Switcher’s data." = "Chọn một thư mục project local hiện có nằm ngoài thư mục dữ liệu AI Switcher.";
+"Choose folder…" = "Chọn thư mục…";

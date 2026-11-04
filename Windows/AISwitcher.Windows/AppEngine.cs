@@ -76,6 +76,8 @@ internal sealed class AppEngine {
                 if((old.EffectiveMode!=edited.EffectiveMode||old.SharesLocalWorkspace!=edited.SharesLocalWorkspace)&&(Running(old)||Busy.Contains(old.Id)))throw new AppError("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes.");
                 edited=edited with{ProviderConnection=old.ProviderConnection,DesktopConnection=old.DesktopConnection,BrowserConnection=old.BrowserConnection,LastOpenedAt=old.LastOpenedAt};
             }
+            else if(edited.UsesPrivateAntigravity && edited.AntigravityLocalProjectFolder is {} folder)
+                edited = edited with { AntigravityLocalProjectFolder = AntigravityProfile.LocalProjectFolder(Repository, folder) };
             var updated=Snapshot with{Accounts=Snapshot.Accounts.Where(x=>x.Id!=edited.Id).Append(edited).OrderBy(x=>x.CreatedAt).ToList()};Repository.Save(updated);Snapshot=updated;Notify();return true;
         }catch(Exception error){Error?.Invoke(Message(error));return false;}
     }

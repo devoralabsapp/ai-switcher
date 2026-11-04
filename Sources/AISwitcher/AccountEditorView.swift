@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import AISwitcherCore
 
@@ -18,6 +19,8 @@ struct AccountEditorView: View {
     @State private var connectOnStartup: Bool
     @State private var agent: AIAgent
     @State private var antigravitySignInMethod: AntigravitySignInMethod
+    @State private var sharesAntigravityProject = false
+    @State private var antigravityProjectFolder: URL?
     @FocusState private var nameFocused: Bool
 
     init(model: AppModel, editor: AccountEditor) {
@@ -44,6 +47,7 @@ struct AccountEditorView: View {
     private var valid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 48 && email.count <= 160
             && (selectedMode == .desktop || !isNew || model.browserService.applicationURL(for: browser) != nil)
+            && (agent != .antigravity || !sharesAntigravityProject || antigravityProjectFolder != nil)
     }
 
     var body: some View {
@@ -97,6 +101,16 @@ struct AccountEditorView: View {
                             Picker(L10n.text("Sign-in method"), selection: $antigravitySignInMethod) {
                                 ForEach(AntigravitySignInMethod.allCases) { Text($0.title).tag($0) }
                             }.accessibilityIdentifier("antigravitySignInMethod")
+                            Toggle(L10n.text("Share local project"), isOn: $sharesAntigravityProject)
+                                .accessibilityIdentifier("antigravityShareLocalProject")
+                            if sharesAntigravityProject {
+                                Text(L10n.text("Choose the same folder for each Antigravity account that should work on the project. Each account keeps its own chat history."))
+                                    .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                                Button(L10n.text("Choose folder…")) { chooseAntigravityProjectFolder() }
+                                if let folder = antigravityProjectFolder {
+                                    Text(folder.path).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                                }
+                            }
                         }
                     }
                 }
@@ -241,7 +255,10 @@ struct AccountEditorView: View {
         account.launchMode = selectedMode
         account.agent = agent
         if isNew && agent == .antigravity { account.antigravityUsesPrivateHome = true }
-        if isNew && agent == .antigravity { account.antigravitySignInMethod = antigravitySignInMethod }
+        if isNew && agent == .antigravity {
+            account.antigravitySignInMethod = antigravitySignInMethod
+            account.antigravityLocalProjectFolder = sharesAntigravityProject ? antigravityProjectFolder?.path : nil
+        }
         account.sharesLocalWorkspace = agent == .chatgpt && sharesLocalWorkspace
         account.defaultAction = agent == .chatgpt ? defaultAction : .openDesktop
         account.connectOnStartup = agent == .chatgpt && connectOnStartup
@@ -250,6 +267,16 @@ struct AccountEditorView: View {
         if isNew && openAfterSave {
             if agent == .antigravity { model.connectSession(account) }
             else { model.open(account) }
+        }
+    }
+
+    private func chooseAntigravityProjectFolder() {
+        let picker = NSOpenPanel()
+        picker.canChooseFiles = false
+        picker.canChooseDirectories = true
+        picker.directoryURL = antigravityProjectFolder
+        picker.begin { response in
+            if response == .OK { antigravityProjectFolder = picker.url }
         }
     }
 

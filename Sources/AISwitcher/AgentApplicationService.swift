@@ -43,6 +43,8 @@ final class AgentApplicationService {
         if let running = runningApplication(for: account) {
             guard ManagedApplications.arguments(for: running.processIdentifier).contains(AntigravityLaunch.isolationArgument) else { throw AntigravityProfileError.sessionNeedsReopen }
             if hasWindow(account), running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) { return running }
+        } else {
+            try repository.prepareAntigravityLocalProject(for: account)
         }
         let process = Process()
         process.executableURL = AntigravityLaunch.sandboxExecutable

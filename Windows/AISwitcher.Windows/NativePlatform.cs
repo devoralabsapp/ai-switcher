@@ -167,7 +167,11 @@ internal sealed partial class NativePlatform {
         }
         repository.PrepareProfile(account);ProtectDirectory(repository.ProfilePath(account));
         var env=account.UsesPrivateAntigravity?AntigravityProfile.Environment(EnvironmentValues(),repository,account):ChildEnvironment.Create(EnvironmentValues(),account.UsesCodexDesktop?repository.QuotaHome(account):null);
-        if(account.UsesPrivateAntigravity){AntigravityProfile.Validate(repository,account);foreach(var dir in AntigravityProfile.Directories(repository,account))ProtectDirectory(dir);}
+        if(account.UsesPrivateAntigravity){
+            AntigravityProfile.Validate(repository,account);
+            foreach(var dir in AntigravityProfile.Directories(repository,account))ProtectDirectory(dir);
+            if(owned==null)AntigravityProfile.PrepareLocalProject(repository,account);
+        }
         if(account.UsesCodexDesktop){env["CODEX_ELECTRON_USER_DATA_PATH"]=repository.DataPath(account);if(useLocalDaemon)env["CODEX_APP_SERVER_USE_LOCAL_DAEMON"]="1";if(account.SharesLocalWorkspace)env["CODEX_SQLITE_HOME"]=SharedWorkspace.Database(preferences);}
         if(account.UsesCodexDesktop){try{var cli=await FindExecutableAsync("codex");if(cli!=null)env["CODEX_CLI_PATH"]=cli;}catch(AppError){/* The Desktop app can use its own packaged CLI while the selected external CLI is unavailable. */}}
         if(account.Agent==Agent.Claude&&account.EffectiveMode==LaunchMode.Desktop)env["CLAUDE_CONFIG_DIR"]=repository.CodeConfig(account);

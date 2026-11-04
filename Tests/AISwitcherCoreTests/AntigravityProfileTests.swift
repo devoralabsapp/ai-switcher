@@ -5,6 +5,44 @@ import XCTest
 final class AntigravityProfileTests: XCTestCase {
     private func fixtureRoot() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("Antigravity's Profiles \(UUID())") }
 
+    func testLocalProjectUsesTheSameFolderAcrossProfilesAndSeedsOnlyOnce() throws {
+        let root = fixtureRoot()
+        let fm = FileManager.default
+        defer { try? fm.removeItem(at: root) }
+        let repo = ProfileRepository(root: root.appendingPathComponent("Manager"))
+        let folder = root.appendingPathComponent("Dự án #1")
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        var a = Account(name: "A", agent: .antigravity, antigravityUsesPrivateHome: true)
+        var b = Account(name: "B", agent: .antigravity, antigravityUsesPrivateHome: true)
+        a.antigravityLocalProjectFolder = folder.path
+        b.antigravityLocalProjectFolder = folder.path
+        b.antigravitySignInMethod = .cli
+        let snapshot = AccountSnapshot(accounts: [a, b])
+        try repo.save(snapshot)
+
+        func project(_ account: Account) -> URL {
+            repo.antigravityHomeURL(for: account.id)
+                .appendingPathComponent(".gemini/config/projects/\(account.id.uuidString.lowercased()).json")
+        }
+        for account in try repo.load().accounts {
+            try repo.prepareAntigravityProfile(for: account.id)
+            try repo.prepareAntigravityLocalProject(for: account)
+            let data = try Data(contentsOf: project(account))
+            let definition = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let resources = try XCTUnwrap(definition["projectResources"] as? [String: [[String: String]]])
+            let uri = try XCTUnwrap(resources["resources"]?.first?["folderUri"])
+            XCTAssertEqual(URL(string: uri)?.path, folder.resolvingSymlinksInPath().path)
+            XCTAssertFalse(fm.fileExists(atPath: repo.antigravityIdentityURL(for: account.id).path))
+        }
+        try fm.removeItem(at: project(a))
+        try repo.prepareAntigravityLocalProject(for: a)
+        XCTAssertFalse(fm.fileExists(atPath: project(a).path))
+        _ = try repo.remove(a.id, from: snapshot)
+        XCTAssertTrue(fm.fileExists(atPath: project(b).path))
+        XCTAssertTrue(fm.fileExists(atPath: folder.path))
+        XCTAssertThrowsError(try repo.antigravityLocalProjectFolder(root.path))
+    }
+
     func testPrivateHomesPersistAndDeletingOneProfilePreservesTheOther() throws {
         let root = fixtureRoot();defer { try? FileManager.default.removeItem(at: root) }
         let repo = ProfileRepository(root: root), a = UUID(), b = UUID()

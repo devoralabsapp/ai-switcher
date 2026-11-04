@@ -54,12 +54,14 @@ public enum AntigravityLaunch {
 
 public enum AntigravityProfileError: LocalizedError {
     case unsafeStorage, unsupportedApp, launchFailed, sessionNeedsReopen
+    case invalidLocalProjectFolder
     public var errorDescription: String? {
         switch self {
         case .unsafeStorage: return L10n.text("The Antigravity profile storage could not be verified. Its data has been preserved.")
         case .unsupportedApp: return L10n.text("This Antigravity version could not be verified for separate profiles. Update Antigravity and try again.")
         case .launchFailed: return L10n.text("Could not open the separate Antigravity session. Try again or update Antigravity.")
         case .sessionNeedsReopen: return L10n.text("Close this Antigravity account session once, then open it again to apply separate sign-in storage. Your data is kept.")
+        case .invalidLocalProjectFolder: return L10n.text("Choose an existing local project folder outside AI Switcher’s data.")
         }
     }
 }
@@ -120,5 +122,60 @@ extension ProfileRepository {
         let marker = profile.appendingPathComponent("ai-switcher-profile.json")
         try JSONEncoder().encode(AntigravityOwner(root: root.path, id: id)).write(to: marker, options: .atomic)
         try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
+    }
+
+    public func antigravityLocalProjectFolder(_ path: String) throws -> URL {
+        let folder = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard path.hasPrefix("/"), FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { throw AntigravityProfileError.invalidLocalProjectFolder }
+        for storage in [root, desktopBackendBase] {
+            let shared = folder.path.lowercased()
+            let privatePath = storage.resolvingSymlinksInPath().path.lowercased()
+            func contains(_ parent: String, _ child: String) -> Bool {
+                parent == "/" || parent == child || child.hasPrefix(parent + "/")
+            }
+            guard !contains(privatePath, shared), !contains(shared, privatePath) else {
+                throw AntigravityProfileError.invalidLocalProjectFolder
+            }
+        }
+        return folder
+    }
+
+    /// Register a native local project once, before Desktop reads its project store.
+    /// Only a folder URI is shared. Antigravity owns edits to the project afterward.
+    public func prepareAntigravityLocalProject(for account: Account) throws {
+        guard account.usesIsolatedAntigravity, let path = account.antigravityLocalProjectFolder else { return }
+        try validateAntigravityOwnership(for: account.id)
+        let fm = FileManager.default
+        let marker = antigravityProfileURL(for: account.id).appendingPathComponent("local-project-initialized")
+        if let type = try? fm.attributesOfItem(atPath: marker.path)[.type] {
+            guard type as? FileAttributeType == .typeRegular else { throw AntigravityProfileError.unsafeStorage }
+            return
+        }
+        let config = antigravityHomeURL(for: account.id).appendingPathComponent(".gemini/config")
+        let projects = config.appendingPathComponent("projects")
+        for directory in [config, projects] {
+            if (try? fm.attributesOfItem(atPath: directory.path)) == nil {
+                try fm.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            }
+            try validateAntigravityDirectory(directory)
+        }
+        let id = account.id.uuidString.lowercased()
+        let project = projects.appendingPathComponent(id + ".json")
+        if let type = try? fm.attributesOfItem(atPath: project.path)[.type] {
+            guard type as? FileAttributeType == .typeRegular else { throw AntigravityProfileError.unsafeStorage }
+        } else {
+            let folder = try antigravityLocalProjectFolder(path)
+            let definition: [String: Any] = [
+                "id": id, "name": folder.lastPathComponent,
+                "projectResources": ["resources": [["folderUri": folder.absoluteString]]]
+            ]
+            let temporary = projects.appendingPathComponent(".seed-" + UUID().uuidString)
+            defer { try? fm.removeItem(at: temporary) }
+            try JSONSerialization.data(withJSONObject: definition).write(to: temporary, options: .withoutOverwriting)
+            try fm.linkItem(at: temporary, to: project)
+        }
+        try Data().write(to: marker, options: .atomic)
     }
 }

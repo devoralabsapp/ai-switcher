@@ -42,6 +42,7 @@ public sealed record Account {
     public Connection? ProviderConnection { get; set; }
     public bool? AntigravityUsesPrivateHome { get; init; }
     public AntigravitySignInMethod? AntigravitySignInMethod { get; init; }
+    public string? AntigravityLocalProjectFolder { get; init; }
     [JsonIgnore] public bool UsesPrivateAntigravity=>Agent==Agent.Antigravity&&AntigravityUsesPrivateHome==true;
     [JsonIgnore] public bool UsesSharedApplication=>Agent.IsShared()&&!UsesPrivateAntigravity;
     [JsonIgnore] public bool UsesAntigravityDesktopQuota=>UsesPrivateAntigravity&&AntigravitySignInMethod!=global::AISwitcher.Core.AntigravitySignInMethod.Cli;

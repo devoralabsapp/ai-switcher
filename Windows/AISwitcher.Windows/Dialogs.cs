@@ -47,12 +47,26 @@ internal sealed partial class MainWindow {
         var startup=new CheckBox{Content=L["Connect in background when AI Switcher starts"],IsChecked=original?.ConnectOnStartup??false};
         var shared=new CheckBox{Content=L["Share local projects and Work history"],IsChecked=original?.SharesLocalWorkspace??false};
         var signInMethod=new ComboBox{ItemsSource=new[]{L["Sign in with browser"],L["Sign in with Antigravity CLI"]},SelectedIndex=original?.AntigravitySignInMethod==AntigravitySignInMethod.Cli?1:0};System.Windows.Automation.AutomationProperties.SetAutomationId(signInMethod,"antigravitySignInMethod");
+        var shareAntigravityProject = new CheckBox { Content = L["Share local project"] };
+        System.Windows.Automation.AutomationProperties.SetAutomationId(shareAntigravityProject, "antigravityShareLocalProject");
+        string? antigravityProjectFolder = null;
+        var projectFolderLabel = Text("", 11, false, T.Secondary);
+        var chooseProjectFolder = Button(L["Choose folder…"], () =>
+        {
+            var picker = new Microsoft.Win32.OpenFolderDialog { InitialDirectory = antigravityProjectFolder ?? "" };
+            if (picker.ShowDialog(dialog) != true) return;
+            antigravityProjectFolder = picker.FolderName;
+            projectFolderLabel.Text = antigravityProjectFolder;
+        });
+        var projectFolderOptions = Stack(Text(L["Choose the same folder for each Antigravity account that should work on the project. Each account keeps its own chat history."], 11, false, T.Secondary), chooseProjectFolder, projectFolderLabel);
+        var antigravityProjectOptions = Stack(shareAntigravityProject, projectFolderOptions, Space(16));
         var openAfter=new CheckBox{Content=L["Open after adding"],IsChecked=!engine.Preferences.QuotaOnlyMode};
         var explanation=Text("",11,false,T.Secondary);var fields=new StackPanel();
         StackPanel Field(string label,UIElement content){var group=Stack(Text(L[label],12,true),Space(6),content,Space(16));fields.Children.Add(group);return group;}
         Field("AI agent",agent);Field("Account name",name);Field("Email or note",note);Field("Profile color",color);var modeField=Field("Mode",mode);fields.Children.Add(explanation);fields.Children.Add(Space(14));var browserField=Field("Browser",browser);
         var desktopOptions=Stack(Text(L["Default account action"],12,true),Space(6),defaultAction,startup,shared,Text(L["Sharing uses the workspace folder selected in Settings. Authentication stays private."],11,false,T.Secondary),Space(16));fields.Children.Add(desktopOptions);
         var signInField=Field("Sign-in method",signInMethod);
+        fields.Children.Add(antigravityProjectOptions);
         if(original==null)fields.Children.Add(openAfter);
         var support=Text(L["Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."],11,false,T.Secondary);support.Margin=new Thickness(0,16,0,20);fields.Children.Add(support);
         void UpdateFields(){var selected=agentValues[agent.SelectedIndex];var selectedMode=(LaunchMode)mode.SelectedIndex;
@@ -60,6 +74,7 @@ internal sealed partial class MainWindow {
             var effective=selected is Agent.Chatgpt or Agent.Claude?selectedMode:selected.IsShared()?LaunchMode.Desktop:LaunchMode.Browser;
             modeField.Visibility=selected is Agent.Claude or Agent.Chatgpt?Visibility.Visible:Visibility.Collapsed;browserField.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
             signInField.Visibility=selected==Agent.Antigravity&&original==null?Visibility.Visible:Visibility.Collapsed;
+            antigravityProjectOptions.Visibility = signInField.Visibility;
             openAfter.Content=L[selected==Agent.Antigravity?"Sign in after adding":"Open after adding"];
             shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=selected==Agent.Antigravity&&original==null?L["Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data."]:Support(original??new Account{Agent=selected,LaunchMode=effective});
         }
@@ -67,8 +82,23 @@ internal sealed partial class MainWindow {
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
             var selected=agentValues[agent.SelectedIndex];
             var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedIndex,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true,AntigravityUsesPrivateHome=original?.AntigravityUsesPrivateHome??(original==null&&selected==Agent.Antigravity?true:null),AntigravitySignInMethod=original?.AntigravitySignInMethod??(original==null&&selected==Agent.Antigravity?(AntigravitySignInMethod)signInMethod.SelectedIndex:null)};
+            if (original == null && selected == Agent.Antigravity && shareAntigravityProject.IsChecked == true)
+                edited = edited with { AntigravityLocalProjectFolder = antigravityProjectFolder };
             if(engine.SaveAccount(edited)){dialog.Close();if(original==null&&openAfter.IsChecked==true){if(edited.Agent==Agent.Antigravity)_=engine.ConnectAsync(edited);else _=engine.OpenAsync(edited);}}
-        },true,T);save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;name.TextChanged+=(_,_)=>save.IsEnabled=!string.IsNullOrWhiteSpace(name.Text)&&!engine.ReadOnly;
+        },true,T);
+        void UpdateProjectSelection()
+        {
+            bool sharesProject = antigravityProjectOptions.Visibility == Visibility.Visible && shareAntigravityProject.IsChecked == true;
+            projectFolderOptions.Visibility = sharesProject ? Visibility.Visible : Visibility.Collapsed;
+            save.IsEnabled = !string.IsNullOrWhiteSpace(name.Text) && !engine.ReadOnly
+                && (!sharesProject || antigravityProjectFolder != null);
+        }
+        UpdateProjectSelection();
+        name.TextChanged += (_, _) => UpdateProjectSelection();
+        agent.SelectionChanged += (_, _) => UpdateProjectSelection();
+        shareAntigravityProject.Checked += (_, _) => UpdateProjectSelection();
+        shareAntigravityProject.Unchecked += (_, _) => UpdateProjectSelection();
+        chooseProjectFolder.Click += (_, _) => UpdateProjectSelection();
         var body=new DockPanel{LastChildFill=true,Margin=new Thickness(25)};var footer=Row(Button(L["Cancel"],()=>dialog.Close()),save);footer.HorizontalAlignment=HorizontalAlignment.Right;DockPanel.SetDock(footer,Dock.Bottom);body.Children.Add(footer);body.Children.Add(new ScrollViewer{Content=Stack(Text(L[original==null?"Another account.\nKeep your flow.":"Edit profile"],24,true),Space(20),fields),VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Margin=new Thickness(0,0,0,14)});dialog.Content=body;dialog.ShowDialog();
     }
     public void Settings(){ShowManager();var dialog=Dialog(L["Appearance & Language"],650,760);

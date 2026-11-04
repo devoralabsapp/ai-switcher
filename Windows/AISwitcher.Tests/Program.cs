@@ -39,6 +39,31 @@ Test("Antigravity preserves legacy sign-in and permits multiple private profiles
     Throws(()=>new Snapshot{Accounts=[legacy,Profile("Duplicate shared",Agent.Antigravity)]}.Validate());repo.PrepareProfile(a);repo.PrepareProfile(b);True(repo.DataPath(a)!=repo.DataPath(b));True(AntigravityProfile.Home(repo,a)!=AntigravityProfile.Home(repo,b));
     File.WriteAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep"),"B");repo.Remove(a,repo.Load());Equal(File.ReadAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep")),"B");
 });
+Test("Antigravity sharing registers the same local folder in independent project stores once", () =>
+{
+    var repo = Repo("antigravity-shared-project");
+    var folder = Path.Combine(root, "Dự án #1");
+    Directory.CreateDirectory(folder);
+    var a = Profile("A", Agent.Antigravity) with { AntigravityUsesPrivateHome = true, AntigravityLocalProjectFolder = folder };
+    var b = a with { Id = Guid.NewGuid(), AntigravitySignInMethod = AntigravitySignInMethod.Cli };
+    repo.Save(new Snapshot { Accounts = [a, b] });
+    string Project(Account account) => Path.Combine(AntigravityProfile.Home(repo, account), ".gemini", "config", "projects", account.Id + ".json");
+    foreach (var account in repo.Load().Accounts)
+    {
+        repo.PrepareProfile(account);
+        AntigravityProfile.PrepareLocalProject(repo, account);
+        using var definition = JsonDocument.Parse(File.ReadAllText(Project(account)));
+        var uri = definition.RootElement.GetProperty("projectResources").GetProperty("resources")[0].GetProperty("folderUri").GetString();
+        Equal(new Uri(uri!).LocalPath, folder);
+        True(!File.Exists(AntigravityProfile.DesktopIdentity(repo, account)));
+    }
+    File.Delete(Project(a));
+    AntigravityProfile.PrepareLocalProject(repo, a);
+    True(!File.Exists(Project(a)));
+    repo.Remove(a, repo.Load());
+    True(File.Exists(Project(b)) && Directory.Exists(folder));
+    Throws(() => AntigravityProfile.LocalProjectFolder(repo, root));
+});
 Test("Fresh Antigravity skips only the irrelevant IDE migration prompt and preserves existing UI settings",()=>{
     var repo=Repo("antigravity-new-ui");var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};repo.PrepareProfile(a);var path=Path.Combine(repo.DataPath(a),"app_storage.json");using(var doc=JsonDocument.Parse(File.ReadAllText(path))){Equal(doc.RootElement.EnumerateObject().Count(),1);Equal(doc.RootElement.GetProperty("ide-install-wizard-shown").GetString(),"true");}
     File.WriteAllText(path,"{\"user-setting\":\"preserve\"}");repo.PrepareProfile(a);Equal(File.ReadAllText(path),"{\"user-setting\":\"preserve\"}");

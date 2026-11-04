@@ -396,6 +396,10 @@ final class AppModel: ObservableObject {
         }
         do {
             try account.validate()
+            if account.usesIsolatedAntigravity, !accounts.contains(where: { $0.id == account.id }),
+               let folder = account.antigravityLocalProjectFolder {
+                account.antigravityLocalProjectFolder = try repository.antigravityLocalProjectFolder(folder).path
+            }
             if account.usesSharedApplication,
                accounts.contains(where: { $0.id != account.id && $0.usesSharedApplication }) {
                 throw AgentLaunchError.duplicateSharedApplication
