@@ -23,6 +23,17 @@ Repository Repo(string name)=>new(Path.Combine(root,name),Path.Combine(root,name
 Account Profile(string name="A",Agent agent=Agent.Chatgpt,LaunchMode mode=LaunchMode.Desktop)=>new(){Name=name,Agent=agent,LaunchMode=mode};
 var now=DateTimeOffset.UtcNow;
 Account WithQuota(string name,double used,double secondary=40,TimeSpan? age=null,long? reset=null){var limits=new Limits("identity",new("codex",null,new(used,300,reset??now.AddHours(2).ToUnixTimeSeconds()),new(secondary,10080,now.AddDays(3).ToUnixTimeSeconds())),null);return Profile(name)with{DesktopConnection=new(new("fixture@example.test","plus","identity"),new(limits,now-(age??TimeSpan.Zero)))};}
+async Task SharedFixtureLink(string link, string target)
+{
+    if (!OperatingSystem.IsWindows()) { Directory.CreateSymbolicLink(link, target); return; }
+    var info = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+    foreach (var value in new[] { "-NoProfile", "-NonInteractive", "-Command", "New-Item -ItemType Junction -Path $env:AISW_LINK -Target $env:AISW_TARGET -ErrorAction Stop | Out-Null" }) info.ArgumentList.Add(value);
+    info.Environment["AISW_LINK"] = link; info.Environment["AISW_TARGET"] = target;
+    using var process = Process.Start(info)!;
+    var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
+    await process.WaitForExitAsync(); await output; await error;
+    Equal(process.ExitCode, 0);
+}
 Test("Detached Windows argument quoting preserves empty, spaced, quoted and trailing-slash values",()=>{
     Equal(DetachedCommand.Quote(""),"\"\"");Equal(DetachedCommand.Quote("simple"),"simple");Equal(DetachedCommand.Quote("a b"),"\"a b\"");Equal(DetachedCommand.Quote("a\"b"),"\"a\\\"b\"");Throws(()=>DetachedCommand.Quote("bad\0value"));
 });
@@ -40,59 +51,81 @@ Test("Antigravity preserves legacy sign-in and permits multiple private profiles
     Throws(()=>new Snapshot{Accounts=[legacy,Profile("Duplicate shared",Agent.Antigravity)]}.Validate());repo.PrepareProfile(a);repo.PrepareProfile(b);True(repo.DataPath(a)!=repo.DataPath(b));True(AntigravityProfile.Home(repo,a)!=AntigravityProfile.Home(repo,b));
     File.WriteAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep"),"B");repo.Remove(a,repo.Load());Equal(File.ReadAllText(Path.Combine(AntigravityProfile.Home(repo,b),"keep")),"B");
 });
-Test("Antigravity sharing registers the same local folder in independent project stores once", () =>
+AsyncTest("Antigravity shares all Desktop projects and histories with private logins and safe restoration", async () =>
 {
-    var repo = Repo("antigravity-shared-project");
-    var folder = Path.Combine(root, "Dự án #1");
-    Directory.CreateDirectory(folder);
-    var a = Profile("A", Agent.Antigravity) with { AntigravityUsesPrivateHome = true, AntigravityLocalProjectFolder = folder };
-    var b = a with { Id = Guid.NewGuid(), AntigravitySignInMethod = AntigravitySignInMethod.Cli };
-    repo.Save(new Snapshot { Accounts = [a, b] });
-    string Project(Account account) => Path.Combine(AntigravityProfile.Home(repo, account), ".gemini", "config", "projects", account.Id + ".json");
-    foreach (var account in repo.Load().Accounts)
+    var repo = Repo("antigravity-all-projects");
+    var source = Path.Combine(root, "Original Desktop Home");
+    var workspace = new SharedAntigravityWorkspace(repo, source);
+    var catalog = Path.Combine(source, ".gemini", "config", "projects");
+    var history = Path.Combine(source, ".gemini", "antigravity", "conversations");
+    Directory.CreateDirectory(catalog);
+    Directory.CreateDirectory(history);
+    File.WriteAllText(Path.Combine(catalog, "one.json"), "{}");
+    File.WriteAllText(Path.Combine(catalog, "two.json"), "{}");
+    var id = Guid.NewGuid().ToString("D");
+    File.WriteAllText(Path.Combine(history, id + ".db"), "shared conversation");
+    var a = Profile("A", Agent.Antigravity) with { AntigravityUsesPrivateHome = true, AntigravitySharesLocalProjects = true };
+    var b = a with { Id = Guid.NewGuid(), Name = "B", AntigravitySignInMethod = AntigravitySignInMethod.Cli };
+    foreach (var account in new[] { a, b })
     {
         repo.PrepareProfile(account);
-        AntigravityProfile.PrepareLocalProject(repo, account);
-        using var definition = JsonDocument.Parse(File.ReadAllText(Project(account)));
-        var uri = definition.RootElement.GetProperty("projectResources").GetProperty("resources")[0].GetProperty("folderUri").GetString();
-        Equal(new Uri(uri!).LocalPath, folder);
-        True(!File.Exists(AntigravityProfile.DesktopIdentity(repo, account)));
+        File.WriteAllText(AntigravityProfile.DesktopIdentity(repo, account), account.Name);
+        await workspace.PrepareAsync(account, SharedFixtureLink);
+        var home = AntigravityProfile.Home(repo, account);
+        Equal(Directory.GetFiles(Path.Combine(home, ".gemini", "config", "projects")).Length, 2);
+        Equal(File.ReadAllText(Path.Combine(home, ".gemini", "antigravity", "conversations", id + ".db")), "shared conversation");
+        Equal(File.ReadAllText(AntigravityProfile.DesktopIdentity(repo, account)), account.Name);
     }
-    File.Delete(Project(a));
-    AntigravityProfile.PrepareLocalProject(repo, a);
-    True(!File.Exists(Project(a)));
-
-    var marker = Path.Combine(repo.ProfilePath(b), "local-project-initialized");
-    File.WriteAllText(marker, "");
-    var saved = JsonNode.Parse(File.ReadAllText(Project(b)))!.AsObject();
-    saved["projectConversations"] = JsonNode.Parse("""{"conversations":[{"conversationId":"existing-chat"}]}""");
-    var extra = Path.Combine(root, "Another project folder");
-    var replacement = Path.Combine(root, "Thư mục #2");
-    Directory.CreateDirectory(extra);
-    Directory.CreateDirectory(replacement);
-    saved["projectResources"]!["resources"]!.AsArray().Add(new JsonObject { ["folderUri"] = new Uri(extra).AbsoluteUri });
-    File.WriteAllText(Project(b), saved.ToJsonString());
-
-    AntigravityProfile.PreserveLocalProjectSelection(repo, b);
-    var edited = b with { AntigravityLocalProjectFolder = replacement };
-    AntigravityProfile.PrepareLocalProject(repo, edited);
-    AssertFolders(extra, replacement);
-    AntigravityProfile.PrepareLocalProject(repo, edited with { AntigravityLocalProjectFolder = null });
-    AssertFolders(extra);
-
-    void AssertFolders(params string[] expected)
-    {
-        var updated = JsonNode.Parse(File.ReadAllText(Project(b)))!;
-        Equal((string?)updated["id"], b.Id.ToString("D"));
-        True(JsonNode.DeepEquals(updated["projectConversations"], saved["projectConversations"]));
-        var resources = updated["projectResources"]!["resources"]!.AsArray();
-        True(resources.Select(r => new Uri((string)r!["folderUri"]!).LocalPath).SequenceEqual(expected));
-    }
-
-    repo.Remove(a, repo.Load());
-    True(File.Exists(Project(b)) && Directory.Exists(folder));
-    Throws(() => AntigravityProfile.LocalProjectFolder(repo, root));
+    File.WriteAllText(Path.Combine(AntigravityProfile.Home(repo, a), ".gemini", "config", "projects", "three.json"), "{}");
+    True(File.Exists(Path.Combine(catalog, "three.json")));
+    await workspace.PrepareAsync(a with { AntigravitySharesLocalProjects = false }, SharedFixtureLink);
+    True(!workspace.IsPrepared(a));
+    repo.Save(new Snapshot { Accounts = [a, b] });
+    repo.Remove(b, repo.Load());
+    True(File.Exists(Path.Combine(catalog, "three.json")) && File.Exists(Path.Combine(history, id + ".db")));
 });
+AsyncTest("Antigravity interrupted shared junction binding recovers original directories", async () =>
+{
+    var repo = Repo("antigravity-recovery");
+    var source = Path.Combine(root, "Recovery Source");
+    var workspace = new SharedAntigravityWorkspace(repo, source);
+    var account = Profile("Recovery", Agent.Antigravity) with { AntigravityUsesPrivateHome = true, AntigravitySharesLocalProjects = true };
+    repo.PrepareProfile(account);
+    var local = Path.Combine(AntigravityProfile.Home(repo, account), ".gemini", "antigravity");
+    Directory.CreateDirectory(local);
+    File.WriteAllText(Path.Combine(local, "private-sentinel"), "original");
+    int links = 0;
+    bool failed = false;
+    try { await workspace.PrepareAsync(account, async (link, target) => { if (++links == 2) throw new IOException("interrupted fixture"); await SharedFixtureLink(link, target); }); }
+    catch (IOException) { failed = true; }
+    True(failed);
+    await workspace.PrepareAsync(account, SharedFixtureLink);
+    await workspace.PrepareAsync(account with { AntigravitySharesLocalProjects = false }, SharedFixtureLink);
+    Equal(File.ReadAllText(Path.Combine(local, "private-sentinel")), "original");
+});
+AsyncTest("Antigravity imports old private histories and refuses conflicting conversation copies", async () =>
+{
+    var repo = Repo("antigravity-import");
+    var source = Path.Combine(root, "Import Source");
+    var workspace = new SharedAntigravityWorkspace(repo, source);
+    var account = Profile("Old", Agent.Antigravity) with { AntigravityUsesPrivateHome = true, AntigravityLocalProjectFolder = "old-folder" };
+    True(account.SharesAntigravityProjects);
+    repo.PrepareProfile(account);
+    var history = Path.Combine(AntigravityProfile.Home(repo, account), ".gemini", "antigravity", "conversations");
+    Directory.CreateDirectory(history);
+    var id = Guid.NewGuid().ToString("D");
+    File.WriteAllText(Path.Combine(history, id + ".db"), "private history");
+    await workspace.PrepareAsync(account, SharedFixtureLink);
+    Equal(workspace.ConversationIDs().Single(), id);
+    Equal(workspace.ConversationIDs().Single(), id);
+    await workspace.PrepareAsync(account with { AntigravitySharesLocalProjects = false }, SharedFixtureLink);
+    File.WriteAllText(Path.Combine(history, id + ".db"), "conflicting history");
+    bool refused = false;
+    try { await workspace.PrepareAsync(account, SharedFixtureLink); } catch (AppError) { refused = true; }
+    True(refused);
+    Equal(File.ReadAllText(Path.Combine(source, ".gemini", "antigravity", "conversations", id + ".db")), "private history");
+});
+
 Test("Fresh Antigravity skips only the irrelevant IDE migration prompt and preserves existing UI settings",()=>{
     var repo=Repo("antigravity-new-ui");var a=Profile("A",Agent.Antigravity)with{AntigravityUsesPrivateHome=true};repo.PrepareProfile(a);var path=Path.Combine(repo.DataPath(a),"app_storage.json");using(var doc=JsonDocument.Parse(File.ReadAllText(path))){Equal(doc.RootElement.EnumerateObject().Count(),1);Equal(doc.RootElement.GetProperty("ide-install-wizard-shown").GetString(),"true");}
     File.WriteAllText(path,"{\"user-setting\":\"preserve\"}");repo.PrepareProfile(a);Equal(File.ReadAllText(path),"{\"user-setting\":\"preserve\"}");

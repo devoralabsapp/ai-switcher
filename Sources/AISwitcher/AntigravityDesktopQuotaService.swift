@@ -1,13 +1,18 @@
 import AppKit
 import Darwin
+import Security
 import AISwitcherCore
 
 @MainActor
 final class AntigravityDesktopQuotaService {
     let applications: AgentApplicationService
     let repository: ProfileRepository
+    private let sharedSourceHome: URL?
+    private var indexedConversations: [UUID: (Endpoint, Set<String>)] = [:]
     private var backgrounds: [UUID: Background] = [:]
-    init(applications: AgentApplicationService, repository: ProfileRepository) { self.applications = applications;self.repository = repository }
+    init(applications: AgentApplicationService, repository: ProfileRepository, sharedSourceHome: URL? = nil) {
+        self.applications = applications; self.repository = repository; self.sharedSourceHome = sharedSourceHome
+    }
 
     private final class Background {
         let process = Process(), input = Pipe(), output = Pipe(), csrf = UUID().uuidString
@@ -27,6 +32,7 @@ final class AntigravityDesktopQuotaService {
         guard account.usesAntigravityDesktopQuota else { throw ProviderQuotaError.unavailable }
         if applications.runningApplication(for:account) != nil || hasBackend(account.id) { return }
         try repository.prepareAntigravityProfile(for:account.id)
+        try SharedAntigravityWorkspace(repository:repository, sourceHome:sharedSourceHome).prepare(account)
         guard let app = applications.applicationURL(for:.antigravity),
               let version = Bundle(url:app)?.infoDictionary?["CFBundleShortVersionString"] as? String else { throw AgentLaunchError.notInstalled("Antigravity") }
         let executable = app.appendingPathComponent("Contents/Resources/bin/language_server")
@@ -60,6 +66,7 @@ final class AntigravityDesktopQuotaService {
     }
 
     func stop(_ id: UUID) async {
+        indexedConversations[id] = nil
         guard let backend = backgrounds.removeValue(forKey:id) else { return }
         try? backend.input.fileHandleForWriting.close()
         for _ in 0..<30 where backend.process.isRunning { try? await Task.sleep(nanoseconds:100_000_000) }
@@ -75,21 +82,7 @@ final class AntigravityDesktopQuotaService {
     /// credential persistence. AI Switcher never exchanges or copies tokens.
     func signInWithBrowser(_ account: Account) async throws {
         let endpoint = try await readyEndpoint(account)
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.connectionProxyDictionary = [:];configuration.httpCookieStorage = nil;configuration.urlCredentialStorage = nil
-        configuration.timeoutIntervalForRequest = 600;configuration.timeoutIntervalForResource = 600
-        let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-        let url = URL(string: "http://127.0.0.1:\(endpoint.port)/exa.language_server_pb.LanguageServerService/Login")!
-        var request = URLRequest(url: url);request.httpMethod = "POST";request.httpBody = Data("{}".utf8)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
-        request.setValue(endpoint.csrf, forHTTPHeaderField: "X-Codeium-Csrf-Token")
-        let (data,response) = try await session.data(for: request)
-        try Task.checkCancellation()
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200, data.count <= 1_048_576,
-              try self.endpoint(account) == endpoint else { throw ProviderQuotaError.signedOut }
-        // Do not persist the login response. The verified identity read follows.
+        _ = try await request(account, endpoint: endpoint, method: "Login")
     }
 
     private struct Endpoint: Equatable {
@@ -99,26 +92,9 @@ final class AntigravityDesktopQuotaService {
     func read(_ account: Account) async throws -> CodexConnection {
         let endpoint = try await readyEndpoint(account)
         let savedBefore = AntigravityAccountMetadata.read(at: repository.antigravityIdentityURL(for: account.id))
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.connectionProxyDictionary = [:]
-        configuration.httpCookieStorage = nil;configuration.urlCredentialStorage = nil
-        configuration.timeoutIntervalForRequest = 15;configuration.timeoutIntervalForResource = 20
-        let delegate = NoRedirects(), session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
+        try await indexSharedConversations(account)
         func request(_ method: String) async throws -> Data {
-            try Task.checkCancellation()
-            guard try self.endpoint(account) == endpoint else { throw ProviderQuotaError.identityChanged }
-            // No caller-provided URL, remote endpoint or arbitrary RPC method.
-            guard ["GetUserStatus","RetrieveUserQuotaSummary"].contains(method),
-                  let url = URL(string: "http://127.0.0.1:\(endpoint.port)/exa.language_server_pb.LanguageServerService/\(method)") else { throw ProviderQuotaError.invalidResponse }
-            var request = URLRequest(url: url);request.httpMethod = "POST";request.httpBody = Data("{}".utf8)
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
-            request.setValue(endpoint.csrf, forHTTPHeaderField: "X-Codeium-Csrf-Token")
-            let (data, response) = try await session.data(for: request)
-            guard let response = response as? HTTPURLResponse, response.statusCode == 200, data.count <= 1_048_576,
-                  try self.endpoint(account) == endpoint else { throw ProviderQuotaError.invalidResponse }
-            return data
+            try await self.request(account, endpoint: endpoint, method: method)
         }
         let before = try await request("GetUserStatus")
         _ = try AntigravityDesktopQuota.identity(before)
@@ -129,6 +105,74 @@ final class AntigravityDesktopQuotaService {
         guard savedBefore == savedAfter else { throw ProviderQuotaError.identityChanged }
         if let email = savedAfter?.email, value.identity.email?.caseInsensitiveCompare(email) != .orderedSame { throw ProviderQuotaError.identityChanged }
         return value
+    }
+
+    func indexSharedConversations(_ account: Account) async throws {
+        guard account.sharesAntigravityProjects else { return }
+        let workspace = SharedAntigravityWorkspace(repository: repository, sourceHome: sharedSourceHome)
+        let ids = try workspace.conversationIDs()
+        guard !ids.isEmpty else { return }
+        let endpoint = try await readyEndpoint(account)
+        let indexed = indexedConversations[account.id]
+        let missing = ids.filter { indexed?.0 != endpoint || indexed?.1.contains($0) != true }
+        for id in missing {
+            try Task.checkCancellation()
+            _ = try await request(account, endpoint: endpoint, method: "GetConversationMetadata",
+                                  body: JSONSerialization.data(withJSONObject: ["conversationId": id]))
+        }
+        indexedConversations[account.id] = (endpoint, Set(ids))
+    }
+
+    #if DEBUG
+    private var fixtureEnabled: Bool {
+        ProcessInfo.processInfo.environment["AISWITCHER_TEST_NATIVE_ANTIGRAVITY"] == "1"
+            && repository.root.lastPathComponent.hasPrefix("Antigravity's Profiles ") && sharedSourceHome != nil
+    }
+    // Signed-out, disposable native history fixture. Never sends a model prompt.
+    func fixtureRequest(_ account: Account, method: String, body: [String: Any] = [:]) async throws -> Data {
+        guard fixtureEnabled else { throw ProviderQuotaError.unavailable }
+        return try await request(account, endpoint: try await readyEndpoint(account), method: method,
+                                 body: JSONSerialization.data(withJSONObject: body))
+    }
+    #endif
+
+    private func request(_ account: Account, endpoint: Endpoint, method: String, body: Data = Data("{}".utf8)) async throws -> Data {
+        var allowed = ["GetUserStatus", "RetrieveUserQuotaSummary", "Login", "GetConversationMetadata"]
+        #if DEBUG
+        if fixtureEnabled { allowed += ["StartCascade", "GetAllCascadeTrajectories", "GetCascadeTrajectory"] }
+        #endif
+        guard allowed.contains(method),
+              try self.endpoint(account) == endpoint else { throw ProviderQuotaError.identityChanged }
+        let config = URLSessionConfiguration.ephemeral
+        config.connectionProxyDictionary = [:]
+        config.httpCookieStorage = nil
+        config.urlCredentialStorage = nil
+        config.timeoutIntervalForRequest = method == "Login" ? 600 : 20
+        config.timeoutIntervalForResource = config.timeoutIntervalForRequest
+        let delegate = LocalNativeSession(port: endpoint.port, pid: endpoint.childPID,
+                                          parent: endpoint.rootPID, stamp: (endpoint.createdSeconds, endpoint.createdMicros))
+        let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+        // Current Hub uses TLS on its local HTTP listener. Older versions use HTTP.
+        for scheme in ["http", "https"] {
+            try Task.checkCancellation()
+            guard try self.endpoint(account) == endpoint else { throw ProviderQuotaError.identityChanged }
+            let url = URL(string: "\(scheme)://127.0.0.1:\(endpoint.port)/exa.language_server_pb.LanguageServerService/\(method)")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
+            request.setValue(endpoint.csrf, forHTTPHeaderField: "X-Codeium-Csrf-Token")
+            let (data, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse, data.count <= 1_048_576,
+                  try self.endpoint(account) == endpoint else { throw ProviderQuotaError.invalidResponse }
+            if scheme == "http", response.statusCode == 400,
+               String(decoding: data, as: UTF8.self).contains("HTTP request to an HTTPS server") { continue }
+            guard response.statusCode == 200 else { throw ProviderQuotaError.unavailable }
+            return data
+        }
+        throw ProviderQuotaError.unavailable
     }
 
     private func readyEndpoint(_ account: Account) async throws -> Endpoint {
@@ -205,6 +249,39 @@ final class AntigravityDesktopQuotaService {
     }
 }
 
-private final class NoRedirects: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
+private final class LocalNativeSession: NSObject, URLSessionTaskDelegate {
+    let port: Int, pid: pid_t, parent: pid_t
+    let stamp: (Int, Int)
+    private let lock = NSLock()
+    private var certificate: Data?
+    init(port: Int, pid: pid_t, parent: pid_t, stamp: (Int, Int)) {
+        self.port = port
+        self.pid = pid
+        self.parent = parent
+        self.stamp = stamp
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        let space = challenge.protectionSpace
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.size
+        guard space.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              space.host == "127.0.0.1", space.port == port,
+              sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0,
+              info.kp_eproc.e_ppid == parent,
+              Int(info.kp_proc.p_starttime.tv_sec) == stamp.0,
+              Int(info.kp_proc.p_starttime.tv_usec) == stamp.1,
+              let trust = space.serverTrust, let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+              let leaf = chain.first else { completionHandler(.cancelAuthenticationChallenge, nil); return }
+        let data = SecCertificateCopyData(leaf) as Data
+        lock.lock()
+        let valid = certificate == nil || certificate == data
+        if certificate == nil { certificate = data }
+        lock.unlock()
+        completionHandler(valid ? .useCredential : .cancelAuthenticationChallenge, valid ? URLCredential(trust: trust) : nil)
+    }
 }

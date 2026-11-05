@@ -397,12 +397,7 @@ final class AppModel: ObservableObject {
         }
         do {
             try account.validate()
-            let projectChanged = (previous?.usesIsolatedAntigravity ?? account.usesIsolatedAntigravity)
-                && previous?.antigravityLocalProjectFolder != account.antigravityLocalProjectFolder
-            if projectChanged,
-               let folder = account.antigravityLocalProjectFolder {
-                account.antigravityLocalProjectFolder = try repository.antigravityLocalProjectFolder(folder).path
-            }
+            let projectChanged = previous?.sharesAntigravityProjects != account.sharesAntigravityProjects
             if account.usesSharedApplication,
                accounts.contains(where: { $0.id != account.id && $0.usesSharedApplication }) {
                 throw AgentLaunchError.duplicateSharedApplication
@@ -421,9 +416,7 @@ final class AppModel: ObservableObject {
                     }
                     quotaErrors[account.id] = nil
                 }
-                if projectChanged {
-                    try repository.preserveAntigravityLocalProjectSelection(for: updated.accounts[index])
-                }
+
                 edited.providerQuotaConnection = updated.accounts[index].providerQuotaConnection
                 edited.codexConnection = updated.accounts[index].codexConnection
                 edited.desktopCodexConnection = updated.accounts[index].desktopCodexConnection
@@ -450,7 +443,12 @@ final class AppModel: ObservableObject {
         Task {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
-                if account.usesIsolatedAntigravity { await antigravityDesktopQuota.stop(account.id);try await agentApplications.open(account) }
+                if account.usesIsolatedAntigravity {
+                    try validateAntigravityWorkspaceSession(account)
+                    await antigravityDesktopQuota.stop(account.id)
+                    try await agentApplications.open(account)
+                    try await antigravityDesktopQuota.indexSharedConversations(account)
+                }
                 else if account.usesSharedApplication { try await agentApplications.open(account.effectiveAgent) }
                 else if account.usesClaudeDesktop { try await claudeDesktopService.open(account) }
                 else if account.usesCodexDesktop { try await desktopService.open(account) }
@@ -466,6 +464,17 @@ final class AppModel: ObservableObject {
                 if account.usesCodexDesktop && !quotaBusyIDs.contains(account.id) { refreshDesktopQuota(account) }
                 if account.usesAntigravityDesktopQuota && !quotaBusyIDs.contains(account.id) { refreshProviderQuota(account) }
             } catch { showError(error, title: L10n.text("Could not open account")) }
+        }
+    }
+
+    private func validateAntigravityWorkspaceSession(_ account: Account) throws {
+        let workspace = SharedAntigravityWorkspace(repository: repository)
+        guard account.sharesAntigravityProjects || workspace.isPrepared(account) else { return }
+        if agentApplications.isRunning(.antigravity) { throw AntigravityProfileError.sharedSessionRunning }
+        for other in accounts where other.id != account.id && other.sharesAntigravityProjects {
+            if hasRunningSession(other) || launchingIDs.contains(other.id) || quotaBusyIDs.contains(other.id) {
+                throw AntigravityProfileError.sharedSessionRunning
+            }
         }
     }
 
@@ -760,6 +769,7 @@ final class AppModel: ObservableObject {
                     updated.accounts[index].providerQuotaConnection = CodexConnection(identity: identity, quota: keepQuota ? old?.quota : nil, identityFetchedAt: Date(), providerSessionKind: kind)
                     try persist(updated);providerSessionIDs.insert(account.id)
                 }
+                if account.usesIsolatedAntigravity { try validateAntigravityWorkspaceSession(account) }
                 let usesWeb = account.effectiveAgent == .claude && account.providerQuotaConnection?.providerSessionKind == "claudeWeb"
                 let read = { [self] in
                     if account.usesAntigravityDesktopQuota { return try await antigravityDesktopQuota.read(account) }

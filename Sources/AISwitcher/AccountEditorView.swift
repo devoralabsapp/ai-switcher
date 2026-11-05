@@ -20,7 +20,6 @@ struct AccountEditorView: View {
     @State private var agent: AIAgent
     @State private var antigravitySignInMethod: AntigravitySignInMethod
     @State private var sharesAntigravityProject: Bool
-    @State private var antigravityProjectFolder: URL?
     @FocusState private var nameFocused: Bool
 
     init(model: AppModel, editor: AccountEditor) {
@@ -36,9 +35,7 @@ struct AccountEditorView: View {
         _connectOnStartup = State(initialValue: editor.account?.automaticallyConnects ?? false)
         _agent = State(initialValue: editor.account?.effectiveAgent ?? editor.defaultAgent)
         _antigravitySignInMethod = State(initialValue: editor.account?.antigravitySignInMethod ?? .browser)
-        let savedFolder = editor.account?.antigravityLocalProjectFolder
-        _sharesAntigravityProject = State(initialValue: savedFolder != nil)
-        _antigravityProjectFolder = State(initialValue: savedFolder.map { URL(fileURLWithPath: $0) })
+        _sharesAntigravityProject = State(initialValue: editor.account?.sharesAntigravityProjects ?? false)
         _openAfterSave = State(initialValue: !model.preferences.quotaOnlyMode)
     }
 
@@ -51,7 +48,6 @@ struct AccountEditorView: View {
     private var valid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 48 && email.count <= 160
             && (selectedMode == .desktop || !isNew || model.browserService.applicationURL(for: browser) != nil)
-            && (!canShareAntigravityProject || !sharesAntigravityProject || antigravityProjectFolder != nil)
     }
 
     var body: some View {
@@ -110,14 +106,8 @@ struct AccountEditorView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Toggle(L10n.text("Share local project"), isOn: $sharesAntigravityProject)
                                     .accessibilityIdentifier("antigravityShareLocalProject")
-                                if sharesAntigravityProject {
-                                    Text(L10n.text("Choose the same folder for each Antigravity account that should work on the project. Each account keeps its own chat history."))
-                                        .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
-                                    Button(L10n.text("Choose folder…")) { chooseAntigravityProjectFolder() }
-                                    if let folder = antigravityProjectFolder {
-                                        Text(folder.path).font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
-                                    }
-                                }
+                                Text(L10n.text("Share all local projects and conversation history from Antigravity Desktop. Close shared sessions before switching accounts."))
+                                    .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
                             }
                             .disabled(modeLocked)
                             if modeLocked {
@@ -272,7 +262,8 @@ struct AccountEditorView: View {
             account.antigravitySignInMethod = antigravitySignInMethod
         }
         if canShareAntigravityProject {
-            account.antigravityLocalProjectFolder = sharesAntigravityProject ? antigravityProjectFolder?.path : nil
+            account.antigravitySharesLocalProjects = sharesAntigravityProject
+            account.antigravityLocalProjectFolder = nil
         }
         account.sharesLocalWorkspace = agent == .chatgpt && sharesLocalWorkspace
         account.defaultAction = agent == .chatgpt ? defaultAction : .openDesktop
@@ -282,16 +273,6 @@ struct AccountEditorView: View {
         if isNew && openAfterSave {
             if agent == .antigravity { model.connectSession(account) }
             else { model.open(account) }
-        }
-    }
-
-    private func chooseAntigravityProjectFolder() {
-        let picker = NSOpenPanel()
-        picker.canChooseFiles = false
-        picker.canChooseDirectories = true
-        picker.directoryURL = antigravityProjectFolder
-        picker.begin { response in
-            if response == .OK { antigravityProjectFolder = picker.url }
         }
     }
 

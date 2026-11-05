@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 using AISwitcher.Core;
 
 namespace AISwitcher.Windows;
-internal sealed class AntigravityDesktopService(Repository repo,NativePlatform platform) {
+internal sealed class AntigravityDesktopService(Repository repo,NativePlatform platform,string? sharedSourceHome=null) {
     sealed class Background(Process process,string csrf){
         public Process Process=process;public string Csrf=csrf;public StringBuilder Startup=new();public bool PrivateStore;
         public int? Port {get{lock(Startup){var matches=Regex.Matches(Startup.ToString(),@"listening on random port at (\d+) for HTTP\b");return matches.Count>0?int.Parse(matches[^1].Groups[1].Value):null;}}}
@@ -24,6 +24,7 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
     readonly Dictionary<Guid,Background> backgrounds=[];
     internal Action<string>? FixtureDiagnostic { get; set; }
     readonly Dictionary<Guid,Endpoint> endpoints=[];
+    readonly Dictionary<Guid,(Endpoint Endpoint, HashSet<string> Ids)> indexedConversations=[];
     internal int? BackendPid(Account account)=>backgrounds.TryGetValue(account.Id,out var backend)&&!backend.Process.HasExited?backend.Process.Id:null;
     public bool IsActive(Account account)=>backgrounds.TryGetValue(account.Id,out var value)&&!value.Process.HasExited;
     static string? Argument(string[] args,string key){var direct=args.FirstOrDefault(x=>x.StartsWith(key+"=",StringComparison.Ordinal));if(direct!=null)return direct[(key.Length+1)..];var index=Array.IndexOf(args,key);return index>=0&&index+1<args.Length?args[index+1]:null;}
@@ -31,7 +32,9 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         AntigravityProfile.Validate(repo,account);await platform.RefreshProcessesAsync();if(platform.Owned(account)!=null||IsActive(account))return;
         if(backgrounds.ContainsKey(account.Id))await StopAsync(account);
         if(platform.HasOwnedProcesses(account))throw new AppError("Close this Antigravity account session once, then open it again to apply separate sign-in storage. Your data is kept.");
-        repo.PrepareProfile(account);foreach(var dir in AntigravityProfile.Directories(repo,account))NativePlatform.ProtectDirectory(dir);
+        repo.PrepareProfile(account);
+        await new SharedAntigravityWorkspace(repo, sharedSourceHome).PrepareAsync(account, SharedWorkspace.JunctionAsync);
+        foreach(var dir in AntigravityProfile.Directories(repo,account))NativePlatform.ProtectDirectory(dir);
         var app=await platform.FindExecutableAsync("antigravity")??throw new AppError("The required app or browser was not found. Choose its executable in Settings.");var native=NativePlatform.AntigravityServerPath(app);
         if(!AntigravityProfile.SupportsPrivateStorage(native))throw new AppError(AntigravityProfile.Unsupported);
         var csrf=Guid.NewGuid().ToString();var version=FileVersionInfo.GetVersionInfo(app).ProductVersion??"2";
@@ -55,7 +58,7 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         }catch{await StopAsync(account);if(!backgrounds.ContainsKey(account.Id))process.Dispose();throw;}
     }
     public async Task StopAsync(Account account){
-        endpoints.Remove(account.Id);if(!backgrounds.Remove(account.Id,out var backend))return;
+        endpoints.Remove(account.Id);indexedConversations.Remove(account.Id);if(!backgrounds.Remove(account.Id,out var backend))return;
         var process=backend.Process;
         try{if(!process.HasExited){process.StandardInput.Close();try{await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3));}catch(TimeoutException){if(!process.HasExited)process.Kill(true);await process.WaitForExitAsync();}}}
         finally{process.Dispose();}
@@ -77,10 +80,10 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
     }
     static bool SameProcess(int id,long created,string? executable=null){try{using var p=Process.GetProcessById(id);return !p.HasExited&&p.StartTime.ToUniversalTime().ToFileTimeUtc()==created&&(executable==null||NativePlatform.SamePath(p.MainModule!.FileName!,executable));}catch(ArgumentException){return false;}catch(System.ComponentModel.Win32Exception){return false;}}
     bool Valid(Endpoint endpoint)=>SameProcess(endpoint.Root,endpoint.RootCreated)&&SameProcess(endpoint.Pid,endpoint.Created,endpoint.Executable)&&ListeningPorts(endpoint.Pid).Contains(endpoint.Port);
-    async Task<JsonElement> Send(Endpoint endpoint,string method,CancellationToken ct,bool discovery=false){
-        if(method is not ("GetUserStatus" or "RetrieveUserQuotaSummary" or "Login")||!Valid(endpoint))throw new AppError(ProviderQuota.Changed);
+    async Task<JsonElement> Send(Endpoint endpoint,string method,CancellationToken ct,bool discovery=false,string? conversationId=null,string? fixtureBody=null){
+        if((method is not ("GetUserStatus" or "RetrieveUserQuotaSummary" or "Login" or "GetConversationMetadata") && !(FixtureEnabled && method is ("StartCascade" or "GetAllCascadeTrajectories" or "GetCascadeTrajectory")))||!Valid(endpoint))throw new AppError(ProviderQuota.Changed);
         using var client=Client(endpoint,TimeSpan.FromSeconds(discovery?5:method=="Login"?600:20));
-        using var request=new HttpRequestMessage(HttpMethod.Post,$"{(endpoint.Tls?"https":"http")}://127.0.0.1:{endpoint.Port}/exa.language_server_pb.LanguageServerService/{method}");request.Content=new StringContent("{}",Encoding.UTF8,"application/json");request.Headers.Add("Connect-Protocol-Version","1");request.Headers.Add("X-Codeium-Csrf-Token",endpoint.Csrf);
+        using var request=new HttpRequestMessage(HttpMethod.Post,$"{(endpoint.Tls?"https":"http")}://127.0.0.1:{endpoint.Port}/exa.language_server_pb.LanguageServerService/{method}");request.Content=new StringContent(fixtureBody ?? (conversationId == null ? "{}" : JsonSerializer.Serialize(new { conversationId })),Encoding.UTF8,"application/json");request.Headers.Add("Connect-Protocol-Version","1");request.Headers.Add("X-Codeium-Csrf-Token",endpoint.Csrf);
         using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,ct);using var stream=await response.Content.ReadAsStreamAsync(ct);using var memory=new MemoryStream();var buffer=new byte[8192];int size;
         while((size=await stream.ReadAsync(buffer,ct))>0){if(memory.Length+size>1048576)throw new AppError(ProviderQuota.Invalid);memory.Write(buffer,0,size);}
         if(!Valid(endpoint))throw new AppError(ProviderQuota.Changed);
@@ -118,7 +121,31 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         }
         throw new AppError(ProviderQuota.Unavailable);
     }
+    bool FixtureEnabled => Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true"
+        && Environment.GetCommandLineArgs().Contains("--antigravity-smoke-test") && sharedSourceHome != null;
+    internal async Task<JsonElement> FixtureRequestAsync(Account account, string method, object? body, CancellationToken ct)
+    {
+        if (!FixtureEnabled) throw new AppError(ProviderQuota.Unavailable);
+        return await Send(await Ready(account, ct), method, ct, fixtureBody: JsonSerializer.Serialize(body ?? new { }));
+    }
+    public async Task IndexSharedConversationsAsync(Account account, CancellationToken ct)
+    {
+        if (!account.SharesAntigravityProjects) return;
+        var workspace = new SharedAntigravityWorkspace(repo, sharedSourceHome);
+        var ids = workspace.ConversationIDs();
+        if (ids.Length == 0) return;
+        var endpoint = await Ready(account, ct);
+        var missing = indexedConversations.TryGetValue(account.Id, out var indexed) && indexed.Endpoint == endpoint
+            ? ids.Where(id => !indexed.Ids.Contains(id)) : ids.AsEnumerable();
+        foreach (var id in missing)
+        {
+            ct.ThrowIfCancellationRequested();
+            _ = await Send(endpoint, "GetConversationMetadata", ct, conversationId: id);
+        }
+        indexedConversations[account.Id] = (endpoint, ids.ToHashSet());
+    }
     public async Task<Connection> ReadAsync(Account account,CancellationToken ct){
+        await IndexSharedConversationsAsync(account, ct);
         var endpoint=await Ready(account,ct);var saved=AntigravityProfile.ReadIdentity(AntigravityProfile.DesktopIdentity(repo,account));
         var before=await Send(endpoint,"GetUserStatus",ct);_=AntigravityProfile.Status(before);
         var quota=await Send(endpoint,"RetrieveUserQuotaSummary",ct);var after=await Send(endpoint,"GetUserStatus",ct);

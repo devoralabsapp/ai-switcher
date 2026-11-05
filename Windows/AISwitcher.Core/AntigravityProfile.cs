@@ -9,7 +9,7 @@ public static class AntigravityProfile {
     public const string DesktopSessionKind="antigravityWindowsDesktopV1",CliSessionKind="antigravityWindowsCliV1";
     public const string MarkerArgument="--ai-switcher-antigravity-private-storage=v1";
     public const string Unsupported="This Antigravity version could not be verified for separate profiles. Update Antigravity and try again.";
-    public const string InvalidLocalProjectFolder = "Choose an existing local project folder outside AI Switcher’s data.";
+
     public static string Home(Repository repo,Account account)=>Path.Combine(repo.ProfilePath(account),"Home");
     public static string DesktopIdentity(Repository repo,Account account)=>Path.Combine(Home(repo,account),".gemini","jetski-standalone-oauth-token");
     public static string CliIdentity(Repository repo,Account account)=>Path.Combine(Home(repo,account),".gemini","antigravity-cli","antigravity-oauth-token");
@@ -23,122 +23,6 @@ public static class AntigravityProfile {
         foreach(var path in new[]{DesktopIdentity(repo,account),CliIdentity(repo,account)})Repository.RejectLinks(path);
     }
 
-    public static string LocalProjectFolder(Repository repo, string path)
-    {
-        if (!Path.IsPathFullyQualified(path) || !Directory.Exists(path))
-            throw new AppError(InvalidLocalProjectFolder);
-
-        var folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        if (OperatingSystem.IsWindows())
-        {
-            if (folder.StartsWith(@"\\", StringComparison.Ordinal))
-                throw new AppError(InvalidLocalProjectFolder);
-            for (var parent = new DirectoryInfo(folder); parent != null; parent = parent.Parent)
-                if ((parent.Attributes & FileAttributes.ReparsePoint) != 0)
-                    throw new AppError(InvalidLocalProjectFolder);
-        }
-
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        bool Contains(string parent, string child) => child.Equals(parent, comparison)
-            || child.StartsWith(Path.EndsInDirectorySeparator(parent) ? parent : parent + Path.DirectorySeparatorChar, comparison);
-        foreach (var storage in new[] { repo.Root, Path.TrimEndingDirectorySeparator(repo.BackendBase) })
-            if (Contains(storage, folder) || Contains(folder, storage))
-                throw new AppError(InvalidLocalProjectFolder);
-        return folder;
-    }
-
-    static string LocalProjectMarker(Repository repo, Account account) =>
-        Path.Combine(repo.ProfilePath(account), "local-project-initialized");
-
-    static string? ReadLocalProjectFile(string path)
-    {
-        Repository.RejectLinks(path);
-        return Directory.Exists(path) ? throw new AppError("Profile storage could not be verified.")
-            : File.Exists(path) ? File.ReadAllText(path) : null;
-    }
-
-    static void WriteLocalProjectFile(string path, string contents, bool overwrite)
-    {
-        var temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
-        try
-        {
-            using (var writer = new StreamWriter(new FileStream(temporary, FileMode.CreateNew)))
-                writer.Write(contents);
-            File.Move(temporary, path, overwrite);
-        }
-        finally { File.Delete(temporary); }
-    }
-
-    // Preview 23 used an empty marker. Capture its applied folder before editing.
-    public static void PreserveLocalProjectSelection(Repository repo, Account account)
-    {
-        if (!account.UsesPrivateAntigravity || account.AntigravityLocalProjectFolder is not { } folder) return;
-        Validate(repo, account);
-        var marker = LocalProjectMarker(repo, account);
-        if (ReadLocalProjectFile(marker) == "")
-            WriteLocalProjectFile(marker, JsonSerializer.Serialize(folder), overwrite: true);
-    }
-
-    // Apply changes before Desktop starts, preserving the native project ID and chat metadata.
-    public static void PrepareLocalProject(Repository repo, Account account)
-    {
-        if (!account.UsesPrivateAntigravity) return;
-        Validate(repo, account);
-        var path = account.AntigravityLocalProjectFolder;
-        var marker = LocalProjectMarker(repo, account);
-        var applied = ReadLocalProjectFile(marker);
-        if (applied == "") return;
-        var previous = applied == null ? null : JsonSerializer.Deserialize<string?>(applied);
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (string.Equals(previous, path, comparison)) return;
-
-        var folder = path == null ? null : LocalProjectFolder(repo, path);
-        var config = Path.Combine(Home(repo, account), ".gemini", "config");
-        var projects = Path.Combine(config, "projects");
-        foreach (var directory in new[] { config, projects })
-        {
-            Repository.RejectLinks(directory);
-            Directory.CreateDirectory(directory);
-            Repository.RejectLinks(directory);
-        }
-
-        var id = account.Id.ToString("D");
-        var project = Path.Combine(projects, id + ".json");
-        var existing = ReadLocalProjectFile(project);
-        if (existing != null)
-        {
-            if (JsonNode.Parse(existing) is not JsonObject definition ||
-                !string.Equals((string?)definition["id"], id, StringComparison.OrdinalIgnoreCase))
-                throw new AppError("Profile storage could not be verified.");
-
-            var projectResources = definition["projectResources"]?.AsObject() ?? new JsonObject();
-            var resources = projectResources["resources"]?.AsArray() ?? new JsonArray();
-            bool Matches(JsonNode? resource, string target) =>
-                Uri.TryCreate((string?)resource?["folderUri"], UriKind.Absolute, out var uri) && uri.IsFile &&
-                string.Equals(Path.TrimEndingDirectorySeparator(uri.LocalPath), target, comparison);
-            var oldResource = previous == null ? null : resources.FirstOrDefault(r => Matches(r, previous));
-            if (oldResource != null) resources.Remove(oldResource);
-            var needsFolder = folder != null && !resources.Any(r => Matches(r, folder));
-            if (needsFolder) resources.Add(new JsonObject { ["folderUri"] = new Uri(folder!).AbsoluteUri });
-            if (oldResource != null || needsFolder)
-            {
-                if (resources.Parent == null) projectResources["resources"] = resources;
-                if (projectResources.Parent == null) definition["projectResources"] = projectResources;
-                WriteLocalProjectFile(project, definition.ToJsonString(), overwrite: true);
-            }
-        }
-        else if (folder != null)
-        {
-            var definition = new
-            {
-                id,
-                name = Path.GetFileName(folder),
-                projectResources = new { resources = new[] { new { folderUri = new Uri(folder).AbsoluteUri } } }
-            };
-            WriteLocalProjectFile(project, JsonSerializer.Serialize(definition), overwrite: false);
-        }
-        WriteLocalProjectFile(marker, JsonSerializer.Serialize(path), overwrite: applied != null);
-    }
     public static Dictionary<string,string> Environment(IReadOnlyDictionary<string,string> inherited,Repository repo,Account account){
         var env=ChildEnvironment.Create(inherited);var home=Home(repo,account);
         env["HOME"]=home;env["USERPROFILE"]=home;env["HOMEDRIVE"]=Path.GetPathRoot(home)!.TrimEnd(Path.DirectorySeparatorChar);env["HOMEPATH"]=home[env["HOMEDRIVE"].Length..];

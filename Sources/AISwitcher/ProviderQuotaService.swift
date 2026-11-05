@@ -63,6 +63,7 @@ final class ProviderQuotaService {
         if account.effectiveAgent == .claude { try repository.prepareClaudeProfile(for: account.id); env["CLAUDE_CONFIG_DIR"] = repository.claudeConfigURL(for: account.id).path }
         if account.usesIsolatedAntigravity {
             try repository.prepareAntigravityProfile(for: account.id)
+            try SharedAntigravityWorkspace(repository: repository).prepare(account)
             env = AntigravityLaunch.environment(base: env, home: repository.antigravityHomeURL(for: account.id))
         }
         return env

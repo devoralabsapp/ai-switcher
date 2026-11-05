@@ -53,6 +53,58 @@ internal static partial class PreviewRunner {
             await ExpectSignedOut(a,restarted);await ExpectSignedOut(b,restarted);
             await engine.CloseAsync(a);Require(!engine.Running(a)&&engine.Running(b),"Closing reopened A affected B");
             await engine.CloseAsync(b);Require(!engine.Running(b),"Close B left a native helper running");
+            Phase("Shared all-project catalog and existing conversations");
+            var source = Path.Combine(root, "original-desktop-home");
+            var projects = Path.Combine(source, ".gemini", "config", "projects");
+            Directory.CreateDirectory(projects);
+            foreach (var name in new[] { "One", "Two" })
+                File.WriteAllText(Path.Combine(projects, name + ".json"), JsonSerializer.Serialize(new { id = Guid.NewGuid().ToString(), name, projectResources = new { } }));
+            var sourceIdentity = Path.Combine(source, ".gemini", "jetski-standalone-oauth-token");
+            File.WriteAllText(sourceIdentity, "source identity canary");
+            var shared = new AntigravityDesktopService(repo, engine.Platform, source);
+            try
+            {
+                await shared.ConnectAsync(a, ct);
+                var created = await shared.FixtureRequestAsync(a, "StartCascade", new { source = "CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE" }, ct);
+                var id = created.GetProperty("cascadeId").GetString()!;
+                await shared.StopAsync(a);
+                var sharedA = a with { AntigravitySharesLocalProjects = true };
+                var sharedB = b with { AntigravitySharesLocalProjects = true };
+                await shared.ConnectAsync(sharedA, ct);
+                await shared.IndexSharedConversationsAsync(sharedA, ct);
+                Require(new SharedAntigravityWorkspace(repo, source).ConversationIDs().Contains(id), "Imported history was not registered");
+                var newConversation = await shared.FixtureRequestAsync(sharedA, "StartCascade", new { source = "CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE" }, ct);
+                var newID = newConversation.GetProperty("cascadeId").GetString()!;
+                await shared.StopAsync(sharedA);
+                await shared.ConnectAsync(sharedB, ct);
+                await shared.IndexSharedConversationsAsync(sharedB, ct);
+                var found = false;
+                for (var attempt = 0; attempt < 40; attempt++)
+                {
+                    var listed = await shared.FixtureRequestAsync(sharedB, "GetAllCascadeTrajectories", null, ct);
+                    if (listed.TryGetProperty("trajectorySummaries", out var summaries) && summaries.TryGetProperty(id, out _) && summaries.TryGetProperty(newID, out _)) { found = true; break; }
+                    await Task.Delay(250, ct);
+                }
+                Require(found, "Account B could not list A's imported local conversation");
+                var read = await shared.FixtureRequestAsync(sharedB, "GetCascadeTrajectory", new { cascadeId = id }, ct);
+                Require(read.GetProperty("trajectory").GetProperty("cascadeId").GetString() == id, "Conversation ID changed across accounts");
+                foreach (var account in new[] { sharedA, sharedB })
+                {
+                    var registry = Path.Combine(AntigravityProfile.Home(repo, account), ".gemini", "config", "projects");
+                    Require(File.Exists(Path.Combine(registry, "One.json")) && File.Exists(Path.Combine(registry, "Two.json")), "Shared catalog lost a Desktop project");
+                    Require(!File.Exists(AntigravityProfile.DesktopIdentity(repo, account)), "Sharing imported another account's login");
+                }
+                try { await shared.ReadAsync(sharedB, ct); throw new InvalidOperationException("Shared history imported source login"); }
+                catch (AppError error) when (error.Key == ProviderQuota.SignedOut) { }
+                Require(File.ReadAllText(sourceIdentity) == "source identity canary", "Source login was changed");
+                await shared.StopAsync(sharedB);
+                await new SharedAntigravityWorkspace(repo, source).PrepareAsync(a, SharedWorkspace.JunctionAsync);
+                await new SharedAntigravityWorkspace(repo, source).PrepareAsync(b, SharedWorkspace.JunctionAsync);
+                Require(File.Exists(Path.Combine(AntigravityProfile.Home(repo, a), ".gemini", "antigravity", "conversations", id + ".db")), "Turning off sharing lost original private history");
+                Require(File.Exists(Path.Combine(source, ".gemini", "antigravity", "conversations", id + ".db")), "Turning off sharing deleted shared history");
+                CheckCanary();
+            }
+            finally { await shared.StopAllAsync(); }
             // Explicit Login must keep a local callback; no Google credentials or consent are entered.
             Phase("Browser localhost callback");
             var browser=await engine.Platform.FindExecutableAsync("edge")??throw new InvalidOperationException("Edge is required for the browser ownership fixture");var unrelatedData=Path.Combine(root,"unrelated-browser");Directory.CreateDirectory(unrelatedData);
@@ -118,7 +170,7 @@ internal static partial class PreviewRunner {
                 if(primary==null)throw cleanup;
             }
         }
-            File.WriteAllText(Path.Combine(output,"antigravity-native-result.txt"),"PASS: official Windows Antigravity Desktop and CLI; private vendor file storage selected; two independent fresh native backgrounds and Desktop windows stay signed out with a global synthetic Credential Manager canary present; CLI /usage uses private storage without model input; separate native HTTP/CSRF endpoints; close/reopen and manager restart preserve ownership and data; account directories can be removed after cancelled browser OAuth; closing A preserves B; global canary unchanged; explicit Google browser Login uses a localhost callback and is cancelled before authentication. Live Google sign-in and live subscription quotas are not exercised.\n");
+            File.WriteAllText(Path.Combine(output,"antigravity-native-result.txt"),"PASS: official Windows Antigravity Desktop and CLI; private vendor file storage selected; two independent fresh native backgrounds and Desktop windows stay signed out with a global synthetic Credential Manager canary present; CLI /usage uses private storage without model input; separate native HTTP/CSRF endpoints; all-project junction sharing imports existing private conversation IDs, indexes them under account B and restores originals when disabled; close/reopen and manager restart preserve ownership and data; account directories can be removed after cancelled browser OAuth; closing A preserves B; global canary unchanged; explicit Google browser Login uses a localhost callback and is cancelled before authentication. Live Google sign-in and live subscription quotas are not exercised.\n");
         async Task ExpectSignedOut(Account account,AppEngine? manager=null){try{await (manager??engine).Antigravity.ReadAsync(account,ct);}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){return;}throw new InvalidOperationException("Fresh private profile was not signed out");}
         void CheckCanary(){foreach(var target in targets)CheckCredential(target);}
         void CheckCredential(string target){Require(CredRead(target,1,0,out var pointer),"Fixture credential disappeared");try{var value=Marshal.PtrToStructure<FixtureCredential>(pointer);var bytes=new byte[value.BlobSize];Marshal.Copy(value.Blob,bytes,0,bytes.Length);Require(bytes.SequenceEqual(synthetic),"Private session changed shared Credential Manager storage");}finally{CredFree(pointer);}}

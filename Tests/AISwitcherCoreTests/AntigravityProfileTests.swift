@@ -3,86 +3,173 @@ import XCTest
 @testable import AISwitcher
 
 final class AntigravityProfileTests: XCTestCase {
-    private func fixtureRoot() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("Antigravity's Profiles \(UUID())") }
+    private func fixtureRoot() -> URL { FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("Antigravity's Profiles \(UUID())") }
 
-    func testEditingPreview23ProjectReplacesOnlyItsManagedFolderAndKeepsHistory() throws {
-        let root = fixtureRoot()
+    func testSharedDesktopWorkspaceIncludesAllProjectsAndHistoryWhileKeepingEachLoginPrivate() throws {
         let fm = FileManager.default
+        let root = fixtureRoot().resolvingSymlinksInPath()
         defer { try? fm.removeItem(at: root) }
         let repo = ProfileRepository(root: root.appendingPathComponent("Manager"))
-        let folders = try ["Original", "Replacement #2", "User folder"].map { name in
-            let folder = root.appendingPathComponent(name, isDirectory: true)
-            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            return try repo.antigravityLocalProjectFolder(folder.path)
+        let source = root.appendingPathComponent("Original Home")
+        let workspace = SharedAntigravityWorkspace(repository: repo, sourceHome: source)
+        let projectStore = source.appendingPathComponent(".gemini/config/projects")
+        let histories = source.appendingPathComponent(".gemini/antigravity/conversations")
+        try fm.createDirectory(at: projectStore, withIntermediateDirectories: true)
+        try fm.createDirectory(at: histories, withIntermediateDirectories: true)
+        for name in ["Project A", "Project B"] {
+            try Data(name.utf8).write(to: projectStore.appendingPathComponent(name + ".json"))
         }
-        var account = Account(name: "Existing", agent: .antigravity, antigravityUsesPrivateHome: true)
-        account.antigravityLocalProjectFolder = folders[0].path
-        try repo.prepareAntigravityProfile(for: account.id)
-        try repo.prepareAntigravityLocalProject(for: account)
-        let marker = repo.antigravityProfileURL(for: account.id).appendingPathComponent("local-project-initialized")
-        try Data().write(to: marker)
-        let id = account.id.uuidString.lowercased()
-        let project = repo.antigravityHomeURL(for: account.id).appendingPathComponent(".gemini/config/projects/\(id).json")
-        let definition: [String: Any] = [
-            "id": id, "name": "My project", "projectConversations": ["conversations": [["conversationId": "existing-chat"]]],
-            "projectResources": ["resources": [folders[0], folders[2]].map { ["folderUri": $0.absoluteString] }]
-        ]
-        try JSONSerialization.data(withJSONObject: definition).write(to: project)
-        try repo.preserveAntigravityLocalProjectSelection(for: account)
-        account.antigravityLocalProjectFolder = folders[1].path
-        try repo.prepareAntigravityLocalProject(for: account)
-
-        func assertFolders(_ expected: [URL]) throws {
-            let updated = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: project)) as? [String: Any])
-            XCTAssertEqual(updated["id"] as? String, id)
-            XCTAssertEqual(updated["name"] as? String, "My project")
-            XCTAssertEqual(updated["projectConversations"] as? [String: [[String: String]]], definition["projectConversations"] as? [String: [[String: String]]])
-            let resources = updated["projectResources"] as? [String: [[String: String]]]
-            XCTAssertEqual(resources?["resources"]?.compactMap { $0["folderUri"] }, expected.map(\.absoluteString))
-        }
-        try assertFolders([folders[2], folders[1]])
-        account.antigravityLocalProjectFolder = nil
-        try repo.prepareAntigravityLocalProject(for: account)
-        try assertFolders([folders[2]])
-        XCTAssertTrue(folders.allSatisfy { fm.fileExists(atPath: $0.path) })
-    }
-
-    func testLocalProjectUsesTheSameFolderAcrossProfilesAndSeedsOnlyOnce() throws {
-        let root = fixtureRoot()
-        let fm = FileManager.default
-        defer { try? fm.removeItem(at: root) }
-        let repo = ProfileRepository(root: root.appendingPathComponent("Manager"))
-        let folder = root.appendingPathComponent("Dự án #1")
-        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        let conversation = UUID().uuidString.lowercased() + ".db"
+        try Data("original conversation".utf8).write(to: histories.appendingPathComponent(conversation))
         var a = Account(name: "A", agent: .antigravity, antigravityUsesPrivateHome: true)
         var b = Account(name: "B", agent: .antigravity, antigravityUsesPrivateHome: true)
-        a.antigravityLocalProjectFolder = folder.path
-        b.antigravityLocalProjectFolder = folder.path
+        a.antigravitySharesLocalProjects = true
+        b.antigravitySharesLocalProjects = true
         b.antigravitySignInMethod = .cli
-        let snapshot = AccountSnapshot(accounts: [a, b])
-        try repo.save(snapshot)
-
-        func project(_ account: Account) -> URL {
-            repo.antigravityHomeURL(for: account.id)
-                .appendingPathComponent(".gemini/config/projects/\(account.id.uuidString.lowercased()).json")
-        }
-        for account in try repo.load().accounts {
+        for account in [a, b] {
             try repo.prepareAntigravityProfile(for: account.id)
-            try repo.prepareAntigravityLocalProject(for: account)
-            let data = try Data(contentsOf: project(account))
-            let definition = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-            let resources = try XCTUnwrap(definition["projectResources"] as? [String: [[String: String]]])
-            let uri = try XCTUnwrap(resources["resources"]?.first?["folderUri"])
-            XCTAssertEqual(URL(string: uri)?.path, folder.resolvingSymlinksInPath().path)
-            XCTAssertFalse(fm.fileExists(atPath: repo.antigravityIdentityURL(for: account.id).path))
+            try Data(account.name.utf8).write(to: repo.antigravityIdentityURL(for: account.id))
+            try workspace.prepare(account)
+            let home = repo.antigravityHomeURL(for: account.id)
+            XCTAssertEqual(try fm.contentsOfDirectory(atPath: home.appendingPathComponent(".gemini/config/projects").path).count, 2)
+            XCTAssertEqual(try Data(contentsOf: home.appendingPathComponent(".gemini/antigravity/conversations/\(conversation)")), Data("original conversation".utf8))
+            XCTAssertEqual(try Data(contentsOf: repo.antigravityIdentityURL(for: account.id)), Data(account.name.utf8))
         }
-        try fm.removeItem(at: project(a))
-        try repo.prepareAntigravityLocalProject(for: a)
-        XCTAssertFalse(fm.fileExists(atPath: project(a).path))
-        _ = try repo.remove(a.id, from: snapshot)
-        XCTAssertTrue(fm.fileExists(atPath: project(b).path))
-        XCTAssertTrue(fm.fileExists(atPath: folder.path))
-        XCTAssertThrowsError(try repo.antigravityLocalProjectFolder(root.path))
+        let local = repo.antigravityHomeURL(for: a.id).appendingPathComponent(".gemini/config/projects/Project C.json")
+        try Data("new project".utf8).write(to: local)
+        XCTAssertTrue(fm.fileExists(atPath: repo.antigravityHomeURL(for: b.id).appendingPathComponent(".gemini/config/projects/Project C.json").path))
+        a.antigravitySharesLocalProjects = false
+        try workspace.prepare(a)
+        XCTAssertFalse(workspace.isPrepared(a))
+        XCTAssertTrue(fm.fileExists(atPath: histories.appendingPathComponent(conversation).path))
+        _ = try repo.remove(b.id, from: .init(accounts: [a, b]))
+        XCTAssertTrue(fm.fileExists(atPath: local.resolvingSymlinksInPath().path) == false)
+        XCTAssertTrue(fm.fileExists(atPath: projectStore.appendingPathComponent("Project C.json").path))
+    }
+
+    func testExistingPrivateHistoryIsImportedAndConflictingCopiesArePreserved() throws {
+        let fm = FileManager.default
+        let root = fixtureRoot().resolvingSymlinksInPath()
+        defer { try? fm.removeItem(at: root) }
+        let repo = ProfileRepository(root: root.appendingPathComponent("Manager"))
+        let source = root.appendingPathComponent("Desktop Home")
+        let workspace = SharedAntigravityWorkspace(repository: repo, sourceHome: source)
+        var account = Account(name: "Old account", agent: .antigravity, antigravityUsesPrivateHome: true)
+        // Preview 23/24 flags migrate to the all-project sharing option.
+        account.antigravityLocalProjectFolder = "/previously-selected-folder"
+        XCTAssertTrue(account.sharesAntigravityProjects)
+        try repo.prepareAntigravityProfile(for: account.id)
+        let history = repo.antigravityHomeURL(for: account.id).appendingPathComponent(".gemini/antigravity/conversations")
+        try fm.createDirectory(at: history, withIntermediateDirectories: true)
+        let id = UUID().uuidString.lowercased()
+        try Data("private history".utf8).write(to: history.appendingPathComponent(id + ".db"))
+        try workspace.prepare(account)
+        XCTAssertEqual(try workspace.conversationIDs(), [id])
+        XCTAssertEqual(try workspace.conversationIDs(), [id], "Reopened backends must rebuild imported history indexes")
+        account.antigravitySharesLocalProjects = false
+        try workspace.prepare(account)
+        XCTAssertEqual(try Data(contentsOf: history.appendingPathComponent(id + ".db")), Data("private history".utf8))
+        try Data("changed private conversation".utf8).write(to: history.appendingPathComponent(id + ".db"))
+        account.antigravitySharesLocalProjects = true
+        XCTAssertThrowsError(try workspace.prepare(account))
+        XCTAssertEqual(try Data(contentsOf: source.appendingPathComponent(".gemini/antigravity/conversations/\(id).db")), Data("private history".utf8))
+    }
+
+    func testInterruptedSharedBindingRecoversAndRedirectedLinksAreRefused() throws {
+        let fm = FileManager.default, root = fixtureRoot()
+        defer { try? fm.removeItem(at: root) }
+        let repo = ProfileRepository(root: root)
+        let source = root.appendingPathComponent("Original Home")
+        let workspace = SharedAntigravityWorkspace(repository: repo, sourceHome: source)
+        var account = Account(name: "Recovery", agent: .antigravity, antigravityUsesPrivateHome: true)
+        account.antigravitySharesLocalProjects = true
+        try repo.prepareAntigravityProfile(for: account.id)
+        let local = repo.antigravityHomeURL(for: account.id).appendingPathComponent(".gemini/antigravity")
+        try fm.createDirectory(at: local, withIntermediateDirectories: true)
+        try Data("original".utf8).write(to: local.appendingPathComponent("private-sentinel"))
+        try workspace.prepare(account)
+        try fm.removeItem(at: local) // Interrupted after archiving the original.
+        try workspace.prepare(account)
+        let foreign = root.appendingPathComponent("Foreign")
+        try fm.createDirectory(at: foreign, withIntermediateDirectories: true)
+        try fm.removeItem(at: local)
+        try fm.createSymbolicLink(at: local, withDestinationURL: foreign)
+        XCTAssertThrowsError(try workspace.prepare(account))
+        XCTAssertTrue(try fm.contentsOfDirectory(atPath: foreign.path).isEmpty)
+        try fm.removeItem(at: local)
+        try fm.createSymbolicLink(at: local, withDestinationURL: source.appendingPathComponent(".gemini/antigravity"))
+        account.antigravitySharesLocalProjects = false
+        try workspace.prepare(account)
+        XCTAssertEqual(try Data(contentsOf: local.appendingPathComponent("private-sentinel")), Data("original".utf8))
+    }
+
+    @MainActor
+    func testNativeSharedProjectsImportHistoryAndReopenUnderAnotherAccount() async throws {
+        guard ProcessInfo.processInfo.environment["AISWITCHER_TEST_NATIVE_ANTIGRAVITY"] == "1" else {
+            throw XCTSkip("Opt in to a signed-out fixture using the installed official Antigravity backend")
+        }
+        let fm = FileManager.default, root = fixtureRoot()
+        defer { try? fm.removeItem(at: root) }
+        let repo = ProfileRepository(root: root)
+        let source = root.appendingPathComponent("Original Home")
+        let workspace = SharedAntigravityWorkspace(repository: repo, sourceHome: source)
+        let app = AgentApplicationService(repository: repo)
+        let service = AntigravityDesktopQuotaService(applications: app, repository: repo, sharedSourceHome: source)
+        var a = Account(name: "A", agent: .antigravity, antigravityUsesPrivateHome: true)
+        var b = Account(name: "B", agent: .antigravity, antigravityUsesPrivateHome: true)
+        b.antigravitySharesLocalProjects = true
+        let projects = source.appendingPathComponent(".gemini/config/projects")
+        try fm.createDirectory(at: projects, withIntermediateDirectories: true)
+        for name in ["One", "Two"] {
+            let value: [String: Any] = ["id": UUID().uuidString, "name": name, "projectResources": [:]]
+            try JSONSerialization.data(withJSONObject: value).write(to: projects.appendingPathComponent(name + ".json"))
+        }
+        let sourceIdentity = source.appendingPathComponent(".gemini/jetski-standalone-oauth-token")
+        try Data("source identity canary".utf8).write(to: sourceIdentity)
+        do {
+            try await service.connect(a)
+            let value = try await service.fixtureRequest(a, method: "StartCascade", body: ["source": "CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE"])
+            let id = try XCTUnwrap((try JSONSerialization.jsonObject(with: value) as? [String: Any])?["cascadeId"] as? String)
+            await service.stop(a.id)
+            a.antigravitySharesLocalProjects = true
+            try await service.connect(a)
+            try await service.indexSharedConversations(a)
+            XCTAssertEqual(try workspace.conversationIDs(), [id])
+            let newValue = try await service.fixtureRequest(a, method: "StartCascade", body: ["source": "CORTEX_TRAJECTORY_SOURCE_INTERACTIVE_CASCADE"])
+            let newID = try XCTUnwrap((try JSONSerialization.jsonObject(with: newValue) as? [String: Any])?["cascadeId"] as? String)
+            await service.stop(a.id)
+            try await service.connect(b)
+            try await service.indexSharedConversations(b)
+            var found = false
+            for _ in 0..<40 {
+                let result = try await service.fixtureRequest(b, method: "GetAllCascadeTrajectories")
+                let summaries = (try JSONSerialization.jsonObject(with: result) as? [String: Any])?["trajectorySummaries"] as? [String: Any]
+                if summaries?[id] != nil && summaries?[newID] != nil { found = true; break }
+                try await Task.sleep(nanoseconds: 250_000_000)
+            }
+            XCTAssertTrue(found, "Imported private history must appear under account B")
+            let read = try await service.fixtureRequest(b, method: "GetCascadeTrajectory", body: ["cascadeId": id])
+            let trajectory = (try JSONSerialization.jsonObject(with: read) as? [String: Any])?["trajectory"] as? [String: Any]
+            XCTAssertEqual(trajectory?["cascadeId"] as? String, id)
+            for account in [a, b] {
+                let registry = repo.antigravityHomeURL(for: account.id).appendingPathComponent(".gemini/config/projects")
+                XCTAssertTrue(fm.fileExists(atPath: registry.appendingPathComponent("One.json").path))
+                XCTAssertTrue(fm.fileExists(atPath: registry.appendingPathComponent("Two.json").path))
+                XCTAssertFalse(fm.fileExists(atPath: repo.antigravityIdentityURL(for: account.id).path))
+            }
+            do { _ = try await service.read(b); XCTFail("Source login must never be imported") }
+            catch ProviderQuotaError.signedOut { }
+            XCTAssertEqual(try Data(contentsOf: sourceIdentity), Data("source identity canary".utf8))
+            await service.stopAll()
+            a.antigravitySharesLocalProjects = false
+            try workspace.prepare(a)
+            XCTAssertTrue(fm.fileExists(atPath: repo.antigravityHomeURL(for: a.id).appendingPathComponent(".gemini/antigravity/conversations/\(id).db").path))
+            _ = try repo.remove(b.id, from: .init(accounts: [a, b]))
+            XCTAssertTrue(fm.fileExists(atPath: source.appendingPathComponent(".gemini/antigravity/conversations/\(id).db").path))
+        } catch {
+            await service.stopAll()
+            throw error
+        }
     }
 
     func testPrivateHomesPersistAndDeletingOneProfilePreservesTheOther() throws {

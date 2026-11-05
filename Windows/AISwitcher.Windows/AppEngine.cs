@@ -72,13 +72,9 @@ internal sealed class AppEngine {
         if(ReadOnly||StoppingAll)return false;
         try{
             edited.Validate();var old=Snapshot.Accounts.FirstOrDefault(x=>x.Id==edited.Id);
-            var projectChanged = (old?.UsesPrivateAntigravity ?? edited.UsesPrivateAntigravity)
-                && old?.AntigravityLocalProjectFolder != edited.AntigravityLocalProjectFolder;
-            if (projectChanged && edited.AntigravityLocalProjectFolder is {} folder)
-                edited = edited with { AntigravityLocalProjectFolder = AntigravityProfile.LocalProjectFolder(Repository, folder) };
+            var projectChanged = (old?.SharesAntigravityProjects ?? false) != edited.SharesAntigravityProjects;
             if(old!=null){if(old.Agent!=edited.Agent||old.Browser!=edited.Browser)throw new AppError("The agent of an existing profile cannot change. Create a new profile instead.");
                 if((old.EffectiveMode!=edited.EffectiveMode||old.SharesLocalWorkspace!=edited.SharesLocalWorkspace||projectChanged)&&(Running(old)||Busy.Contains(old.Id)))throw new AppError("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes.");
-                if (projectChanged) AntigravityProfile.PreserveLocalProjectSelection(Repository, old);
                 edited=edited with{ProviderConnection=old.ProviderConnection,DesktopConnection=old.DesktopConnection,BrowserConnection=old.BrowserConnection,LastOpenedAt=old.LastOpenedAt};
             }
             var updated=Snapshot with{Accounts=Snapshot.Accounts.Where(x=>x.Id!=edited.Id).Append(edited).OrderBy(x=>x.CreatedAt).ToList()};Repository.Save(updated);Snapshot=updated;Notify();return true;
@@ -106,16 +102,30 @@ internal sealed class AppEngine {
     void InvalidateWorkspaceActivation(Account a){if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)WorkspaceActivation.Invalidate(Repository,SharedWorkspace.Source(Preferences),SharedWorkspace.Database(Preferences));}
     public Task OpenAsync(Account a)=>Run(a,async ct=>{
         string? backgroundError=null;
-        if(a.UsesPrivateAntigravity)await Antigravity.StopAsync(a);
+        if(a.UsesPrivateAntigravity){ValidateAntigravityWorkspaceSession(a);await Antigravity.StopAsync(a);}
         if(a.UsesCodexDesktop){Repository.PrepareQuota(a);Repository.PrepareProfile(a);await PrepareWorkspaceActivationAsync(a,ct);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);try{await Backend.StartAsync(a,ct);}catch(Exception error)when(error is AppError or System.ComponentModel.Win32Exception){backgroundError=Message(error);}}
         await Platform.OpenAsync(a,useLocalDaemon:Backend.UsesLocalDaemon(a),ct:ct);var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
         RecordWorkspaceActivation(a);
+        if (a.SharesAntigravityProjects) await Antigravity.IndexSharedConversationsAsync(a, ct);
         if(a.UsesAntigravityDesktopQuota){try{await ReadAsync(a,ct);}catch(AppError error){Errors[a.Id]=Message(error);}}
         if(backgroundError!=null)Errors[a.Id]=backgroundError;
     });
+    void ValidateAntigravityWorkspaceSession(Account account)
+    {
+        var workspace = new SharedAntigravityWorkspace(Repository);
+        if (!account.SharesAntigravityProjects && !workspace.IsPrepared(account)) return;
+        var unmanaged = Platform.Processes.Any(p =>
+            Path.GetFileName(p.Executable).Equals("Antigravity.exe", StringComparison.OrdinalIgnoreCase) &&
+            !p.Arguments.Any(arg => arg.StartsWith("--type=", StringComparison.OrdinalIgnoreCase)) &&
+            !p.Arguments.Any(arg => arg.StartsWith("--user-data-dir=" + Path.Combine(Repository.Root, "Antigravity") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)));
+        if (unmanaged || Snapshot.Accounts.Any(other => other.Id != account.Id && other.SharesAntigravityProjects &&
+            (Running(other) || Busy.Contains(other.Id))))
+            throw new AppError(SharedAntigravityWorkspace.SessionRunning);
+    }
+
     public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;return Run(a,async ct=>{
         try{
-            if(a.UsesAntigravityDesktopQuota){Repository.PrepareProfile(a);await Antigravity.ConnectAsync(a,ct);}
+            if(a.UsesAntigravityDesktopQuota){ValidateAntigravityWorkspaceSession(a);Repository.PrepareProfile(a);await Antigravity.ConnectAsync(a,ct);}
             else if(!a.Agent.ProviderQuota())await Backend.StartAsync(a,ct);
             try{await ReadAsync(a,ct);}
             catch(AppError error)when(a.Agent==Agent.Antigravity&&error.Key==ProviderQuota.SignedOut){
@@ -157,8 +167,17 @@ internal sealed class AppEngine {
             finally{InstallingProviders.Remove(a.Agent);installationTasks.Remove(a.Agent);Notify();}
         }
     }
-    public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,async ct=>{if(report&&a.UsesAntigravityDesktopQuota&&!Antigravity.IsActive(a)&&Platform.Owned(a)==null){Repository.PrepareProfile(a);await Antigravity.ConnectAsync(a,ct);}await ReadAsync(a,ct);},report);}
+    public Task RefreshAsync(Account a,bool report=true){if(!a.Agent.HasQuota())return Task.CompletedTask;return Run(a,async ct=>{if(a.UsesPrivateAntigravity)ValidateAntigravityWorkspaceSession(a);if(report&&a.UsesAntigravityDesktopQuota&&!Antigravity.IsActive(a)&&Platform.Owned(a)==null){Repository.PrepareProfile(a);await Antigravity.ConnectAsync(a,ct);}await ReadAsync(a,ct);},report);}
     async Task ReadAsync(Account a,CancellationToken ct){
+        if (a.UsesPrivateAntigravity)
+        {
+            ValidateAntigravityWorkspaceSession(a);
+            if (a.UsesProviderCli && Platform.Owned(a) == null)
+            {
+                Repository.PrepareProfile(a);
+                await new SharedAntigravityWorkspace(Repository).PrepareAsync(a, SharedWorkspace.JunctionAsync);
+            }
+        }
         Checks[a.Id]=DateTimeOffset.UtcNow;
         try{
             var connection=a.UsesAntigravityDesktopQuota?await Antigravity.ReadAsync(a,ct):a.Agent.ProviderQuota()?await Provider.ReadAsync(a,ct):await Backend.ReadAsync(a,ct);var current=Current(a);

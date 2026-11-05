@@ -125,7 +125,7 @@ internal static class SharedWorkspace {
         var path=Path.Combine(home,".codex-global-state.json");Repository.RejectLinks(path);var state=File.Exists(path)?JsonNode.Parse(File.ReadAllText(path))!.AsObject():new JsonObject();var old=data["previous"]!.AsObject();foreach(var key in Keys){if(old.ContainsKey(key))state[key]=old[key]?.DeepClone();else state.Remove(key);}File.WriteAllText(path,state.ToJsonString());File.Delete(marker);
     }
     static bool Within(string path,string parent)=>NativePlatform.SamePath(path,parent)||path.StartsWith(parent.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);
-    static async Task JunctionAsync(string link,string target){
+    internal static async Task JunctionAsync(string link,string target){
         var info=new ProcessStartInfo("powershell.exe"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
         foreach(var arg in new[]{"-NoProfile","-NonInteractive","-Command","New-Item -ItemType Junction -Path $env:AISW_LINK -Target $env:AISW_TARGET -ErrorAction Stop | Out-Null"})info.ArgumentList.Add(arg);info.Environment["AISW_LINK"]=link;info.Environment["AISW_TARGET"]=target;
         using var process=Process.Start(info)??throw new AppError("The local workspace paths could not be verified.");var output=process.StandardOutput.ReadToEndAsync();var error=process.StandardError.ReadToEndAsync();await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));await output;await error;if(process.ExitCode!=0)throw new AppError("The local workspace paths could not be verified.");
