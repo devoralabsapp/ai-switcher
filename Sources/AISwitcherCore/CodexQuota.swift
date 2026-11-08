@@ -93,6 +93,15 @@ public struct CodexQuotaSnapshot: Codable, Equatable, Sendable {
             [$0.value.primary, $0.value.secondary].compactMap { $0 }.contains { $0.resetHasPassed(at: date) }
         }
     }
+
+    public func isExhausted(at date: Date) -> Bool {
+        let buckets = limits.buckets
+        return !isStale(at: date) && !buckets.isEmpty && buckets.allSatisfy { bucket in
+            [bucket.value.primary, bucket.value.secondary].compactMap { $0 }.contains {
+                ($0.remainingPercent ?? $0.remainingAmount) == 0
+            }
+        }
+    }
 }
 
 public struct CodexConnection: Codable, Equatable, Sendable {

@@ -72,6 +72,7 @@ enum AntigravitySmokeTest {
         let backgroundQuota = AntigravityDesktopQuotaService(applications:service,repository:repository)
         let a = Account(name: "Antigravity Smoke A", agent: .antigravity, antigravityUsesPrivateHome: true)
         let b = Account(name: "Antigravity Smoke B", agent: .antigravity, antigravityUsesPrivateHome: true)
+        let target = Account(name: "Antigravity Handoff Target", agent: .antigravity, antigravityUsesPrivateHome: true)
         let existing = NSRunningApplication.runningApplications(withBundleIdentifier: AntigravityLaunch.bundleIdentifier)
         var failure: Error?
         do {
@@ -115,9 +116,26 @@ enum AntigravitySmokeTest {
                 guard text.contains("sandbox-exec"),text.contains("deny process-exec"),text.contains(repository.antigravityHomeURL(for:a.id).path) else { throw AntigravityProfileError.unsafeStorage }
                 print("PASS: official CLI reports signed out in its private home and its login launcher blocks the Keychain helper before it can show a dialog")
             }
+            var exhausted = a
+            let status = Data(#"{"userStatus":{"email":"fixture@example.test"}}"#.utf8)
+            let zero = Data(#"{"response":{"groups":[{"displayName":"Gemini models","buckets":[{"bucketId":"gemini-weekly","remainingFraction":0}]}]}}"#.utf8)
+            exhausted.providerQuotaConnection = try AntigravityDesktopQuota.connection(
+                statusBefore: status, quota: zero, statusAfter: status, emailHint: "")
+            let model = AppModel(root: repository.root, preferences: AppPreferences(), monitoring: false)
+            guard model.saveAccount(exhausted), model.saveAccount(b), model.saveAccount(target) else {
+                throw AntigravityProfileError.unsafeStorage
+            }
+            model.open(target)
+            for _ in 0..<600 where model.launchingIDs.contains(target.id) {
+                try await Task.sleep(nanoseconds: 200_000_000)
+            }
+            guard service.runningApplication(for: a) == nil, service.hasWindow(target), service.hasWindow(b) else {
+                throw AntigravityProfileError.launchFailed
+            }
+            print("PASS: opening a third private Desktop profile closes only the verified exhausted account")
         } catch { failure = error }
         await backgroundQuota.stopAll()
-        for account in [a,b] {
+        for account in [a,b,target] where FileManager.default.fileExists(atPath: repository.antigravityProfileURL(for: account.id).path) {
             do { try await service.close(account);_ = try repository.remove(account.id, from: .init()) }
             catch { failure = failure ?? error }
         }

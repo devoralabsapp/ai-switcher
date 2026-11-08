@@ -102,7 +102,11 @@ internal sealed class AppEngine {
     void InvalidateWorkspaceActivation(Account a){if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)WorkspaceActivation.Invalidate(Repository,SharedWorkspace.Source(Preferences),SharedWorkspace.Database(Preferences));}
     public Task OpenAsync(Account a)=>Run(a,async ct=>{
         string? backgroundError=null;
-        if(a.UsesPrivateAntigravity){ValidateAntigravityWorkspaceSession(a);await Antigravity.StopAsync(a);}
+        if (a.UsesPrivateAntigravity)
+        {
+            await HandOffAntigravitySessionAsync(a, ct);
+            await Antigravity.StopAsync(a);
+        }
         if(a.UsesCodexDesktop){Repository.PrepareQuota(a);Repository.PrepareProfile(a);await PrepareWorkspaceActivationAsync(a,ct);await SharedWorkspace.PrepareAsync(a,Repository,Preferences);try{await Backend.StartAsync(a,ct);}catch(Exception error)when(error is AppError or System.ComponentModel.Win32Exception){backgroundError=Message(error);}}
         await Platform.OpenAsync(a,useLocalDaemon:Backend.UsesLocalDaemon(a),ct:ct);var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
         RecordWorkspaceActivation(a);
@@ -110,7 +114,38 @@ internal sealed class AppEngine {
         if(a.UsesAntigravityDesktopQuota){try{await ReadAsync(a,ct);}catch(AppError error){Errors[a.Id]=Message(error);}}
         if(backgroundError!=null)Errors[a.Id]=backgroundError;
     });
-    void ValidateAntigravityWorkspaceSession(Account account)
+    async Task HandOffAntigravitySessionAsync(Account account, CancellationToken ct)
+    {
+        await Platform.RefreshProcessesAsync();
+        var now = DateTimeOffset.UtcNow;
+        var exhausted = Snapshot.Accounts.Where(other =>
+            other.Id != account.Id && other.UsesPrivateAntigravity
+            && !Busy.Contains(other.Id) && !Errors.ContainsKey(other.Id)
+            && other.Connection?.Quota?.IsExhausted(now) == true
+            && (Antigravity.IsActive(other) || Platform.HasOwnedProcesses(other))).ToArray();
+        var closing = exhausted.Select(other => other.Id).ToHashSet();
+        ValidateAntigravityWorkspaceSession(account, closing);
+        Busy.UnionWith(closing);
+        Notify();
+        try
+        {
+            foreach (var other in exhausted)
+            {
+                ct.ThrowIfCancellationRequested();
+                await Provider.DisconnectAsync(other);
+                await Antigravity.StopAsync(other);
+                await Platform.CloseAsync(other);
+                await Platform.VerifyClosedAsync(other);
+            }
+            ValidateAntigravityWorkspaceSession(account, closing);
+        }
+        finally
+        {
+            Busy.ExceptWith(closing);
+            Notify();
+        }
+    }
+    void ValidateAntigravityWorkspaceSession(Account account, HashSet<Guid>? closing = null)
     {
         var workspace = new SharedAntigravityWorkspace(Repository);
         if (!account.SharesAntigravityProjects && !workspace.IsPrepared(account)) return;
@@ -118,8 +153,9 @@ internal sealed class AppEngine {
             Path.GetFileName(p.Executable).Equals("Antigravity.exe", StringComparison.OrdinalIgnoreCase) &&
             !p.Arguments.Any(arg => arg.StartsWith("--type=", StringComparison.OrdinalIgnoreCase)) &&
             !p.Arguments.Any(arg => arg.StartsWith("--user-data-dir=" + Path.Combine(Repository.Root, "Antigravity") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)));
-        if (unmanaged || Snapshot.Accounts.Any(other => other.Id != account.Id && other.SharesAntigravityProjects &&
-            (Running(other) || Busy.Contains(other.Id))))
+        if (unmanaged || Snapshot.Accounts.Any(other => other.Id != account.Id && other.SharesAntigravityProjects
+            && closing?.Contains(other.Id) != true
+            && (Antigravity.IsActive(other) || Platform.HasOwnedProcesses(other) || Busy.Contains(other.Id))))
             throw new AppError(SharedAntigravityWorkspace.SessionRunning);
     }
 

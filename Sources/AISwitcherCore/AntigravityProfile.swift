@@ -125,4 +125,39 @@ extension ProfileRepository {
         try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
     }
 
+    /// Hub 2.28 and the official CLI use the same Google OAuth client, with
+    /// separate files when the vendor falls back to profile-local storage.
+    public func prepareAntigravityDesktopSignIn(_ account: Account) throws {
+        guard account.usesIsolatedAntigravity && account.usesAntigravityCLI else { return }
+        try validateAntigravityOwnership(for: account.id)
+        let source = antigravityCLIIdentityURL(for: account.id)
+        let destination = antigravityIdentityURL(for: account.id)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: source.path) else { return }
+        let handle = try FileHandle(forReadingFrom: source)
+        defer { try? handle.close() }
+        guard let data = try handle.read(upToCount: 131_073),
+              let identity = AntigravityAccountMetadata.identity(from: data),
+              let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = record["token"] as? [String: Any],
+              let refresh = token["refresh_token"] as? String, !refresh.isEmpty else { return }
+        _ = try AntigravityAccountMetadata.consistentIdentity(before: identity, after: identity, emailHint: account.emailHint)
+        if fm.fileExists(atPath: destination.path) {
+            if let existing = AntigravityAccountMetadata.read(at: destination),
+               !identity.matches(existing), !existing.matches(identity) {
+                throw ProviderQuotaError.identityChanged
+            }
+            return
+        }
+        let staging = destination.deletingLastPathComponent().appendingPathComponent(".desktop-sign-in-\(UUID())")
+        let descriptor = open(staging.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw AntigravityProfileError.unsafeStorage }
+        defer { try? fm.removeItem(at: staging) }
+        let output = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        try output.write(contentsOf: data)
+        try output.close()
+        // Publish the complete file without replacing a concurrent Desktop login.
+        try fm.linkItem(at: staging, to: destination)
+    }
+
 }

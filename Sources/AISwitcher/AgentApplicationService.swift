@@ -45,6 +45,7 @@ final class AgentApplicationService {
             if hasWindow(account), running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) { return running }
         } else {
             try SharedAntigravityWorkspace(repository: repository).prepare(account)
+            try repository.prepareAntigravityDesktopSignIn(account)
         }
         let process = Process()
         process.executableURL = AntigravityLaunch.sandboxExecutable

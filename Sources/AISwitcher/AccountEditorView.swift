@@ -101,6 +101,10 @@ struct AccountEditorView: View {
                             Picker(L10n.text("Sign-in method"), selection: $antigravitySignInMethod) {
                                 ForEach(AntigravitySignInMethod.allCases) { Text($0.title).tag($0) }
                             }.accessibilityIdentifier("antigravitySignInMethod")
+                            if antigravitySignInMethod == .browser {
+                                Text(L10n.text("After Google confirms sign-in, return to AI Switcher and choose Open Antigravity."))
+                                    .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                            }
                         }
                         if canShareAntigravityProject {
                             VStack(alignment: .leading, spacing: 8) {

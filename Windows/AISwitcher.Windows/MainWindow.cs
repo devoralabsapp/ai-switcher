@@ -139,11 +139,31 @@ internal sealed partial class MainWindow:Window {
                 }
                 if(quota.IsStale(now)||engine.Errors.ContainsKey(a.Id))stack.Children.Add(Text(L["Stale data · refresh needed"],10,true));
             }else stack.Children.Add(Text(L["No quota data available for this account."],11,false,T.Secondary));
-            if((connection.Quota?.FetchedAt??connection.IdentityFetchedAt) is {} read){stack.Children.Add(Space(10));stack.Children.Add(Text(L.Format("Last read: %@",L.Date(read)),10,false,T.Secondary));}
+            var read = connection.Quota?.FetchedAt ?? connection.IdentityFetchedAt;
+            if (!all && a.Agent == Agent.Antigravity)
+            {
+                var footer = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+                if (read is { } date)
+                    footer.Children.Add(Text(L.Format("Last read: %@", date.ToLocalTime().ToString("t", L.Culture)), 10, false, T.Secondary));
+                var details = Button(L["Details"] + " ↗", () => QuotaDetails(a));
+                details.FontSize = 10;
+                details.Foreground = Brush(T.Accent);
+                details.Background = System.Windows.Media.Brushes.Transparent;
+                details.BorderThickness = new Thickness(0);
+                details.Padding = new Thickness(4, 0, 0, 0);
+                details.Margin = new Thickness(0);
+                footer.Children.Add(details);
+                stack.Children.Add(footer);
+            }
+            else if (read is { } date)
+            {
+                stack.Children.Add(Space(10));
+                stack.Children.Add(Text(L.Format("Last read: %@", L.Date(date)), 10, false, T.Secondary));
+            }
         }
         if(engine.Errors.TryGetValue(a.Id,out var error))stack.Children.Add(Text(error,11,false,T.Secondary));
         if(engine.WaitingForSignIn.Contains(a.Id)){stack.Children.Add(Text(L["Waiting for sign-in…"],11));stack.Children.Add(Button(L["Cancel"],()=>engine.CancelConnection(a)));}
-        if(!all)stack.Children.Add(Button(L["Details"]+" ↗",()=>QuotaDetails(a)));
+        if (!all && a.Agent != Agent.Antigravity) stack.Children.Add(Button(L["Details"] + " ↗", () => QuotaDetails(a)));
         return stack;
     }
     void RenderTable(Account[] accounts){var table=new StackPanel();

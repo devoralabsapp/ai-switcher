@@ -5,6 +5,31 @@ import XCTest
 final class AntigravityProfileTests: XCTestCase {
     private func fixtureRoot() -> URL { FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("Antigravity's Profiles \(UUID())") }
 
+    func testCLIProfileSeedsDesktopSignInWithoutReplacingAnotherIdentity() throws {
+        let root = fixtureRoot(), fm = FileManager.default
+        defer { try? fm.removeItem(at: root) }
+        let repo = ProfileRepository(root: root)
+        var cli = Account(name: "CLI", agent: .antigravity, antigravityUsesPrivateHome: true)
+        cli.antigravitySignInMethod = .cli
+        let browser = Account(name: "Browser", agent: .antigravity, antigravityUsesPrivateHome: true)
+        for account in [cli, browser] {
+            try repo.prepareAntigravityProfile(for: account.id)
+            let source = repo.antigravityCLIIdentityURL(for: account.id)
+            try fm.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(#"{"auth_method":"consumer","id_token_email":"cli@example.test","token":{"refresh_token":"fixture-only"}}"#.utf8).write(to: source)
+            try repo.prepareAntigravityDesktopSignIn(account)
+        }
+        let desktop = repo.antigravityIdentityURL(for: cli.id)
+        XCTAssertEqual(try Data(contentsOf: desktop), try Data(contentsOf: repo.antigravityCLIIdentityURL(for: cli.id)))
+        XCTAssertFalse(fm.fileExists(atPath: repo.antigravityIdentityURL(for: browser.id).path))
+        let existing = Data(#"{"auth_method":"consumer","id_token_email":"other@example.test"}"#.utf8)
+        try existing.write(to: desktop)
+        XCTAssertThrowsError(try repo.prepareAntigravityDesktopSignIn(cli)) {
+            XCTAssertEqual($0 as? ProviderQuotaError, .identityChanged)
+        }
+        XCTAssertEqual(try Data(contentsOf: desktop), existing)
+    }
+
     func testSharedDesktopWorkspaceIncludesAllProjectsAndHistoryWhileKeepingEachLoginPrivate() throws {
         let fm = FileManager.default
         let root = fixtureRoot().resolvingSymlinksInPath()

@@ -41,7 +41,12 @@ final class AntigravityDesktopQuotaService {
         backend.process.executableURL = AntigravityLaunch.sandboxExecutable
         let arguments = ["--standalone","--override_ide_name","antigravity","--subclient_type","hub","--override_ide_version",version,"--override_user_agent_name","antigravity","--http_server_port","0","--csrf_token",backend.csrf,"--app_data_dir","antigravity","--api_server_url","https://generativelanguage.googleapis.com","--cloud_code_endpoint","https://daily-cloudcode-pa.googleapis.com","--exit_on_stdin_close"]
         backend.process.arguments = AntigravityLaunch.isolatedArguments(executable:executable,arguments:arguments)
-        backend.process.environment = AntigravityLaunch.environment(base:ProcessInfo.processInfo.environment,home:repository.antigravityHomeURL(for:account.id))
+        var environment = AntigravityLaunch.environment(base: ProcessInfo.processInfo.environment,
+                                                       home: repository.antigravityHomeURL(for: account.id))
+        // The vendor's no-handoff success page leaves OAuth in this backend.
+        // The system-wide antigravity:// link has no private profile identifier.
+        environment["ANTIGRAVITY_AUTH_SUCCESS_APP"] = "antigravity-cli"
+        backend.process.environment = environment
         backend.process.currentDirectoryURL = repository.antigravityHomeURL(for:account.id)
         backend.process.standardInput = backend.input
         backend.process.standardOutput = backend.output;backend.process.standardError = backend.output

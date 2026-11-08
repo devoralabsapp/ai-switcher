@@ -593,6 +593,7 @@
 "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles read email and quota from their own Desktop sign-in, without CLI login. Connect reuses saved sign-in in the background; first sign-in needs the Desktop window. No model prompt is sent." = "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles read email and quota from their own Desktop sign-in, without CLI login. Connect reuses saved sign-in in the background; first sign-in needs the Desktop window. No model prompt is sent.";
 
 "Sign in with browser" = "Sign in with browser";
+"After Google confirms sign-in, return to AI Switcher and choose Open Antigravity." = "After Google confirms sign-in, return to AI Switcher and choose Open Antigravity.";
 
 "Sign in with Antigravity CLI" = "Sign in with Antigravity CLI";
 

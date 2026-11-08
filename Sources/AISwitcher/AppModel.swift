@@ -438,13 +438,14 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ account: Account, newWindow: Bool = false) {
-        guard let account = accounts.first(where: { $0.id == account.id }), !launchingIDs.contains(account.id) else { return }
+        guard let account = accounts.first(where: { $0.id == account.id }), !launchingIDs.contains(account.id),
+              !account.usesIsolatedAntigravity || !quotaBusyIDs.contains(account.id) else { return }
         launchingIDs.insert(account.id)
         Task {
             defer { launchingIDs.remove(account.id); refreshRunning() }
             do {
                 if account.usesIsolatedAntigravity {
-                    try validateAntigravityWorkspaceSession(account)
+                    try await handOffAntigravitySession(to: account)
                     await antigravityDesktopQuota.stop(account.id)
                     try await agentApplications.open(account)
                     try await antigravityDesktopQuota.indexSharedConversations(account)
@@ -467,12 +468,39 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func validateAntigravityWorkspaceSession(_ account: Account) throws {
+    private func handOffAntigravitySession(to account: Account) async throws {
+        let now = Date()
+        let exhausted = accounts.filter { other in
+            other.id != account.id && other.usesIsolatedAntigravity
+                && !launchingIDs.contains(other.id) && !quotaBusyIDs.contains(other.id)
+                && quotaErrors[other.id] == nil
+                && other.displayedCodexConnection?.quota?.isExhausted(at: now) == true
+                && (agentApplications.runningApplication(for: other) != nil || antigravityDesktopQuota.hasBackend(other.id))
+        }
+        let closing = Set(exhausted.map(\.id))
+        try validateAntigravityWorkspaceSession(account, closing: closing)
+        launchingIDs.formUnion(closing)
+        closingSessionIDs.formUnion(closing)
+        defer {
+            launchingIDs.subtract(closing)
+            closingSessionIDs.subtract(closing)
+        }
+        for other in exhausted {
+            try await agentApplications.close(other)
+            await antigravityDesktopQuota.stop(other.id)
+            await providerQuota.stop(other.id)
+            providerSessionIDs.remove(other.id)
+        }
+        try validateAntigravityWorkspaceSession(account, closing: closing)
+    }
+
+    private func validateAntigravityWorkspaceSession(_ account: Account, closing: Set<UUID> = []) throws {
         let workspace = SharedAntigravityWorkspace(repository: repository)
         guard account.sharesAntigravityProjects || workspace.isPrepared(account) else { return }
         if agentApplications.isRunning(.antigravity) { throw AntigravityProfileError.sharedSessionRunning }
-        for other in accounts where other.id != account.id && other.sharesAntigravityProjects {
-            if hasRunningSession(other) || launchingIDs.contains(other.id) || quotaBusyIDs.contains(other.id) {
+        for other in accounts where other.id != account.id && other.sharesAntigravityProjects && !closing.contains(other.id) {
+            if agentApplications.runningApplication(for: other) != nil || antigravityDesktopQuota.hasBackend(other.id)
+                || launchingIDs.contains(other.id) || quotaBusyIDs.contains(other.id) {
                 throw AntigravityProfileError.sharedSessionRunning
             }
         }

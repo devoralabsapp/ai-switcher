@@ -59,6 +59,8 @@ internal sealed partial class MainWindow {
         Field("AI agent",agent);Field("Account name",name);Field("Email or note",note);Field("Profile color",color);var modeField=Field("Mode",mode);fields.Children.Add(explanation);fields.Children.Add(Space(14));var browserField=Field("Browser",browser);
         var desktopOptions=Stack(Text(L["Default account action"],12,true),Space(6),defaultAction,startup,shared,Text(L["Sharing uses the workspace folder selected in Settings. Authentication stays private."],11,false,T.Secondary),Space(16));fields.Children.Add(desktopOptions);
         var signInField=Field("Sign-in method",signInMethod);
+        var browserSignInHint = Text(L["After Google confirms sign-in, return to AI Switcher and choose Open Antigravity."], 11, false, T.Secondary);
+        fields.Children.Add(browserSignInHint);
         fields.Children.Add(antigravityProjectOptions);
         if(original==null)fields.Children.Add(openAfter);
         var support=Text(L["Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."],11,false,T.Secondary);support.Margin=new Thickness(0,16,0,20);fields.Children.Add(support);
@@ -67,6 +69,8 @@ internal sealed partial class MainWindow {
             var effective=selected is Agent.Chatgpt or Agent.Claude?selectedMode:selected.IsShared()?LaunchMode.Desktop:LaunchMode.Browser;
             modeField.Visibility=selected is Agent.Claude or Agent.Chatgpt?Visibility.Visible:Visibility.Collapsed;browserField.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
             signInField.Visibility=selected==Agent.Antigravity&&original==null?Visibility.Visible:Visibility.Collapsed;
+            browserSignInHint.Visibility = signInField.Visibility == Visibility.Visible && signInMethod.SelectedIndex == 0
+                ? Visibility.Visible : Visibility.Collapsed;
             antigravityProjectOptions.Visibility = selected == Agent.Antigravity && (original == null || original.UsesPrivateAntigravity)
                 ? Visibility.Visible : Visibility.Collapsed;
             projectEditor.IsEnabled = original == null || (!engine.Running(original) && !engine.Busy.Contains(original.Id));
@@ -75,6 +79,7 @@ internal sealed partial class MainWindow {
             shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=selected==Agent.Antigravity&&original==null?L["Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data."]:Support(original??new Account{Agent=selected,LaunchMode=effective});
         }
         agent.SelectionChanged+=(_,_)=>{UpdateFields();if(agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;};mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();if(original==null&&agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;
+        signInMethod.SelectionChanged += (_, _) => UpdateFields();
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
             var selected=agentValues[agent.SelectedIndex];
             var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedIndex,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true,AntigravityUsesPrivateHome=original?.AntigravityUsesPrivateHome??(original==null&&selected==Agent.Antigravity?true:null),AntigravitySignInMethod=original?.AntigravitySignInMethod??(original==null&&selected==Agent.Antigravity?(AntigravitySignInMethod)signInMethod.SelectedIndex:null)};

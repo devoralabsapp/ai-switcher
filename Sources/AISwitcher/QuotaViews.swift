@@ -30,7 +30,7 @@ struct ProviderQuotaSummaryView: View {
                     }
                 }
                 if let connection = account.displayedCodexConnection {
-                    if details { connectionContent(connection, now: context.date) }
+                    if details || account.effectiveAgent == .antigravity { connectionContent(connection, now: context.date) }
                     else {
                         Button { model.quotaAccountID = account.id } label: { connectionContent(connection, now: context.date).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }
                             .buttonStyle(ThemedPlainButtonStyle())
@@ -81,8 +81,19 @@ struct ProviderQuotaSummaryView: View {
             if details && value.providerSessionKind == "claudeWeb" { Text(L10n.text("Sign-in source: Claude web")).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
             let read = value.quota?.fetchedAt ?? value.identityFetchedAt
             let stale = value.quota?.isStale(at: now) ?? read.map { now.timeIntervalSince($0) > 360 } ?? false
-            Text(model.quotaErrors[account.id] != nil ? L10n.text("Refresh failed · previously read data") : stale ? L10n.text("Stale data · refresh needed") : read.map { details ? L10n.format("Last read: %@", L10n.dateTime($0)) : L10n.format("Read at %@ · Details ↗", L10n.time($0)) } ?? L10n.text("Details"))
-                .font(theme.font(size: 9)).foregroundColor(palette.secondary)
+            if account.effectiveAgent == .antigravity && !details {
+                HStack(spacing: 6) {
+                    if let read {
+                        Text(L10n.format("Last read: %@", L10n.time(read))).foregroundColor(palette.secondary)
+                    }
+                    Button(L10n.text("Details") + " ↗") { model.quotaAccountID = account.id }
+                        .buttonStyle(ThemedPlainButtonStyle()).foregroundColor(palette.accent)
+                }.font(theme.font(size: 9))
+                if stale { Text(L10n.text("Stale data · refresh needed")).font(theme.font(size: 9)).foregroundColor(palette.secondary) }
+            } else {
+                Text(model.quotaErrors[account.id] != nil ? L10n.text("Refresh failed · previously read data") : stale ? L10n.text("Stale data · refresh needed") : read.map { details ? L10n.format("Last read: %@", L10n.dateTime($0)) : L10n.format("Read at %@ · Details ↗", L10n.time($0)) } ?? L10n.text("Details"))
+                    .font(theme.font(size: 9)).foregroundColor(palette.secondary)
+            }
         }
     }
 }

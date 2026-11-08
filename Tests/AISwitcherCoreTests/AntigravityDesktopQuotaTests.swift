@@ -3,6 +3,21 @@ import XCTest
 @testable import AISwitcher
 
 final class AntigravityDesktopQuotaTests: XCTestCase {
+    func testOnlyFreshExhaustionOfEveryGroupAllowsAutomaticHandoff() throws {
+        let now = Date()
+        let status = try status()
+        func snapshot(gemini: Double, other: Double) throws -> CodexQuotaSnapshot {
+            let quota = Data("""
+            {"response":{"groups":[{"displayName":"Gemini models","buckets":[{"bucketId":"gemini","remainingFraction":\(gemini)}]},{"displayName":"Claude and GPT models","buckets":[{"bucketId":"3p","remainingFraction":\(other)}]}]}}
+            """.utf8)
+            return try XCTUnwrap(AntigravityDesktopQuota.connection(statusBefore: status, quota: quota, statusAfter: status, emailHint: "").quota)
+        }
+        let empty = try snapshot(gemini: 0, other: 0)
+        XCTAssertTrue(empty.isExhausted(at: now))
+        XCTAssertFalse(empty.isExhausted(at: now.addingTimeInterval(400)))
+        XCTAssertFalse(try snapshot(gemini: 0, other: 0.2).isExhausted(at: now))
+    }
+
     private func status(_ email: String = "desktop@example.test") throws -> Data {
         try JSONSerialization.data(withJSONObject: ["userStatus":["email":email,"planStatus":["planInfo":["planName":"Google AI Pro"]]]])
     }

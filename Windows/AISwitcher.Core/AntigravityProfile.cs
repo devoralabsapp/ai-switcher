@@ -55,8 +55,11 @@ public static class AntigravityProfile {
     public static Identity? ReadIdentity(string path){
         Repository.RejectLinks(path);if(!File.Exists(path))return null;
         using var file=File.OpenRead(path);if(file.Length>131072)throw new AppError(ProviderQuota.Invalid);
+        try{using var doc=JsonDocument.Parse(file);return ReadIdentity(doc.RootElement);}
+        catch(JsonException){return null;}
+    }
+    static Identity? ReadIdentity(JsonElement root){
         try{
-            using var doc=JsonDocument.Parse(file);var root=doc.RootElement;
             if(ProviderQuota.Get(root,"auth_method").GetString()!="consumer")return null;
             if(ProviderQuota.Get(root,"id_token_email") is {ValueKind:JsonValueKind.String} value&&ValidEmail(value.GetString()))return new(value.GetString(),null);
             if(ProviderQuota.Get(root,"id_token") is not {ValueKind:JsonValueKind.String} token)return null;
@@ -66,6 +69,42 @@ public static class AntigravityProfile {
             var email=ProviderQuota.Get(claims,"email");var issuer=ProviderQuota.Get(claims,"iss");
             return ProviderQuota.Get(header,"alg").GetString()=="RS256"&&issuer.GetString() is "accounts.google.com" or "https://accounts.google.com"&&ProviderQuota.Get(claims,"email_verified").ValueKind==JsonValueKind.True&&ValidEmail(email.GetString())?new(email.GetString(),null):null;
         }catch(Exception error)when(error is JsonException or FormatException or InvalidOperationException){return null;}
+    }
+    public static void PrepareDesktopSignIn(Repository repo, Account account)
+    {
+        if (!account.UsesPrivateAntigravity || !account.UsesProviderCli) return;
+        Validate(repo, account);
+        var source = CliIdentity(repo, account);
+        var destination = DesktopIdentity(repo, account);
+        if (!File.Exists(source)) return;
+        using var file = File.OpenRead(source);
+        if (file.Length > 131072) return;
+        var data = new byte[(int)file.Length];
+        file.ReadExactly(data);
+        Identity? identity;
+        try
+        {
+            using var record = JsonDocument.Parse(data);
+            identity = ReadIdentity(record.RootElement);
+            var refresh = ProviderQuota.Get(ProviderQuota.Get(record.RootElement, "token"), "refresh_token");
+            if (identity == null || refresh.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(refresh.GetString())) return;
+        }
+        catch (JsonException) { return; }
+        if (account.EmailHint.Contains('@') && !string.Equals(account.EmailHint, identity.Email, StringComparison.OrdinalIgnoreCase))
+            throw new AppError(ProviderQuota.Changed);
+        if (File.Exists(destination))
+        {
+            if (ReadIdentity(destination) is { } existing && !existing.Matches(identity))
+                throw new AppError(ProviderQuota.Changed);
+            return;
+        }
+        var staging = destination + ".pending-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            using (var output = new FileStream(staging, FileMode.CreateNew)) output.Write(data);
+            File.Move(staging, destination);
+        }
+        finally { File.Delete(staging); }
     }
     public static string DisplayTitle(string id,string? name,string? group=null){
         var text=(id+" "+name+" "+group).ToLowerInvariant();

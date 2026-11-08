@@ -22,6 +22,40 @@ var root=Path.Combine(Path.GetTempPath(),"ai-switcher-core-tests."+Guid.NewGuid(
 Repository Repo(string name)=>new(Path.Combine(root,name),Path.Combine(root,name+"-backend"));
 Account Profile(string name="A",Agent agent=Agent.Chatgpt,LaunchMode mode=LaunchMode.Desktop)=>new(){Name=name,Agent=agent,LaunchMode=mode};
 var now=DateTimeOffset.UtcNow;
+Test("Antigravity CLI login seeds only the matching private Desktop account", () =>
+{
+    var repo = Repo("antigravity-desktop-sign-in");
+    var cli = Profile("CLI", Agent.Antigravity) with
+    { AntigravityUsesPrivateHome = true, AntigravitySignInMethod = AntigravitySignInMethod.Cli };
+    var browser = cli with { Id = Guid.NewGuid(), AntigravitySignInMethod = AntigravitySignInMethod.Browser };
+    const string token = """{"auth_method":"consumer","id_token_email":"cli@example.test","token":{"refresh_token":"fixture-only"}}""";
+    foreach (var account in new[] { cli, browser })
+    {
+        repo.PrepareProfile(account);
+        var source = AntigravityProfile.CliIdentity(repo, account);
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        File.WriteAllText(source, token);
+        AntigravityProfile.PrepareDesktopSignIn(repo, account);
+    }
+    var desktop = AntigravityProfile.DesktopIdentity(repo, cli);
+    Equal(File.ReadAllText(desktop), token);
+    True(!File.Exists(AntigravityProfile.DesktopIdentity(repo, browser)));
+    var other = """{"auth_method":"consumer","id_token_email":"other@example.test"}""";
+    File.WriteAllText(desktop, other);
+    Throws(() => AntigravityProfile.PrepareDesktopSignIn(repo, cli));
+    Equal(File.ReadAllText(desktop), other);
+});
+Test("Antigravity handoff requires fresh exhaustion of all quota groups", () =>
+{
+    QuotaSnapshot Quota(double used) => new(new(null, null, new()
+    {
+        ["gemini"] = new("gemini", "Gemini models", new(100, 10080, null), null),
+        ["3p"] = new("3p", "Claude and GPT models", new(used, 10080, null), null)
+    }), now);
+    True(Quota(100).IsExhausted(now));
+    True(!Quota(100).IsExhausted(now.AddMinutes(7)));
+    True(!Quota(80).IsExhausted(now));
+});
 Account WithQuota(string name,double used,double secondary=40,TimeSpan? age=null,long? reset=null){var limits=new Limits("identity",new("codex",null,new(used,300,reset??now.AddHours(2).ToUnixTimeSeconds()),new(secondary,10080,now.AddDays(3).ToUnixTimeSeconds())),null);return Profile(name)with{DesktopConnection=new(new("fixture@example.test","plus","identity"),new(limits,now-(age??TimeSpan.Zero)))};}
 async Task SharedFixtureLink(string link, string target)
 {

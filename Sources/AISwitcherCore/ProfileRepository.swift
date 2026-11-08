@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// Stores labels, a confirmed Codex identity, and cached quota. Never reads tokens.
+/// Stores labels, a confirmed Codex identity, and cached quota separately from vendor sign-in files.
 public struct ProfileRepository: Sendable {
     public let root: URL
     public let desktopBackendBase: URL
