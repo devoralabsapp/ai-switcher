@@ -22,6 +22,22 @@ var root=Path.Combine(Path.GetTempPath(),"ai-switcher-core-tests."+Guid.NewGuid(
 Repository Repo(string name)=>new(Path.Combine(root,name),Path.Combine(root,name+"-backend"));
 Account Profile(string name="A",Agent agent=Agent.Chatgpt,LaunchMode mode=LaunchMode.Desktop)=>new(){Name=name,Agent=agent,LaunchMode=mode};
 var now=DateTimeOffset.UtcNow;
+Test("Native browser sign-in validates Google origin and preserves the local callback", () =>
+{
+    const string value = "https://accounts.google.com/o/oauth2/v2/auth?state=fixture&redirect_uri=http%3A%2F%2F127.0.0.1%3A53743%2Foauth-callback";
+    Equal(BrowserSignIn.AntigravityURL(BrowserSignIn.AntigravityURLPrefix + value)!.AbsoluteUri, value);
+    True(BrowserSignIn.AntigravityURL("Listening on localhost") == null);
+    foreach (var invalid in new[]
+    {
+        value.Replace("https:", "http:"),
+        value.Replace("accounts.google.com", "accounts.google.com.example.test"),
+        value.Replace("state=fixture", "state="),
+        value.Replace("127.0.0.1", "example.test"),
+        value.Replace("accounts.google.com", "user@accounts.google.com"),
+        value.Replace("53743", "80")
+    })
+        Throws(() => BrowserSignIn.AntigravityURL(BrowserSignIn.AntigravityURLPrefix + invalid));
+});
 Test("Antigravity CLI login seeds only the matching private Desktop account", () =>
 {
     var repo = Repo("antigravity-desktop-sign-in");

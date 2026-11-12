@@ -62,7 +62,7 @@ public sealed class SharedAntigravityWorkspace(Repository repository, string? so
     }
     public bool IsPrepared(Account account) => File.Exists(Marker(account));
 
-    public async Task PrepareAsync(Account account, Func<string, string, Task> createLink)
+    public async Task PrepareAsync(Account account, Func<string, string, Task> createLink, bool bindIfNeeded = true)
     {
         if (!account.UsesPrivateAntigravity) return;
         AntigravityProfile.Validate(repository, account);
@@ -76,9 +76,17 @@ public sealed class SharedAntigravityWorkspace(Repository repository, string? so
             localHome.StartsWith(Path.Combine(home, ".gemini") + Path.DirectorySeparatorChar, Comparison) ||
             home.Equals(localHome, Comparison))
             throw new AppError("Profile storage could not be verified.");
-        foreach (var path in Paths) DirectoryPath(Source(path));
-
         var binding = ReadBinding(account);
+        if (binding == null && !bindIfNeeded)
+        {
+            foreach (var path in Paths.Prepend("config"))
+            {
+                var local = Destination(account, path);
+                if (Attributes(local) != null) { Repository.RejectLinks(local); DirectoryPath(local); }
+            }
+            return;
+        }
+        foreach (var path in Paths) DirectoryPath(Source(path));
         if (binding == null)
         {
             foreach (var path in Paths)

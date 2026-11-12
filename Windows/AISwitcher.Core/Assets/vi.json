@@ -430,6 +430,7 @@
   "Sign in once in this Antigravity Desktop profile. Email and quota update automatically; Connect reuses its saved sign-in without CLI login.": "Đăng nhập một lần trong hồ sơ Antigravity Desktop này. Email và hạn mức tự cập nhật; Kết nối dùng lại phiên đã lưu, không cần đăng nhập CLI.",
   "ChatGPT reads Codex quota from its Desktop session. Claude uses a separate quota sign-in per profile. New Antigravity profiles read email and quota from their own Desktop sign-in, without CLI login. Connect reuses saved sign-in in the background; first sign-in needs the Desktop window. No model prompt is sent.": "ChatGPT đọc hạn mức Codex từ phiên Desktop. Claude dùng đăng nhập xem hạn mức riêng từng hồ sơ. Hồ sơ Antigravity mới đọc email và hạn mức từ chính đăng nhập Desktop, không cần CLI. Kết nối dùng phiên đã lưu ở nền; đăng nhập lần đầu cần cửa sổ Desktop. Không gửi câu hỏi AI.",
   "Sign in with browser": "Đăng nhập trên trình duyệt",
+  "Google Chrome is not installed. Install Chrome, then try again.": "Chưa cài Google Chrome. Cài Chrome rồi thử lại.",
   "After Google confirms sign-in, return to AI Switcher and choose Open Antigravity.": "Sau khi Google xác nhận đăng nhập, quay lại AI Switcher và chọn Mở Antigravity.",
   "Sign in with Antigravity CLI": "Đăng nhập bằng Antigravity CLI",
   "Sign-in method": "Phương thức đăng nhập",

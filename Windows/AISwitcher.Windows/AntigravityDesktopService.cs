@@ -18,6 +18,7 @@ namespace AISwitcher.Windows;
 internal sealed class AntigravityDesktopService(Repository repo,NativePlatform platform,string? sharedSourceHome=null) {
     sealed class Background(Process process,string csrf){
         public Process Process=process;public string Csrf=csrf;public StringBuilder Startup=new();public bool PrivateStore;
+        public TaskCompletionSource<Uri>? BrowserRequest;
         public int? Port {get{lock(Startup){var matches=Regex.Matches(Startup.ToString(),@"listening on random port at (\d+) for HTTP\b");return matches.Count>0?int.Parse(matches[^1].Groups[1].Value):null;}}}
     }
     sealed record Endpoint(int Root,long RootCreated,int Pid,long Created,int Port,string Csrf,string Executable,bool Tls=false);
@@ -45,9 +46,33 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         var info=ChildEnvironment.StartInfo(native,args,AntigravityProfile.Environment(NativePlatform.EnvironmentValues(),repo,account),Environment.GetFolderPath(Environment.SpecialFolder.System));
         // The vendor's CLI success page omits the unscoped antigravity:// link.
         info.Environment["ANTIGRAVITY_AUTH_SUCCESS_APP"] = "antigravity-cli";
+        info.Environment[BrowserSignIn.AntigravityBrowserHost] = "1";
         info.RedirectStandardInput=true;info.RedirectStandardOutput=true;info.RedirectStandardError=true;
         var process=new Process{StartInfo=info};var backend=new Background(process,csrf);
-        void Output(object sender,DataReceivedEventArgs e){if(e.Data==null)return;if(FixtureDiagnostic!=null){if(e.Data.Contains("file-based token storage"))FixtureDiagnostic("native file storage: "+(e.Data.Contains("WSL environment")?"WSL":"other"));if(e.Data.Contains("listening"))FixtureDiagnostic("native listener startup");if(e.Data.Contains("Unknown command line flag"))FixtureDiagnostic("unsupported native flag");}lock(backend.Startup){if(e.Data.Contains("Using file-based token storage because WSL environment detected",StringComparison.Ordinal))backend.PrivateStore=true;if(backend.Startup.Length<65536)backend.Startup.AppendLine(e.Data[..Math.Min(e.Data.Length,65536-backend.Startup.Length)]);}}
+        void Output(object sender, DataReceivedEventArgs e)
+        {
+            if (e.Data == null) return;
+            lock (backend.Startup)
+            {
+                if (e.Data.StartsWith(BrowserSignIn.AntigravityURLPrefix, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        if (BrowserSignIn.AntigravityURL(e.Data) is { } url) backend.BrowserRequest?.TrySetResult(url);
+                    }
+                    catch (Exception error) { backend.BrowserRequest?.TrySetException(error); }
+                    return;
+                }
+                if (e.Data.Contains("Using file-based token storage because WSL environment detected", StringComparison.Ordinal))
+                    backend.PrivateStore = true;
+                if (backend.Startup.Length < 65536)
+                    backend.Startup.AppendLine(e.Data[..Math.Min(e.Data.Length, 65536 - backend.Startup.Length)]);
+            }
+            if (e.Data.Contains("file-based token storage"))
+                FixtureDiagnostic?.Invoke("native file storage: " + (e.Data.Contains("WSL environment") ? "WSL" : "other"));
+            if (e.Data.Contains("listening")) FixtureDiagnostic?.Invoke("native listener startup");
+            if (e.Data.Contains("Unknown command line flag")) FixtureDiagnostic?.Invoke("unsupported native flag");
+        }
         process.OutputDataReceived+=Output;process.ErrorDataReceived+=Output;
         try{
             process.Start();backgrounds[account.Id]=backend;process.BeginOutputReadLine();process.BeginErrorReadLine();
@@ -155,7 +180,35 @@ internal sealed class AntigravityDesktopService(Repository repo,NativePlatform p
         if(saved!=savedAfter||savedAfter?.Email is {} email&&!string.Equals(email,connection.Identity.Email,StringComparison.OrdinalIgnoreCase))throw new AppError(ProviderQuota.Changed);
         return connection;
     }
-    public async Task SignInAsync(Account account,CancellationToken ct){var endpoint=await Ready(account,ct);_=await Send(endpoint,"Login",ct);}
+    public async Task SignInAsync(Account account, CancellationToken ct)
+    {
+        var endpoint = await Ready(account, ct);
+        if (!backgrounds.TryGetValue(account.Id, out var backend))
+            throw new AppError("Close this Antigravity account session once, then open it again to apply separate sign-in storage. Your data is kept.");
+        if (await platform.FindExecutableAsync("chrome") == null)
+            throw new AppError("Google Chrome is not installed. Install Chrome, then try again.");
+        var request = new TaskCompletionSource<Uri>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (backend.Startup) backend.BrowserRequest = request;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var login = Send(endpoint, "Login", cancellation.Token);
+        try
+        {
+            if (await Task.WhenAny(login, request.Task).WaitAsync(ct) == login)
+            {
+                _ = await login;
+                return;
+            }
+            var url = await request.Task;
+            await platform.OpenSignInAsync(url, ct);
+            _ = await login;
+        }
+        finally
+        {
+            lock (backend.Startup) backend.BrowserRequest = null;
+            cancellation.Cancel();
+            try { await login; } catch { }
+        }
+    }
 
     internal static HashSet<int> ListeningPorts(int pid){
         var result=new HashSet<int>();foreach(var family in new[]{2,23}){

@@ -22,6 +22,26 @@ final class BrowserService {
 
     var installedBrowsers: [BrowserKind] { BrowserKind.allCases.filter { applicationURL(for: $0) != nil } }
 
+    /// Chrome resolves its normal profile and forwards to that profile's instance.
+    func openSignIn(_ url: URL) async throws {
+        guard url.scheme == "https", url.user == nil, url.password == nil else {
+            throw ProviderQuotaError.invalidResponse
+        }
+        guard let application = applicationURL(for: .chrome),
+              let executable = Bundle(url: application)?.executableURL else {
+            throw ProfileError.browserUnavailable(BrowserKind.chrome.name)
+        }
+        // Starting Chrome directly avoids Launch Services selecting another
+        // running Chrome instance that has an isolated AI Switcher profile.
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = [url.absoluteString]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+    }
+
     func runningApplication(for account: Account) -> NSRunningApplication? {
         let profile = repository.profileURL(for: account.id)
         return NSWorkspace.shared.runningApplications.first {

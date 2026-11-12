@@ -211,7 +211,7 @@ internal sealed class AppEngine {
             if (a.UsesProviderCli && Platform.Owned(a) == null)
             {
                 Repository.PrepareProfile(a);
-                await new SharedAntigravityWorkspace(Repository).PrepareAsync(a, SharedWorkspace.JunctionAsync);
+                await new SharedAntigravityWorkspace(Repository).PrepareAsync(a, SharedWorkspace.JunctionAsync, bindIfNeeded: false);
             }
         }
         Checks[a.Id]=DateTimeOffset.UtcNow;
@@ -234,7 +234,7 @@ internal sealed class AppEngine {
         if(a.Agent!=Agent.Chatgpt||a.EffectiveMode!=LaunchMode.Browser)return;
         await using var client=await Backend.StdioClientAsync(a,ct);var login=await client.StartLoginAsync(ct);bool confirmed=false;
         try{
-            await Platform.OpenAsync(a,login.Url,ct:ct);await client.WaitForLoginAsync(login.Id,ct);var identity=await client.ReadIdentityAsync(ct);
+            await Platform.OpenSignInAsync(login.Url, ct);await client.WaitForLoginAsync(login.Id,ct);var identity=await client.ReadIdentityAsync(ct);
             if(!await confirm(identity))return;var connection=await client.ReadQuotaAsync(ct);if(!identity.Matches(connection.Identity))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
             Current(a).BrowserConnection=connection;Repository.Save(Snapshot);confirmed=true;
         }finally{if(!confirmed){try{await client.CancelLoginAsync(login.Id);await client.LogoutAsync();}catch{}}}

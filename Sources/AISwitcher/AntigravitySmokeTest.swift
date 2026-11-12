@@ -9,29 +9,16 @@ enum AntigravitySmokeTest {
         guard CommandLine.arguments.contains("--data-dir"), repository.root.lastPathComponent.hasPrefix("ai-switcher-smoke."),
               (try? repository.load().accounts.isEmpty) == true else { Darwin.exit(1) }
         let service = AgentApplicationService(repository: repository)
-        let quota = AntigravityDesktopQuotaService(applications:service,repository:repository)
+        var callbackVerified = false
+        let quota = AntigravityDesktopQuotaService(applications: service, repository: repository, openSignIn: { url in
+            callbackVerified = try BrowserSignIn.antigravityURL(from: BrowserSignIn.antigravityURLPrefix + url.absoluteString) == url
+        })
         let account = Account(name: "Browser OAuth probe",agent:.antigravity,antigravityUsesPrivateHome:true)
         var login: Task<Void, Error>?
         var loginFailure: Error?
-        let oldPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
         do {
-            // Capture the vendor's browser-open request without selecting a real
-            // account or leaving an OAuth tab open during an automated test.
-            let bin = repository.root.appendingPathComponent("browser-fixture-bin")
-            try FileManager.default.createDirectory(at:bin,withIntermediateDirectories:true)
-            let opener = bin.appendingPathComponent("open")
-            let script = """
-            #!/usr/bin/python3
-            import sys,json,pathlib,urllib.parse
-            u=urllib.parse.urlsplit(sys.argv[-1]);q=urllib.parse.parse_qs(u.query)
-            r=urllib.parse.urlsplit(q.get('redirect_uri',[''])[0])
-            pathlib.Path(__file__).parent.parent.joinpath('browser-request.json').write_text(json.dumps({'host':u.hostname,'callbackScheme':r.scheme,'callbackHost':r.hostname}))
-            """
-            try script.write(to:opener,atomically:true,encoding:.utf8)
-            try FileManager.default.setAttributes([.posixPermissions:0o700],ofItemAtPath:opener.path)
-            setenv("PATH",bin.path + ":" + oldPath,1)
+            // Observe the manager's browser handoff without opening a real OAuth tab.
             try await quota.connect(account)
-            setenv("PATH",oldPath,1)
             guard !service.hasWindow(account) else { throw AntigravityProfileError.launchFailed }
             do { _ = try await quota.read(account);throw AntigravityProfileError.unsafeStorage }
             catch ProviderQuotaError.signedOut { print("PASS: fresh browser-mode backend asks for sign-in before returning quota") }
@@ -40,21 +27,19 @@ enum AntigravitySmokeTest {
                 do { try await quota.signInWithBrowser(account);print("QA: official browser login request completed") }
                 catch { if !Task.isCancelled { loginFailure = error };throw error }
             }
-            try await Task.sleep(nanoseconds: 30_000_000_000)
-            let requestFile = repository.root.appendingPathComponent("browser-request.json")
-            let info = (try? Data(contentsOf:requestFile)).flatMap { try? JSONSerialization.jsonObject(with:$0) as? [String:Any] }
-            let callbackVerified = info?["host"] as? String == "accounts.google.com" && info?["callbackScheme"] as? String == "http" && ["127.0.0.1","localhost"].contains(info?["callbackHost"] as? String ?? "")
+            for _ in 0..<120 where !callbackVerified && loginFailure == nil {
+                try await Task.sleep(nanoseconds: 250_000_000)
+            }
             login?.cancel();_ = try? await login?.value
             if let loginFailure { throw loginFailure }
             guard callbackVerified else { throw AntigravityProfileError.launchFailed }
-            print("PASS: the official Google OAuth request uses a local callback for the selected private backend")
+            print("PASS: the manager receives the official Google URL with a callback to the selected private backend")
             await quota.stopAll()
             try await service.close(account)
             _ = try repository.remove(account.id,from:.init())
             print("PASS: cancelled disposable browser sign-in and removed only its fixture profile")
             Darwin.exit(0)
         } catch {
-            setenv("PATH",oldPath,1)
             login?.cancel();_ = try? await login?.value
             await quota.stopAll()
             try? await service.close(account)

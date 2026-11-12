@@ -25,7 +25,21 @@ internal sealed partial class NativePlatform {
     public HashSet<Guid> PreparingRuntime { get; }=[];
     public event Action? PreparationChanged;
     internal Action<int>? FixtureStarted { get; set; }
+    internal Action<Uri>? FixtureSignInOpened { get; set; }
     public NativePlatform(Repository repository,Preferences preferences){this.repository=repository;this.preferences=preferences;}
+    public async Task OpenSignInAsync(Uri url, CancellationToken ct = default)
+    {
+        if (url.Scheme != "https" || url.UserInfo.Length != 0) throw new AppError(ProviderQuota.Invalid);
+        var chrome = await FindExecutableAsync("chrome")
+            ?? throw new AppError("Google Chrome is not installed. Install Chrome, then try again.");
+        ct.ThrowIfCancellationRequested();
+        // Launch from the manager's environment so Chrome reuses the user's
+        // normal browser storage, independently of the provider's private home.
+        using var browser = Process.Start(ChildEnvironment.StartInfo(chrome, new[] { url.AbsoluteUri },
+            ChildEnvironment.Create(EnvironmentValues()), Environment.GetFolderPath(Environment.SpecialFolder.System)))
+            ?? throw new AppError("Could not open the AI agent window. Try again or check the browser.");
+        FixtureSignInOpened?.Invoke(url);
+    }
     public static Dictionary<string,string> EnvironmentValues()=>Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>().ToDictionary(x=>(string)x.Key,x=>(string)x.Value!,StringComparer.OrdinalIgnoreCase);
     public static bool IsElevated()=>new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
     public static void ProtectDirectory(string path){

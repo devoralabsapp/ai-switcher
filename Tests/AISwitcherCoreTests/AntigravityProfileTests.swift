@@ -232,6 +232,58 @@ final class AntigravityProfileTests: XCTestCase {
     }
 
     @MainActor
+    func testReaddedCLIProfileStartsSignInBeforeBindingSharedProjects() async throws {
+        let root = fixtureRoot(), fm = FileManager.default
+        defer { try? fm.removeItem(at: root) }
+        let repo = ProfileRepository(root: root)
+        var account = Account(name: "Re-added Antigravity", agent: .antigravity, antigravityUsesPrivateHome: true)
+        account.antigravitySignInMethod = .cli
+        account.antigravitySharesLocalProjects = true
+        try repo.prepareAntigravityProfile(for: account.id)
+        _ = try repo.remove(account.id, from: .init(accounts: [account]))
+        account = Account(name: account.name, agent: .antigravity, antigravityUsesPrivateHome: true)
+        account.antigravitySignInMethod = .cli
+        account.antigravitySharesLocalProjects = true
+
+        let executable = root.appendingPathComponent("agy-fixture")
+        let script = """
+        #!/bin/sh
+        case "$1" in
+          --version) echo 1.5.3 ;;
+          '') printf '%s' "$HOME" > "$HOME/login-home" ;;
+          *) printf '%s' 'Error: Authentication required. Run agy to sign in.' >&2; exec /bin/sleep 30 ;;
+        esac
+        """
+        try script.write(to: executable, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let service = ProviderQuotaService(repository: repo)
+        do {
+            _ = try await service.read(account, override: executable.path)
+            XCTFail("A new CLI profile must request sign-in")
+        } catch { XCTAssertEqual(error as? ProviderQuotaError, .signedOut) }
+        let launcher = try await service.prepareSignInScript(account, override: executable.path)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [launcher.path]
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        let home = repo.antigravityHomeURL(for: account.id)
+        XCTAssertEqual(try String(contentsOf: home.appendingPathComponent("login-home"), encoding: .utf8), home.path)
+        XCTAssertFalse(SharedAntigravityWorkspace(repository: repo).isPrepared(account))
+
+        let identity = repo.antigravityCLIIdentityURL(for: account.id)
+        try fm.createDirectory(at: identity.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"auth_method":"consumer","id_token_email":"fixture@example.test"}"#.utf8).write(to: identity)
+        let started = Date()
+        do {
+            _ = try await service.read(account, override: executable.path)
+            XCTFail("A signed-out CLI should return its diagnostic even while still running")
+        } catch { XCTAssertEqual(error as? ProviderQuotaError, .signedOut) }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10)
+    }
+
+    @MainActor
     func testOfficialCLIReadsEachHomesIdentityAndQuotaAndLoginUsesTheSameHome() async throws {
         let root = fixtureRoot();defer { try? FileManager.default.removeItem(at: root) }
         let repo = ProfileRepository(root: root), fm = FileManager.default

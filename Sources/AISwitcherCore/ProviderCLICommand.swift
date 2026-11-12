@@ -14,6 +14,7 @@ public actor ProviderCLICommand {
     private var buffer = Data()
     private var lines: [Data] = []
     private var ended = false
+    private var failure: Error?
     private var waiter: CheckedContinuation<Data?, Error>?
     private var deadline: Task<Void, Never>?
     public init() {}
@@ -26,7 +27,7 @@ public actor ProviderCLICommand {
             let stderr = Pipe();process.standardError = stderr
             errorOutput = stderr.fileHandleForReading;diagnosticsEnded = false
             errorOutput?.readabilityHandler = { [weak self] file in
-                let bytes = (try? file.read(upToCount: 16_384)) ?? Data()
+                let bytes = file.availableData
                 Task { await self?.receiveDiagnostic(bytes) }
             }
         } else { process.standardError = FileHandle.nullDevice }
@@ -39,6 +40,9 @@ public actor ProviderCLICommand {
         if bytes.isEmpty { finishDiagnostics();return }
         diagnosticBuffer.append(bytes)
         if diagnosticBuffer.count > 16_384 { diagnosticBuffer.removeFirst(diagnosticBuffer.count - 16_384) }
+        if ProviderCLIConfiguration.antigravityRequiresSignIn(diagnosticBuffer) {
+            finish(error: ProviderQuotaError.signedOut)
+        }
     }
     private func finishDiagnostics() {
         diagnosticsEnded = true;diagnosticDeadline?.cancel()
@@ -66,10 +70,19 @@ public actor ProviderCLICommand {
         deliver()
     }
     private func deliver() { if let waiting = waiter, !lines.isEmpty { waiter = nil; deadline?.cancel(); waiting.resume(returning: lines.removeFirst()) } else if let waiting = waiter, ended { waiter = nil; deadline?.cancel(); waiting.resume(returning: nil) } }
-    private func finish(error: Error) { ended = true; let waiting = waiter; waiter = nil; deadline?.cancel(); waiting?.resume(throwing: error); if let child, child.isRunning { child.terminate() } }
+    private func finish(error: Error) {
+        if failure == nil { failure = error }
+        ended = true
+        let waiting = waiter
+        waiter = nil
+        deadline?.cancel()
+        waiting?.resume(throwing: failure ?? error)
+        if let child, child.isRunning { child.terminate() }
+    }
     public func next(timeout: TimeInterval = 30) async throws -> Data? {
         try await withTaskCancellationHandler(operation: {
             try Task.checkCancellation()
+            if let failure { throw failure }
             if !lines.isEmpty { return lines.removeFirst() }; if ended { return nil }
             return try await withCheckedThrowingContinuation { continuation in
                 waiter = continuation

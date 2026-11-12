@@ -63,7 +63,10 @@ final class ProviderQuotaService {
         if account.effectiveAgent == .claude { try repository.prepareClaudeProfile(for: account.id); env["CLAUDE_CONFIG_DIR"] = repository.claudeConfigURL(for: account.id).path }
         if account.usesIsolatedAntigravity {
             try repository.prepareAntigravityProfile(for: account.id)
-            try SharedAntigravityWorkspace(repository: repository).prepare(account)
+            // CLI setup only needs the private home. Desktop creates the shared
+            // workspace binding when first opened. Check existing bindings for
+            // profiles that already use shared storage, including after edits.
+            try SharedAntigravityWorkspace(repository: repository).prepare(account, bindIfNeeded: false)
             env = AntigravityLaunch.environment(base: env, home: repository.antigravityHomeURL(for: account.id))
         }
         return env
@@ -134,7 +137,14 @@ final class ProviderQuotaService {
                a.caseInsensitiveCompare(b) != .orderedSame { throw ProviderQuotaError.identityChanged }
             return cli ?? desktop
         }
-        if account.usesIsolatedAntigravity { try repository.validateAntigravityOwnership(for: account.id) }
+        if account.usesIsolatedAntigravity {
+            try repository.validateAntigravityOwnership(for: account.id)
+            let fm = FileManager.default
+            guard fm.fileExists(atPath: legacyIdentityURL.path)
+                || modernCLIIdentityURL.map({ fm.fileExists(atPath: $0.path) }) == true else {
+                throw ProviderQuotaError.signedOut
+            }
+        }
         let before = try identity()
         let data = try await run(account, exe: exe, arguments: ProviderCLIConfiguration.antigravityArguments, detectSignOut: true)
         if account.usesIsolatedAntigravity { try repository.validateAntigravityOwnership(for: account.id) }

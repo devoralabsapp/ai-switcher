@@ -8,15 +8,20 @@ final class AntigravityDesktopQuotaService {
     let applications: AgentApplicationService
     let repository: ProfileRepository
     private let sharedSourceHome: URL?
+    private let openSignIn: (URL) async throws -> Void
     private var indexedConversations: [UUID: (Endpoint, Set<String>)] = [:]
     private var backgrounds: [UUID: Background] = [:]
-    init(applications: AgentApplicationService, repository: ProfileRepository, sharedSourceHome: URL? = nil) {
+    init(applications: AgentApplicationService, repository: ProfileRepository, sharedSourceHome: URL? = nil,
+         openSignIn: ((URL) async throws -> Void)? = nil) {
         self.applications = applications; self.repository = repository; self.sharedSourceHome = sharedSourceHome
+        self.openSignIn = openSignIn ?? { url in try await BrowserService(repository: repository).openSignIn(url) }
     }
 
     private final class Background {
         let process = Process(), input = Pipe(), output = Pipe(), csrf = UUID().uuidString
         var startup = Data()
+        var browserLine = Data()
+        var browserRequest: ((Result<URL, Error>) -> Void)?
         var port: Int? {
             let text = String(decoding:startup,as:UTF8.self)
             guard let regex = try? NSRegularExpression(pattern:#"listening on random port at (\d+) for HTTP\b"#),
@@ -46,6 +51,7 @@ final class AntigravityDesktopQuotaService {
         // The vendor's no-handoff success page leaves OAuth in this backend.
         // The system-wide antigravity:// link has no private profile identifier.
         environment["ANTIGRAVITY_AUTH_SUCCESS_APP"] = "antigravity-cli"
+        environment[BrowserSignIn.antigravityBrowserHost] = "1"
         backend.process.environment = environment
         backend.process.currentDirectoryURL = repository.antigravityHomeURL(for:account.id)
         backend.process.standardInput = backend.input
@@ -54,7 +60,7 @@ final class AntigravityDesktopQuotaService {
             let bytes = file.availableData
             Task { @MainActor in
                 guard let self,let backend,self.backgrounds[account.id] === backend else { return }
-                if backend.startup.count < 65_536 { backend.startup.append(bytes.prefix(65_536 - backend.startup.count)) }
+                self.receive(bytes, backend: backend)
             }
         }
         backgrounds[account.id] = backend
@@ -83,11 +89,56 @@ final class AntigravityDesktopQuotaService {
     }
     func stopAll() async { for id in Array(backgrounds.keys) { await stop(id) } }
 
-    /// The vendor owns the OAuth state, callback listener, browser launch and
-    /// credential persistence. AI Switcher never exchanges or copies tokens.
+    private func receive(_ bytes: Data, backend: Background) {
+        backend.browserLine.append(bytes)
+        while let end = backend.browserLine.firstIndex(of: 10) {
+            let line = Data(backend.browserLine[..<end])
+            backend.browserLine.removeSubrange(...end)
+            let text = String(decoding: line, as: UTF8.self)
+            if text.hasPrefix(BrowserSignIn.antigravityURLPrefix) {
+                do {
+                    if let url = try BrowserSignIn.antigravityURL(from: text) { backend.browserRequest?(.success(url)) }
+                } catch { backend.browserRequest?(.failure(error)) }
+            } else if backend.startup.count < 65_536 {
+                backend.startup.append(line.prefix(65_536 - backend.startup.count))
+                backend.startup.append(10)
+            }
+        }
+        if backend.browserLine.count > 65_536 {
+            backend.browserLine.removeAll()
+            backend.browserRequest?(.failure(ProviderQuotaError.invalidResponse))
+        }
+    }
+
+    /// The vendor owns OAuth state, its callback listener and credentials.
+    /// The manager opens the authorization URL in the ordinary Chrome session.
     func signInWithBrowser(_ account: Account) async throws {
         let endpoint = try await readyEndpoint(account)
-        _ = try await request(account, endpoint: endpoint, method: "Login")
+        guard let backend = backgrounds[account.id] else { throw AntigravityProfileError.sessionNeedsReopen }
+        let browser = BrowserService(repository: repository)
+        guard browser.applicationURL(for: .chrome) != nil else {
+            throw ProfileError.browserUnavailable(BrowserKind.chrome.name)
+        }
+        var browserError: Error?
+        var opening: Task<Void, Never>?
+        let login = Task { try await request(account, endpoint: endpoint, method: "Login") }
+        backend.browserRequest = { result in
+            guard opening == nil, browserError == nil else { return }
+            opening = Task { @MainActor in
+                do { try await self.openSignIn(result.get()) }
+                catch { browserError = error; login.cancel() }
+            }
+        }
+        defer { backend.browserRequest = nil; opening?.cancel(); login.cancel() }
+        do {
+            _ = try await withTaskCancellationHandler(operation: { try await login.value },
+                                                      onCancel: { login.cancel() })
+            await opening?.value
+            if let browserError { throw browserError }
+        } catch {
+            if let browserError { throw browserError }
+            throw error
+        }
     }
 
     private struct Endpoint: Equatable {

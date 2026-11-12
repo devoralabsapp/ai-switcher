@@ -60,7 +60,7 @@ public struct SharedAntigravityWorkspace {
     }
     private func verifiedLink(_ url: URL, target: URL) throws -> Bool {
         guard try kind(url) == .typeSymbolicLink else { return false }
-        guard url.resolvingSymlinksInPath().standardizedFileURL == target.standardizedFileURL else {
+        guard url.resolvingSymlinksInPath().standardizedFileURL.path == target.standardizedFileURL.path else {
             throw AntigravityProfileError.unsafeStorage
         }
         return true
@@ -68,7 +68,7 @@ public struct SharedAntigravityWorkspace {
 
     public func isPrepared(_ account: Account) -> Bool { fm.fileExists(atPath: marker(account).path) }
 
-    public func prepare(_ account: Account) throws {
+    public func prepare(_ account: Account, bindIfNeeded: Bool = true) throws {
         guard account.usesIsolatedAntigravity else { return }
         try repository.validateAntigravityOwnership(for: account.id)
         if !account.sharesAntigravityProjects {
@@ -78,9 +78,15 @@ public struct SharedAntigravityWorkspace {
         let home = repository.antigravityHomeURL(for: account.id).standardizedFileURL.path
         guard !sourceHome.path.hasPrefix(home + "/"), !home.hasPrefix(sourceHome.path + "/.gemini/"),
               sourceHome.path != home else { throw AntigravityProfileError.unsafeStorage }
-        for path in paths { try directory(source(path)) }
-
         var binding = try readBinding(account)
+        if binding == nil && !bindIfNeeded {
+            for path in ["config"] + paths {
+                let local = destination(account, path)
+                if try kind(local) != nil { try directory(local) }
+            }
+            return
+        }
+        for path in paths { try directory(source(path)) }
         if binding == nil {
             for path in paths {
                 let local = destination(account, path)

@@ -109,25 +109,36 @@ internal static partial class PreviewRunner {
             Phase("Browser localhost callback");
             var browser=await engine.Platform.FindExecutableAsync("edge")??throw new InvalidOperationException("Edge is required for the browser ownership fixture");var unrelatedData=Path.Combine(root,"unrelated-browser");Directory.CreateDirectory(unrelatedData);
             unrelatedBrowser=Process.Start(ChildEnvironment.StartInfo(browser,new[]{"--user-data-dir="+unrelatedData,"--no-first-run","--disable-background-mode","about:blank"},ChildEnvironment.Create(NativePlatform.EnvironmentValues()),Environment.GetFolderPath(Environment.SpecialFolder.System)))!;
-            await engine.Antigravity.ConnectAsync(a,ct);using(var loginCancellation=CancellationTokenSource.CreateLinkedTokenSource(ct)){
-                var login=engine.Antigravity.SignInAsync(a,loginCancellation.Token);var observed=false;
-                for(var i=0;i<60&&!observed;i++){
-                    await Task.Delay(250,ct);await engine.Platform.RefreshProcessesAsync();
-                    foreach(var arg in engine.Platform.Processes.SelectMany(p=>p.Arguments)){
-                        foreach(System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(arg,@"https://accounts\.google\.com/[^\s""<>]+")){
-                            if(!Uri.TryCreate(match.Value,UriKind.Absolute,out var uri))continue;
-                            var redirect=uri.Query.TrimStart('?').Split('&').FirstOrDefault(x=>x.StartsWith("redirect_uri=",StringComparison.Ordinal));
-                            if(redirect!=null&&Uri.TryCreate(Uri.UnescapeDataString(redirect[13..]),UriKind.Absolute,out var callback)&&callback.Scheme=="http"&&callback.Host is "localhost" or "127.0.0.1")observed=true;
-                        }
-                    }
-                }
-                loginCancellation.Cancel();try{await login;}catch(OperationCanceledException){}
-                Require(observed,"Official Windows browser login did not expose a Google destination with localhost callback");
+            Uri? browserSignIn = null;
+            engine.Platform.FixtureSignInOpened = url => browserSignIn = url;
+            await engine.Antigravity.ConnectAsync(a, ct);
+            using (var loginCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                var login = engine.Antigravity.SignInAsync(a, loginCancellation.Token);
+                for (var i = 0; i < 60 && browserSignIn == null; i++)
+                    await Task.Delay(250, ct);
+                loginCancellation.Cancel();
+                try { await login; } catch (OperationCanceledException) { }
+                Require(browserSignIn != null && BrowserSignIn.AntigravityURL(BrowserSignIn.AntigravityURLPrefix + browserSignIn.AbsoluteUri) != null,
+                    "Official Google OAuth was not handed to personal Chrome");
             }
-            IReadOnlyList<OwnedProcess> oauth=[];for(var i=0;i<40;i++){await engine.ObserveAsync(false);oauth=await engine.Platform.AntigravityOAuthBrowsersAsync(a);if(oauth.Count>0)break;await Task.Delay(250,ct);}
-            Require(oauth.Count>0,"Private browser storage was not attributed to the selected profile");Require(oauth.All(p=>p.Id!=unrelatedBrowser.Id),"Unrelated browser was adopted as a private OAuth window");
-            await engine.Antigravity.StopAsync(a);await engine.ObserveAsync(false);Require(engine.Running(a),"Private OAuth browser must retain a closeable session after cancellation");
-            await engine.CloseAsync(a);Require(!engine.Running(a),"Cancelled OAuth left private browser or native processes running");Require(!unrelatedBrowser.HasExited,"Closing Antigravity stopped an unrelated browser");CheckCanary();
+            engine.Platform.FixtureSignInOpened = null;
+            await engine.ObserveAsync(false);
+            var chrome = await engine.Platform.FindExecutableAsync("chrome");
+            var personalChrome = engine.Platform.Processes.Where(p => chrome != null
+                && NativePlatform.SamePath(p.Executable, chrome)
+                && !p.Arguments.Any(arg => arg.StartsWith("--type=", StringComparison.OrdinalIgnoreCase))
+                && !p.Arguments.Any(arg => arg.StartsWith("--user-data-dir=", StringComparison.OrdinalIgnoreCase))).ToArray();
+            Require(personalChrome.Length > 0, "Sign-in did not use ordinary Chrome storage");
+            Require((await engine.Platform.AntigravityOAuthBrowsersAsync(a)).Count == 0, "Personal Chrome was adopted by the private session");
+            await engine.Antigravity.StopAsync(a);
+            await engine.CloseAsync(a);
+            Require(!engine.Running(a), "Cancelled OAuth left the private backend running");
+            await engine.Platform.RefreshProcessesAsync();
+            Require(personalChrome.Any(original => engine.Platform.Processes.Any(p => p.Id == original.Id && p.Created == original.Created)),
+                "Closing the private session stopped personal Chrome");
+            Require(!unrelatedBrowser.HasExited, "Closing Antigravity stopped an unrelated browser");
+            CheckCanary();
             // Exercise the real CLI's /usage, not a fake parser or an early metadata check.
             Phase("Official CLI usage");Require(GetConsoleCP()==0,"GUI manager retained a controlling console");
             // glog's default cli.log is a link. Ask the official CLI for an
@@ -170,7 +181,7 @@ internal static partial class PreviewRunner {
                 if(primary==null)throw cleanup;
             }
         }
-            File.WriteAllText(Path.Combine(output,"antigravity-native-result.txt"),"PASS: official Windows Antigravity Desktop and CLI; private vendor file storage selected; two independent fresh native backgrounds and Desktop windows stay signed out with a global synthetic Credential Manager canary present; CLI /usage uses private storage without model input; separate native HTTP/CSRF endpoints; all-project junction sharing imports existing private conversation IDs, indexes them under account B and restores originals when disabled; close/reopen and manager restart preserve ownership and data; account directories can be removed after cancelled browser OAuth; closing A preserves B; global canary unchanged; explicit Google browser Login uses a localhost callback and is cancelled before authentication. Live Google sign-in and live subscription quotas are not exercised.\n");
+            File.WriteAllText(Path.Combine(output,"antigravity-native-result.txt"),"PASS: official Windows Antigravity Desktop and CLI; private vendor file storage selected; two independent fresh native backgrounds and Desktop windows stay signed out with a global synthetic Credential Manager canary present; CLI /usage uses private storage without model input; separate native HTTP/CSRF endpoints; all-project junction sharing imports existing private conversation IDs, indexes them under account B and restores originals when disabled; close/reopen and manager restart preserve ownership and data; Google sign-in opens personal Chrome using manager environment and closing a profile preserves it; account directories can be removed after cancelled browser OAuth; closing A preserves B; global canary unchanged; explicit Google browser Login uses a localhost callback and is cancelled before authentication. Live Google sign-in and live subscription quotas are not exercised.\n");
         async Task ExpectSignedOut(Account account,AppEngine? manager=null){try{await (manager??engine).Antigravity.ReadAsync(account,ct);}catch(AppError error)when(error.Key==ProviderQuota.SignedOut){return;}throw new InvalidOperationException("Fresh private profile was not signed out");}
         void CheckCanary(){foreach(var target in targets)CheckCredential(target);}
         void CheckCredential(string target){Require(CredRead(target,1,0,out var pointer),"Fixture credential disappeared");try{var value=Marshal.PtrToStructure<FixtureCredential>(pointer);var bytes=new byte[value.BlobSize];Marshal.Copy(value.Blob,bytes,0,bytes.Length);Require(bytes.SequenceEqual(synthetic),"Private session changed shared Credential Manager storage");}finally{CredFree(pointer);}}

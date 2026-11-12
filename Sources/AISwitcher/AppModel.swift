@@ -646,7 +646,7 @@ final class AppModel: ObservableObject {
             defer { connectingID = nil; finishQuotaOperation(account.id) }
             do {
                 let connection = try await quotaService.connect(account.id) { [self] url in
-                    try await browserService.open(account, forceNewWindow: true, url: url)
+                    try await browserService.openSignIn(url)
                 }
                 try Task.checkCancellation()
                 pendingConnections[account.id] = connection
