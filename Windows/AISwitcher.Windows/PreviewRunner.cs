@@ -26,7 +26,7 @@ internal static partial class PreviewRunner {
             Require(Find(window,"addAccount") is Button,"Add account button missing");Require(Find(window,"quotaOnlyMode") is CheckBox,"Quota-only control missing");Require(Find(window,"agent-filter-claude") is Button,"Agent filter missing");Require(Find(window,"forceStopAll") is Button,"Force-stop control missing");CheckScrollbars(window);
             engine.SetQuotaOnly(true);Require(engine.Preferences.WorkspaceLayout==WorkspaceLayout.QuotaTable,"Quota-only must select table");engine.SetQuotaOnly(false);Require(engine.Preferences.WorkspaceLayout==WorkspaceLayout.Cards,"Disabling quota-only must restore cards");
             if(theme.Seasonal){await CaptureDialog(window,window.Settings,Path.Combine(output,$"settings-{theme.Id}-{language}.png"));}
-            if(theme.Id=="terminalBlack"){Require(theme.Canvas=="#000000","Terminal Black canvas mismatch");engine.SetAgent(Agent.Claude);await CaptureDialog(window,()=>window.EditAccount(),Path.Combine(output,$"claude-editor-{language}.png"));await CaptureDialog(window,window.Settings,Path.Combine(output,$"settings-{language}.png"));}
+            if(theme.Id=="terminalBlack"){Require(theme.Canvas=="#000000","Terminal Black canvas mismatch");engine.SetAgent(Agent.Claude);await CaptureDialog(window,()=>window.EditAccount(),Path.Combine(output,$"claude-editor-{language}.png"),"Claude");await CaptureDialog(window,window.Settings,Path.Combine(output,$"settings-{language}.png"));}
             if(theme.Id=="terminalBlack"){engine.SetAgent(Agent.Antigravity);await CaptureDialog(window,()=>window.EditAccount(),Path.Combine(output,$"antigravity-editor-{language}.png"),"Antigravity");}
             window.Exiting=true;window.Close();engine.Shutdown();
         }
@@ -47,9 +47,26 @@ internal static partial class PreviewRunner {
         var mismatch=engine.Snapshot.Accounts.First(x=>x.Id==claude.Id) with{EmailHint="other@example.test"};Require(engine.SaveAccount(mismatch),"Cannot set identity fixture");await engine.ConnectAsync(mismatch,false);Require(!engine.Provider.Connected.Contains(claude.Id),"Mismatched Claude identity was accepted");Require(engine.Errors.ContainsKey(claude.Id),"Mismatched identity must be visible");Require(engine.Snapshot.Accounts.First(x=>x.Id==claude.Id).Connection?.Quota!=null,"Failed read must preserve old quota");
         await engine.ShutdownAsync();
     }
-    static async Task CaptureDialog(MainWindow owner,Action open,string path,string expectedAgent="Claude"){
+    static async Task CaptureDialog(MainWindow owner,Action open,string path,string? expectedAgent=null){
         CompactCardLayout();
-        _=owner.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(()=>{var dialog=Application.Current.Windows.Cast<Window>().FirstOrDefault(x=>x!=owner&&x.Owner==owner);if(dialog!=null){dialog.UpdateLayout();if(Find(dialog,"accountAgent") is ComboBox agent)Require(agent.SelectedItem is string text&&text==expectedAgent,"Agent selector must display the selected agent name");if(expectedAgent is "Claude" or "ChatGPT")Require(Find(dialog,"accountSignInMethod") is ComboBox {Visibility:Visibility.Visible,Items.Count:3},"Desktop sign-in method choices are missing");if(expectedAgent=="Antigravity")Require(Find(dialog,"antigravitySignInMethod") is ComboBox {Visibility:Visibility.Visible,Items.Count:2},"Antigravity browser/CLI choice is missing");Save(dialog,path);dialog.Close();}}));open();await Task.CompletedTask;
+        _=owner.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(()=>{
+            var dialog=Application.Current.Windows.Cast<Window>().FirstOrDefault(x=>x!=owner&&x.Owner==owner);
+            if(dialog==null)return;
+            dialog.UpdateLayout();
+            if(expectedAgent!=null)
+                Require(Find(dialog,"accountAgent") is ComboBox {SelectedItem: string name} && name==expectedAgent,
+                    "Agent selector must display the selected agent name");
+            if(expectedAgent is "Claude" or "ChatGPT")
+                Require(Find(dialog,"accountSignInMethod") is ComboBox {Visibility:Visibility.Visible,Items.Count:3},
+                    "Desktop sign-in method choices are missing");
+            if(expectedAgent=="Antigravity")
+                Require(Find(dialog,"antigravitySignInMethod") is ComboBox {Visibility:Visibility.Visible,Items.Count:2},
+                    "Antigravity browser/CLI choice is missing");
+            Save(dialog,path);
+            dialog.Close();
+        }));
+        open();
+        await Task.CompletedTask;
     }
     static void CompactCardLayout() {
         foreach(var count in new[]{1,2}){
