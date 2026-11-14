@@ -22,7 +22,7 @@ internal sealed partial class MainWindow {
             stack.Children.Add(Space(18));
             if(a.Agent.ProviderQuota()){
                 var connect=Button(L["Connect account session"],async()=>{await engine.ConnectAsync(a);Build();},true,T);connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);
-                if(a.Agent!=Agent.Antigravity){stack.Children.Add(Button(L["Sign in with official CLI…"],()=>{try{engine.Provider.SignIn(a);}catch(Exception error){Notice(L["AI Switcher"],engine.Message(error));}}));}
+                if(a.Agent!=Agent.Antigravity&&!a.UsesClaudeDesktopQuota){stack.Children.Add(Button(L["Sign in with official CLI…"],()=>{try{engine.Provider.SignIn(a);}catch(Exception error){Notice(L["AI Switcher"],engine.Message(error));}}));}
                 if(a.UsesProviderCli)AddProviderInstallation(stack,a,Build);
                 if(a.Agent!=Agent.Antigravity&&engine.Provider.Connected.Contains(a.Id))stack.Children.Add(Button(L["Disconnect"],async()=>{await engine.CloseAsync(a);Build();}));
                 if(engine.WaitingForSignIn.Contains(a.Id))stack.Children.Add(Button(L["Cancel"],()=>{engine.CancelConnection(a);Build();}));
@@ -41,7 +41,7 @@ internal sealed partial class MainWindow {
         var name=new TextBox{Text=original?.Name??"",MaxLength=48};var note=new TextBox{Text=original?.EmailHint??"",MaxLength=160};
         var agentValues=Enum.GetValues<Agent>();var agent=new ComboBox{ItemsSource=agentValues.Select(x=>x.Name()).ToArray(),SelectedIndex=Array.IndexOf(agentValues,original?.Agent??engine.Preferences.AgentFilter??Agent.Chatgpt),IsEnabled=original==null};System.Windows.Automation.AutomationProperties.SetAutomationId(agent,"accountAgent");
         var browser=new ComboBox{ItemsSource=Enum.GetValues<Browser>(),SelectedItem=original?.Browser??Browser.Chrome,IsEnabled=original==null};
-        var mode=new ComboBox{ItemsSource=new[]{L["Desktop"],L["Browser"]},SelectedIndex=(int)(original?.EffectiveMode??LaunchMode.Desktop)};
+        var desktopSignIn=new ComboBox{ItemsSource=new[]{L["Sign in with browser"],L["Sign in with Desktop app"],L["Sign in with CLI"]},SelectedIndex=(int)(original?.EffectiveSignInMethod??AccountSignInMethod.Browser)};System.Windows.Automation.AutomationProperties.SetAutomationId(desktopSignIn,"accountSignInMethod");
         var color=new ComboBox{ItemsSource=ProfileColors.Names.Select(x=>L[char.ToUpperInvariant(x[0])+x[1..]]).ToArray(),SelectedIndex=original==null?engine.Snapshot.Accounts.Count%ProfileColors.Names.Length:Array.IndexOf(ProfileColors.Names,original.Color)};
         var defaultAction=new ComboBox{ItemsSource=new[]{L["Open ChatGPT"],L["Connect in background"]},SelectedIndex=original?.DefaultAction==DefaultAction.ConnectSession||original==null&&engine.Preferences.QuotaOnlyMode?1:0};
         var startup=new CheckBox{Content=L["Connect in background when AI Switcher starts"],IsChecked=original?.ConnectOnStartup??false};
@@ -56,7 +56,7 @@ internal sealed partial class MainWindow {
         var openAfter=new CheckBox{Content=L["Open after adding"],IsChecked=!engine.Preferences.QuotaOnlyMode};
         var explanation=Text("",11,false,T.Secondary);var fields=new StackPanel();
         StackPanel Field(string label,UIElement content){var group=Stack(Text(L[label],12,true),Space(6),content,Space(16));fields.Children.Add(group);return group;}
-        Field("AI agent",agent);Field("Account name",name);Field("Email or note",note);Field("Profile color",color);var modeField=Field("Mode",mode);fields.Children.Add(explanation);fields.Children.Add(Space(14));var browserField=Field("Browser",browser);
+        Field("AI agent",agent);Field("Account name",name);Field("Email or note",note);Field("Profile color",color);var modeField=Field("Sign-in Method",desktopSignIn);fields.Children.Add(explanation);fields.Children.Add(Space(14));var browserField=Field("Browser",browser);
         var desktopOptions=Stack(Text(L["Default account action"],12,true),Space(6),defaultAction,startup,shared,Text(L["Sharing uses the workspace folder selected in Settings. Authentication stays private."],11,false,T.Secondary),Space(16));fields.Children.Add(desktopOptions);
         var signInField=Field("Sign-in method",signInMethod);
         var browserSignInHint = Text(L["After Google confirms sign-in, return to AI Switcher and choose Open Antigravity."], 11, false, T.Secondary);
@@ -64,8 +64,9 @@ internal sealed partial class MainWindow {
         fields.Children.Add(antigravityProjectOptions);
         if(original==null)fields.Children.Add(openAfter);
         var support=Text(L["Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."],11,false,T.Secondary);support.Margin=new Thickness(0,16,0,20);fields.Children.Add(support);
-        void UpdateFields(){var selected=agentValues[agent.SelectedIndex];var selectedMode=(LaunchMode)mode.SelectedIndex;
-            mode.IsEnabled=(selected is Agent.Chatgpt or Agent.Claude)&&(original==null||!engine.Running(original)&&!engine.Busy.Contains(original.Id));
+        void UpdateFields(){var selected=agentValues[agent.SelectedIndex];var selectedMode=LaunchMode.Desktop;
+            support.Text=L[selected==Agent.Claude?"Claude quota reads only this profile's Desktop session cookie to request account and usage data from claude.ai. It does not read conversations or copy cookies into account metadata or logs.":"Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."];
+            desktopSignIn.IsEnabled=(selected is Agent.Chatgpt or Agent.Claude)&&(original==null||!engine.Running(original)&&!engine.Busy.Contains(original.Id));
             var effective=selected is Agent.Chatgpt or Agent.Claude?selectedMode:selected.IsShared()?LaunchMode.Desktop:LaunchMode.Browser;
             modeField.Visibility=selected is Agent.Claude or Agent.Chatgpt?Visibility.Visible:Visibility.Collapsed;browserField.Visibility=effective==LaunchMode.Browser?Visibility.Visible:Visibility.Collapsed;desktopOptions.Visibility=selected==Agent.Chatgpt&&effective==LaunchMode.Desktop?Visibility.Visible:Visibility.Collapsed;
             signInField.Visibility=selected==Agent.Antigravity&&original==null?Visibility.Visible:Visibility.Collapsed;
@@ -75,17 +76,35 @@ internal sealed partial class MainWindow {
                 ? Visibility.Visible : Visibility.Collapsed;
             projectEditor.IsEnabled = original == null || (!engine.Running(original) && !engine.Busy.Contains(original.Id));
             projectLocked.Visibility = projectEditor.IsEnabled ? Visibility.Collapsed : Visibility.Visible;
-            openAfter.Content=L[selected==Agent.Antigravity?"Sign in after adding":"Open after adding"];
-            shared.IsEnabled=original==null||!engine.Running(original);explanation.Text=selected==Agent.Antigravity&&original==null?L["Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data."]:Support(original??new Account{Agent=selected,LaunchMode=effective});
+            openAfter.Content=L[selected is Agent.Antigravity or Agent.Chatgpt or Agent.Claude?"Sign in after adding":"Open after adding"];
+            shared.IsEnabled=original==null||!engine.Running(original);
+            if(selected is Agent.Chatgpt or Agent.Claude) {
+                var method=(AccountSignInMethod)desktopSignIn.SelectedIndex;
+                var detail=selected==Agent.Claude&&method==AccountSignInMethod.Cli
+                    ? "Claude CLI signs in to Claude Code only. Sign in to Claude Desktop once too; quota is read from Desktop, including Free when Claude provides it."
+                    : selected==Agent.Claude&&method==AccountSignInMethod.Browser
+                    ? "In this account's Claude Desktop window, choose browser sign-in and finish authorization in your browser. The saved session belongs to Desktop."
+                    : selected==Agent.Chatgpt&&method==AccountSignInMethod.Browser
+                    ? "Authorize in your existing Chrome, then return to this account's ChatGPT Desktop session."
+                    : "Sign in directly in this account's Desktop window.";
+                explanation.Text=L["All sign-in methods open the Desktop app. Each account keeps its own saved session."]+"\n"+L[detail];
+                if(original!=null)explanation.Text+="\n"+L["To sign in again, close the session, then choose Sign in… in the account menu."];
+                if(original?.EffectiveMode==LaunchMode.Browser)explanation.Text+="\n"+L["Existing browser sign-ins stay saved. Sign in once for the new Desktop session."];
+                if(!desktopSignIn.IsEnabled)explanation.Text+="\n"+L["Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."];
+            } else explanation.Text=selected==Agent.Antigravity&&original==null
+                ? L["Choose browser sign-in for Google OAuth, or use the official Antigravity CLI. Each account keeps separate sign-in data."]
+                : Support(original??new Account{Agent=selected,LaunchMode=effective});
         }
-        agent.SelectionChanged+=(_,_)=>{UpdateFields();if(agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;};mode.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();if(original==null&&agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;
+        agent.SelectionChanged+=(_,_)=>{UpdateFields();if(agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;};desktopSignIn.SelectionChanged+=(_,_)=>UpdateFields();UpdateFields();if(original==null&&agentValues[agent.SelectedIndex]==Agent.Antigravity)openAfter.IsChecked=true;
         signInMethod.SelectionChanged += (_, _) => UpdateFields();
         var save=Button(L[original==null?"Add account":"Save changes"],()=>{
             var selected=agentValues[agent.SelectedIndex];
-            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=(LaunchMode)mode.SelectedIndex,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true,AntigravityUsesPrivateHome=original?.AntigravityUsesPrivateHome??(original==null&&selected==Agent.Antigravity?true:null),AntigravitySignInMethod=original?.AntigravitySignInMethod??(original==null&&selected==Agent.Antigravity?(AntigravitySignInMethod)signInMethod.SelectedIndex:null)};
+            var edited=(original??new Account{Agent=selected,Browser=(Browser)browser.SelectedItem})with{Name=name.Text.Trim(),EmailHint=note.Text.Trim(),Color=ProfileColors.Names[color.SelectedIndex],LaunchMode=LaunchMode.Desktop,DesktopSignInPending=selected is Agent.Chatgpt or Agent.Claude?(original==null||original.EffectiveMode==LaunchMode.Browser?true:original.DesktopSignInPending):null,SignInMethod=selected is Agent.Chatgpt or Agent.Claude?(AccountSignInMethod)desktopSignIn.SelectedIndex:null,DefaultAction=defaultAction.SelectedIndex==1?DefaultAction.ConnectSession:DefaultAction.OpenDesktop,ConnectOnStartup=selected==Agent.Chatgpt&&startup.IsChecked==true,SharesLocalWorkspace=selected==Agent.Chatgpt&&shared.IsChecked==true,AntigravityUsesPrivateHome=original?.AntigravityUsesPrivateHome??(original==null&&selected==Agent.Antigravity?true:null),AntigravitySignInMethod=original?.AntigravitySignInMethod??(original==null&&selected==Agent.Antigravity?(AntigravitySignInMethod)signInMethod.SelectedIndex:null)};
+            if(original is { SupportsDesktopSignIn:true, EffectiveMode:LaunchMode.Browser } && !desktopSignIn.IsEnabled)
+                edited=edited with { LaunchMode=original.LaunchMode, SignInMethod=original.SignInMethod, DesktopSignInPending=original.DesktopSignInPending, SharesLocalWorkspace=original.SharesLocalWorkspace };
             if (edited.UsesPrivateAntigravity)
                 edited = edited with { AntigravitySharesLocalProjects = shareAntigravityProject.IsChecked == true, AntigravityLocalProjectFolder = null };
-            if(engine.SaveAccount(edited)){dialog.Close();if(original==null&&openAfter.IsChecked==true){if(edited.Agent==Agent.Antigravity)_=engine.ConnectAsync(edited);else _=engine.OpenAsync(edited);}}
+            if(engine.SaveAccount(edited)){dialog.Close();if(original==null&&openAfter.IsChecked==true){if(edited.Agent==Agent.Antigravity)_=engine.ConnectAsync(edited);else if(edited.SupportsDesktopSignIn)_=engine.SignInAccountAsync(edited);else _=engine.OpenAsync(edited);}}
         },true,T);
         save.IsEnabled = !string.IsNullOrWhiteSpace(name.Text) && !engine.ReadOnly;
         name.TextChanged += (_, _) => save.IsEnabled = !string.IsNullOrWhiteSpace(name.Text) && !engine.ReadOnly;

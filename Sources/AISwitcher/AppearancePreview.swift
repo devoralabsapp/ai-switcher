@@ -109,6 +109,49 @@ enum AppearancePreview {
         print("Rendered appearance previews with fictional profiles: \(output.path)")
     }
 
+    static func renderSignInMethods(root: URL, output: URL) throws {
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        let suite = "ai-switcher.signin-preview." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for agent in [AIAgent.chatgpt, .claude] {
+            for method in AccountSignInMethod.allCases {
+                let account = Account(name: "Demo " + agent.name, agent: agent).withDesktopSignIn(method)
+                let data = root.appendingPathComponent(agent.rawValue + "-" + method.rawValue)
+                try ProfileRepository(root: data).save(.init(accounts: [account]))
+                let preferences = AppPreferences(language: L10n.language, theme: .light)
+                let model = AppModel(root: data, preferences: preferences, monitoring: false,
+                    preferencesStore: AppPreferencesStore(defaults: defaults))
+                try renderView(AccountEditorView(model: model, editor: AccountEditor(account: account)),
+                    size: NSSize(width: 520, height: 760),
+                    to: output.appendingPathComponent("signin-" + agent.rawValue + "-" + method.rawValue + ".png"))
+            }
+        }
+    }
+
+    static func renderCompactCards(root: URL, output: URL) throws {
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        let suite = "ai-switcher.compact-preview." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for theme in [AppTheme.light, .terminalBlack, .playfulRetro] {
+            for count in [1, 2, 5] {
+                let data = root.appendingPathComponent(theme.rawValue + "-" + String(count))
+                var accounts = [Account(name: "Demo ChatGPT", color: .mint, launchMode: .desktop),
+                    Account(name: "Demo Claude", color: .violet, launchMode: .desktop, agent: .claude),
+                    Account(name: "Demo Gemini", color: .blue, agent: .gemini),
+                    Account(name: "Demo Antigravity", color: .peach, agent: .antigravity),
+                    Account(name: "Demo Work", color: .gold, launchMode: .desktop)]
+                accounts[1].providerQuotaConnection = CodexConnection(identity: .init(email: "demo@example.test", planType: "free"), identityFetchedAt: Date(), providerSessionKind: "claudeDesktop")
+                try ProfileRepository(root: data).save(.init(accounts: Array(accounts.prefix(count))))
+                let model = AppModel(root: data, preferences: .init(language: L10n.language, theme: theme), monitoring: false,
+                    preferencesStore: AppPreferencesStore(defaults: defaults))
+                try renderView(Dashboard(model: model), size: NSSize(width: 1440, height: 1040),
+                    to: output.appendingPathComponent("cards-" + theme.rawValue + "-" + String(count) + ".png"))
+            }
+        }
+    }
+
     private static func renderView<Content: View>(_ content: Content, size: NSSize, to destination: URL) throws {
         let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)

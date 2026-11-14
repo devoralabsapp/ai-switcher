@@ -29,9 +29,17 @@ Với agent trình duyệt, cài Chrome, Edge hoặc Brave rồi đăng nhập t
 
 ## Claude Desktop riêng cho từng tài khoản
 
-Cài Claude chính thức vào Applications. Khi thêm hồ sơ Claude, chọn **Claude Desktop** rồi đăng nhập trực tiếp trong cửa sổ riêng của hồ sơ. Mở lại hồ sơ sẽ đưa đúng cửa sổ lên trước; **Đóng phiên tài khoản…** chỉ đóng hồ sơ đó và giữ dữ liệu.
+Cài Claude chính thức vào Applications. ChatGPT và Claude đều có mục **Phương thức đăng nhập (Sign-in Method)** gồm **Trình duyệt**, **Desktop app**, **CLI**. Sau đó, **Open** luôn dùng Desktop với phiên riêng của từng tài khoản.
 
-Với hồ sơ Claude đã tạo bằng trình duyệt: đóng phiên, chọn **Sửa hồ sơ → Claude Desktop**, rồi đăng nhập một lần trong cửa sổ Desktop mới. Đăng nhập trình duyệt cũ vẫn được giữ khi đổi lại Browser. Mỗi hồ sơ Desktop dùng thư mục dữ liệu riêng, không sao chép đăng nhập Claude mặc định. Chưa hỗ trợ quota, kết nối nền hoặc chia sẻ lịch sử Work cho Claude.
+- ChatGPT / Trình duyệt: xác nhận trên Chrome cá nhân, lưu đăng nhập trong backend Desktop riêng rồi mở Desktop. CLI chạy `codex login` trong Terminal với cùng thư mục đăng nhập riêng đó. Desktop app cho phép đăng nhập trực tiếp trong cửa sổ riêng.
+- Claude / Trình duyệt: mở cửa sổ Claude Desktop của hồ sơ, chọn đăng nhập qua trình duyệt rồi xác nhận trên Chrome cá nhân. Claude điều khiển luồng này bằng trình duyệt mặc định của hệ thống, nên cần đặt Chrome làm mặc định. AI Switcher kiểm tra và hướng dẫn nếu chưa đúng, không tự đổi trình duyệt mặc định.
+- Claude / CLI: chạy `claude auth login` với cấu hình Claude Code riêng, sau đó mở Desktop. **CLI không đăng nhập thay Claude Desktop**; cần đăng nhập Desktop một lần nữa. Claude Free có thể không dùng được Claude Code hoặc quota CLI. Giao diện ghi rõ giới hạn này.
+
+Để đăng nhập lại bằng phương thức đã chọn, đóng phiên rồi dùng **⋯ → Đăng nhập…**. Nếu bỏ chọn đăng nhập ngay sau khi thêm, lần Open đầu tiên vẫn dùng phương thức đã lưu. Hồ sơ Browser cũ sẽ chuyển sang Desktop khi sửa hoặc mở sau khi đóng phiên cũ; dữ liệu trình duyệt và cache quota cũ được giữ lại. Desktop cần đăng nhập riêng một lần. **Đóng phiên tài khoản…** chỉ đóng hồ sơ đó và giữ dữ liệu.
+
+Quota Claude hiện lấy từ đúng phiên Desktop của hồ sơ trên cả macOS và Windows, không cần đăng nhập Web/CLI thêm. Gói **Free cũng được gọi API usage**: khi Claude trả số liệu, app hiển thị phần trăm và mốc reset thật. Nếu Claude chưa cung cấp quota dạng số cho tài khoản, app vẫn hiện email/gói đã xác minh và ghi rõ chưa có số liệu, không tự suy ra 100%.
+
+Reader chỉ mở Cookie DB của hồ sơ đã xác minh quyền sở hữu, dùng `sessionKey` tạm thời trong bộ nhớ để gọi HTTPS account/organizations/usage của claude.ai. macOS dùng Keychain **Claude Safe Storage** và có thể hỏi quyền ở lần tự kết nối đầu tiên; Windows dùng khóa DPAPI của chính hồ sơ. Không đọc hội thoại, không gửi tin nhắn, không sao chép cookie vào thông tin tài khoản hay log, không lấy phiên Claude mặc định hoặc cookie Chrome. Các lần làm mới sau dùng lại quyền đã cấp trong phiên AI Switcher. Mã hóa chưa được hỗ trợ sẽ báo lỗi và giữ nguyên đăng nhập. Đóng phiên ngừng tự động kiểm tra quota cho hồ sơ đã đóng.
 
 Đã kiểm tra Claude 3.6556.2 với hai tiến trình/cửa sổ mới, dùng lại đúng cửa sổ, đóng/mở riêng và giữ dữ liệu từng hồ sơ. Đăng nhập hai tài khoản thật, OAuth/deep link, Claude Code và Cowork vẫn cần kiểm tra thủ công. Chế độ này thử nghiệm và có thể bị ảnh hưởng khi Claude cập nhật.
 

@@ -2,11 +2,21 @@ import SwiftUI
 import AISwitcherCore
 
 struct QuotaSummaryView: View {
+    @Environment(\.appTheme) private var theme
     @ObservedObject var model: AppModel
     let account: Account
     var body: some View {
-        if account.effectiveAgent.usesProviderQuota { ProviderQuotaSummaryView(model: model, account: account) }
-        else { CodexQuotaSummaryView(model: model, account: account) }
+        VStack(alignment: .leading, spacing: 8) {
+            if account.effectiveAgent.usesProviderQuota { ProviderQuotaSummaryView(model: model, account: account) }
+            else { CodexQuotaSummaryView(model: model, account: account) }
+            if model.desktopSignInIDs.contains(account.id) {
+                HStack {
+                    Text(L10n.text("Waiting for sign-in…")).font(theme.font(size: 10))
+                    Spacer()
+                    Button(L10n.text("Cancel")) { model.cancelDesktopSignIn(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 10))
+                }
+            }
+        }
     }
 }
 
@@ -37,7 +47,7 @@ struct ProviderQuotaSummaryView: View {
                     }
                 } else {
                     HStack {
-                        Text(model.providerSignInIDs.contains(account.id) ? L10n.text("Waiting for sign-in…") : L10n.text("Connect to view quota."))
+                        Text(model.providerSignInIDs.contains(account.id) ? L10n.text("Waiting for sign-in…") : account.usesClaudeDesktop && busy ? L10n.text("Reading Desktop quota…") : L10n.text("Connect to view quota."))
                             .font(theme.font(size: 10)).foregroundColor(palette.secondary)
                         Spacer()
                         if !busy && !model.installingProviderAgents.contains(account.effectiveAgent) { Button(L10n.text("Connect")) { model.connectSession(account) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 10, weight: .semibold)).foregroundColor(palette.accent) }
@@ -53,7 +63,7 @@ struct ProviderQuotaSummaryView: View {
                 if model.installingProviderAgents.contains(account.effectiveAgent) {
                     HStack { ProgressView().controlSize(.mini);Text(L10n.format("Installing %@ CLI…", account.effectiveAgent.name)).font(theme.font(size: 11)) }
                     Text(L10n.text("Installation is running in Terminal. This app will connect when it finishes.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
-                } else if !account.usesAntigravityDesktopQuota && !model.hasProviderCLI(account) {
+                } else if !account.usesAntigravityDesktopQuota && !account.usesClaudeDesktop && !model.hasProviderCLI(account) {
                     Button(L10n.text("Install & connect")) { model.installProviderCLI(account) }.buttonStyle(PrimaryButtonStyle(compact: true)).disabled(busy)
                     Button(L10n.text("Choose quota CLI…")) { model.setProviderExecutable(account.effectiveAgent) }.buttonStyle(ThemedPlainButtonStyle()).font(theme.font(size: 11))
                 }
@@ -76,7 +86,7 @@ struct ProviderQuotaSummaryView: View {
                     QuotaBucketView(bucket: bucket.value, now: now, compact: !details, stale: quota.isStale(at: now) || model.quotaErrors[account.id] != nil)
                 }
             } else {
-                Text(L10n.text("No quota data available for this account.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
+                Text(L10n.text(account.usesClaudeDesktop ? "Claude has not exposed numeric usage limits for this account. Email and plan are verified; refresh to check again." : "No quota data available for this account.")).font(theme.font(size: 10)).foregroundColor(palette.secondary)
             }
             if details && value.providerSessionKind == "claudeWeb" { Text(L10n.text("Sign-in source: Claude web")).font(theme.font(size: 10)).foregroundColor(palette.secondary) }
             let read = value.quota?.fetchedAt ?? value.identityFetchedAt

@@ -8,6 +8,7 @@ namespace AISwitcher.Core;
 
 public enum Agent { Chatgpt, Claude, Gemini, Antigravity, Perplexity, Deepseek }
 public enum AntigravitySignInMethod { Browser, Cli }
+public enum AccountSignInMethod { Browser, Desktop, Cli }
 public enum LaunchMode { Desktop, Browser }
 public enum Browser { Chrome, Edge, Brave }
 public enum DefaultAction { OpenDesktop, ConnectSession }
@@ -29,6 +30,8 @@ public sealed record Account {
     public string EmailHint { get; set; } = "";
     public Agent Agent { get; init; }
     public Browser Browser { get; init; }
+    public AccountSignInMethod? SignInMethod { get; set; }
+    public bool? DesktopSignInPending { get; set; }
     public LaunchMode LaunchMode { get; set; } = LaunchMode.Desktop;
     public string Color { get; set; } = "mint";
     public bool IsFavorite { get; set; }
@@ -49,12 +52,16 @@ public sealed record Account {
     [JsonIgnore] public bool UsesPrivateAntigravity=>Agent==Agent.Antigravity&&AntigravityUsesPrivateHome==true;
     [JsonIgnore] public bool UsesSharedApplication=>Agent.IsShared()&&!UsesPrivateAntigravity;
     [JsonIgnore] public bool UsesAntigravityDesktopQuota=>UsesPrivateAntigravity&&AntigravitySignInMethod!=global::AISwitcher.Core.AntigravitySignInMethod.Cli;
-    [JsonIgnore] public bool UsesProviderCli=>Agent.ProviderQuota()&&!UsesAntigravityDesktopQuota;
-    [JsonIgnore] public LaunchMode EffectiveMode => Agent is Agent.Chatgpt or Agent.Claude ? LaunchMode : Agent.IsShared() ? LaunchMode.Desktop : LaunchMode.Browser;
+    [JsonIgnore] public bool UsesClaudeDesktopQuota=>Agent==Agent.Claude&&EffectiveMode==LaunchMode.Desktop;
+    [JsonIgnore] public bool UsesProviderCli=>Agent.ProviderQuota()&&!UsesAntigravityDesktopQuota&&!UsesClaudeDesktopQuota;
+    [JsonIgnore] public bool SupportsDesktopSignIn => Agent is Agent.Chatgpt or Agent.Claude;
+    [JsonIgnore] public AccountSignInMethod EffectiveSignInMethod => SignInMethod ?? (EffectiveMode == LaunchMode.Browser ? AccountSignInMethod.Browser : AccountSignInMethod.Desktop);
+    public Account WithDesktopSignIn(AccountSignInMethod? method = null) => SupportsDesktopSignIn ? this with { SignInMethod = method ?? EffectiveSignInMethod, DesktopSignInPending = EffectiveMode == LaunchMode.Browser ? true : DesktopSignInPending, LaunchMode = LaunchMode.Desktop } : this;
+    [JsonIgnore] public LaunchMode EffectiveMode => SupportsDesktopSignIn && SignInMethod != null ? LaunchMode.Desktop : Agent is Agent.Chatgpt or Agent.Claude ? LaunchMode : Agent.IsShared() ? LaunchMode.Desktop : LaunchMode.Browser;
     [JsonIgnore] public bool UsesCodexDesktop => Agent == Agent.Chatgpt && EffectiveMode == LaunchMode.Desktop;
     [JsonIgnore] public Connection? Connection => !Agent.HasQuota() ? null : Agent.ProviderQuota() ? UsesPrivateAntigravity&&ProviderConnection?.ProviderSessionKind is not (AntigravityProfile.DesktopSessionKind or AntigravityProfile.CliSessionKind)?null:ProviderConnection : UsesCodexDesktop ? DesktopConnection : BrowserConnection;
     public void Validate() {
-        if (Id == Guid.Empty || Name.Trim().Length is < 1 or > 48 || EmailHint.Length > 160 || !ProfileColors.Names.Contains(Color) || !Enum.IsDefined(Agent) || !Enum.IsDefined(Browser) || !Enum.IsDefined(LaunchMode) || AntigravitySignInMethod.HasValue&&!Enum.IsDefined(AntigravitySignInMethod.Value)) throw new AppError("Invalid profile data.");
+        if (Id == Guid.Empty || Name.Trim().Length is < 1 or > 48 || EmailHint.Length > 160 || !ProfileColors.Names.Contains(Color) || !Enum.IsDefined(Agent) || !Enum.IsDefined(Browser) || !Enum.IsDefined(LaunchMode) || SignInMethod.HasValue&&!Enum.IsDefined(SignInMethod.Value) || AntigravitySignInMethod.HasValue&&!Enum.IsDefined(AntigravitySignInMethod.Value)) throw new AppError("Invalid profile data.");
     }
 }
 public sealed record Snapshot {

@@ -22,6 +22,54 @@ var root=Path.Combine(Path.GetTempPath(),"ai-switcher-core-tests."+Guid.NewGuid(
 Repository Repo(string name)=>new(Path.Combine(root,name),Path.Combine(root,name+"-backend"));
 Account Profile(string name="A",Agent agent=Agent.Chatgpt,LaunchMode mode=LaunchMode.Desktop)=>new(){Name=name,Agent=agent,LaunchMode=mode};
 var now=DateTimeOffset.UtcNow;
+Test("Claude Desktop reads Free metadata and actual usage without requiring Code", () => {
+    using var account=JsonDocument.Parse("""{"uuid":"12121212-1212-4212-8212-121212121212","email_address":"free@example.test","session_key":"never-save-fixture"}""");
+    using var orgs=JsonDocument.Parse("""[{"uuid":"34343434-3434-4434-8434-343434343434","plan_display_name":"Free"},{"uuid":"56565656-5656-4656-8656-565656565656","plan_display_name":"Pro"}]""");
+    var metadata=ClaudeDesktopAccount.Parse(account.RootElement,orgs.RootElement,"34343434-3434-4434-8434-343434343434","");
+    Equal(metadata.Identity.PlanType,"free");Equal(metadata.Identity.Email,"free@example.test");
+    True(ClaudeDesktopAccount.Parse(account.RootElement,orgs.RootElement,null,"").Organization==null);
+    using var usage=JsonDocument.Parse("""{"five_hour":{"utilization":23},"seven_day":{"utilization":0},"access_token":"never-save-fixture"}""");
+    var result=ClaudeDesktopAccount.Usage(usage.RootElement,metadata.Identity);
+    Equal(result.Quota!.Limits.Buckets.First().Value.Primary!.Remaining,77d);Equal(result.Quota.Limits.Buckets.First().Value.Secondary!.Remaining,100d);
+    True(!JsonSerializer.Serialize(result,Json.Options).Contains("never-save-fixture"));
+    using var missing=JsonDocument.Parse("{}");True(ClaudeDesktopAccount.Usage(missing.RootElement,metadata.Identity).Quota==null);
+    using var unavailable=JsonDocument.Parse("""{"rate_limits_available":false,"rate_limits":{"five_hour":{"utilization":0}}}""");True(ClaudeDesktopAccount.Usage(unavailable.RootElement,metadata.Identity).Quota==null);
+    Throws(()=>ClaudeDesktopAccount.Parse(account.RootElement,orgs.RootElement,null,"other@example.test"));
+});
+Test("Claude Windows cookie decryption verifies GCM and host binding", () => {
+    var key=System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);var nonce=System.Security.Cryptography.RandomNumberGenerator.GetBytes(12);
+    var token=System.Text.Encoding.UTF8.GetBytes("disposable-session");var digest=System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(".claude.ai"));var plain=digest.Concat(token).ToArray();
+    var ciphertext=new byte[plain.Length];var tag=new byte[16];using(var aes=new System.Security.Cryptography.AesGcm(key,16))aes.Encrypt(nonce,plain,ciphertext,tag);
+    var encrypted="v10"u8.ToArray().Concat(nonce).Concat(ciphertext).Concat(tag).ToArray();
+    Equal(ClaudeDesktopAccount.DecryptCookie(encrypted,key,".claude.ai",true),"disposable-session");
+    Throws(()=>ClaudeDesktopAccount.DecryptCookie(encrypted,key,"example.test",true));
+    encrypted[^1]^=1;Throws(()=>ClaudeDesktopAccount.DecryptCookie(encrypted,key,".claude.ai",true));
+    Throws(()=>ClaudeDesktopAccount.DecryptCookie("v20unsupported"u8.ToArray(),key,".claude.ai",true));
+});
+Test("Desktop sign-in migration preserves web data and separates auth destinations", () => {
+    var repo = Repo("desktop-signin");
+    foreach (var agent in new[] { Agent.Chatgpt, Agent.Claude }) {
+        var old = Profile("Legacy", agent, LaunchMode.Browser) with { BrowserConnection = new(new("web@example.test", "plus")), DesktopConnection = new(new("desktop@example.test", "free")) };
+        repo.PrepareProfile(old);
+        var browserPath = repo.ProfilePath(old);
+        File.WriteAllText(Path.Combine(browserPath, "preserved.fixture"), "keep");
+        foreach (var method in Enum.GetValues<AccountSignInMethod>()) {
+            var migrated = old.WithDesktopSignIn(method);
+            Equal(migrated.Id, old.Id); Equal(migrated.EffectiveMode, LaunchMode.Desktop);
+            Equal(migrated.EffectiveSignInMethod, method); True(migrated.DesktopSignInPending == true);
+            True(repo.ProfilePath(migrated) != browserPath);
+            Equal(migrated.BrowserConnection, old.BrowserConnection);
+            Equal(migrated.DesktopConnection, old.DesktopConnection);
+            if (agent == Agent.Chatgpt) Equal(migrated.Connection?.Identity.Email, "desktop@example.test");
+            repo.Save(new() { Accounts = [migrated] });
+            Equal(repo.Load().Accounts[0], migrated);
+            Equal(File.ReadAllText(Path.Combine(browserPath, "preserved.fixture")), "keep");
+        }
+    }
+    var gemini = Profile("Gemini", Agent.Gemini, LaunchMode.Browser);
+    Equal(gemini.WithDesktopSignIn(AccountSignInMethod.Cli), gemini);
+    Throws(() => (Profile() with { SignInMethod = (AccountSignInMethod)99 }).Validate());
+});
 Test("Native browser sign-in validates Google origin and preserves the local callback", () =>
 {
     const string value = "https://accounts.google.com/o/oauth2/v2/auth?state=fixture&redirect_uri=http%3A%2F%2F127.0.0.1%3A53743%2Foauth-callback";

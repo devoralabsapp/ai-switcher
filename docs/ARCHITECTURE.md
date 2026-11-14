@@ -62,7 +62,7 @@ Protocol reference: [Codex App Server](https://learn.chatgpt.com/docs/app-server
 
 ## Browser fallback and verification
 
-`BrowserService` retains Chrome/Edge/Brave app-window launching with UUID-specific `--user-data-dir`, exact argument matching and normal termination. It runs for ChatGPT profiles selecting browser mode and for supported web agents. Its default destination comes from `AIAgent.webURL`; explicit URLs remain available for the ChatGPT OAuth flow and loopback smoke fixtures.
+`BrowserService` retains Chrome/Edge/Brave app-window launching with UUID-specific `--user-data-dir`, exact argument matching and normal termination. It runs for Gemini, Perplexity, and DeepSeek. Legacy ChatGPT/Claude browser storage remains readable for migration, but their public Open action now targets Desktop after the old session is closed. Its default destination comes from `AIAgent.webURL`; explicit URLs remain available for the ChatGPT OAuth flow and loopback smoke fixtures.
 
 The offline core/protocol suite verifies persistence, migration, owner markers, environment isolation, routing, permissions, staged deletion/rollback, quota semantics and JSONL lifecycle. `--desktop` uses two new real Desktop profiles, verifies separate PIDs, blank identities through each daemon, reuse, close/reopen persistence and cleanup while existing instances remain alive. `--browser` adds Chrome GUI checks and a headless loopback cookie/localStorage fixture; `--codex` probes an empty standalone CLI home.
 
@@ -94,7 +94,7 @@ Per-profile optional `defaultAction` and `connectOnStartup` fields migrate witho
 
 ## Multiple AI agents
 
-`AIAgent` defines stable identifiers, names, symbols, web destinations, and capabilities for ChatGPT, Claude, Gemini, Antigravity, Perplexity, and DeepSeek. `Account.agent` is optional: absent values preserve ChatGPT migration and existing launch behavior. Claude permits Desktop or browser mode and defaults missing stored modes to browser for compatibility; other web agents use browser mode. Antigravity uses a shared native launcher. The editor fixes the agent after creation, and AppModel enforces that rule when saving.
+`AIAgent` defines stable identifiers, names, symbols, web destinations, and capabilities for ChatGPT, Claude, Gemini, Antigravity, Perplexity, and DeepSeek. `Account.agent` is optional: absent values preserve ChatGPT migration and existing launch behavior. ChatGPT and Claude store an optional `signInMethod` (browser/desktop/cli) independently of launch destination; any explicit method targets Desktop. Legacy browser-mode records decode unchanged and move to Desktop at edit/first Open, preserving browser data and requiring a new Desktop login. A pending flag remembers sign-in when immediate setup was skipped. Other web agents use browser mode. Antigravity uses a shared native launcher. The editor fixes the agent after creation, and AppModel enforces that rule when saving.
 
 `AgentApplicationService` locates the installed Antigravity app by bundle identifier and opens it with NSWorkspace, using its existing sign-in. It neither supplies profile flags nor changes authentication paths. Only one Antigravity entry is allowed; it is never treated as an owned running session for close/delete controls. Its running badge reports the shared application state.
 
@@ -119,3 +119,15 @@ The optional `--claude` smoke check opens two disposable profiles, checks distin
 ## Windows companion
 
 `Windows/` contains a separate .NET 10 core and native WPF adapter. Shared palettes and localization are exported from the Swift sources by `scripts/sync-windows-assets.py`; the macOS implementation is unchanged. See [Windows architecture, storage, runtime checks and compatibility limits](../Windows/README.md). Windows builds run portable storage/quota/RPC tests and native WPF/process fixture checks before producing standalone x64/ARM64 packages. Vendor sign-in and live account behavior require field validation.
+
+## Desktop sign-in methods
+
+`DesktopSignInService` uses a fresh official Codex app-server in the selected Desktop home for browser OAuth, opening the authorization URL through personal Chrome and retaining provider-managed file credentials in that same home. CLI login uses the same private home with file credential storage. The old browser quota home is never imported or reused as Desktop auth. Fresh backend startup after authentication avoids a stale signed-out daemon. Login errors cancel the OAuth attempt and preserve existing profile files.
+
+Claude browser sign-in remains the installed Desktop app's own authorization flow; the preflight requires Chrome as the system default because Electron/ASWebAuthenticationSession chooses the browser. No vendor code, cookie stores, debug ports, or global browser defaults are modified. Claude CLI uses the separate private CodeConfig and opens Desktop with an explicit warning that Code login cannot authenticate Desktop.
+
+## Claude Desktop quota
+
+`ClaudeDesktopQuotaService` uses the owned profile's read-only SQLite cookie store. Only `sessionKey` and the active organization ID are selected. macOS v10 cookies use Keychain-protected AES-CBC; modern host digests are validated. Windows v10 uses the profile Local State DPAPI key plus AES-GCM; legacy DPAPI records are also accepted, while app-bound/unknown formats fail closed. Private path links, conflicting session cookies, expired sessions, identity changes and cookie changes are rejected. Credentials are never persisted in manager metadata or logs. All transport is HTTPS to allowlisted claude.ai account/organizations/usage paths with redirects disabled and cookies disabled in the general HTTP store. No conversation endpoints or model requests exist in this reader.
+
+Desktop quota precedes CLI/WebKit for every sign-in method. Free is not filtered out. Absence of provider numbers remains unknown; matching previous real usage can be kept only as stale data. Organization-scoped identities prevent retaining another workspace's quota. The manager tries to connect when a saved Desktop session is detected at startup or after opening Claude. The first attempt can request Keychain permission on macOS. Periodic reads require an open Desktop process or a connected quota session and reuse access granted in the current manager process. Close pauses automatic reads for the profile. Fixture tests use synthetic databases/keys and mock HTTP only, never real account credentials.

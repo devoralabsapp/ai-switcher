@@ -63,6 +63,39 @@ internal sealed class BackendService {
         owned.RemoveAll(request=>!request.Transport.IsRunning);owned.Add(new(transport,client));
         try{await client.StartAsync(ct);return client;}catch{await client.DisposeAsync();throw;}
     }
+    public async Task<Connection> SignInDesktopAsync(Account account, CancellationToken ct) {
+        if (!account.UsesCodexDesktop) throw new AppError("Quota is not available for this agent.");
+        if (account.EffectiveSignInMethod == AccountSignInMethod.Cli) {
+            // Reuse the official executable discovery and this profile's auth home.
+            var info = await StdioInfoAsync(account);
+            info.ArgumentList.Clear();
+            foreach (var arg in new[] { "-c", "cli_auth_credentials_store=\"file\"", "login" }) info.ArgumentList.Add(arg);
+            info.CreateNoWindow = false;
+            using var child = Process.Start(info) ?? throw new AppError("Could not start the profile backend.");
+            try {
+                await child.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromMinutes(10), ct);
+                if (child.ExitCode != 0) throw new AppError("The Codex session is signed out or expired. Reconnect the account.");
+            } finally {
+                // Preserve the personal browser and its other tabs.
+                if (!child.HasExited) { child.Kill(); await child.WaitForExitAsync(); }
+            }
+            await using var signedIn = await StdioClientAsync(account, ct);
+            var identity = await signedIn.ReadIdentityAsync(ct);
+            Connection value = new(identity, null);
+            try { value = await signedIn.ReadQuotaAsync(ct); } catch (AppError) { }
+            return value;
+        }
+        await using var client = await StdioClientAsync(account, ct);
+        var login = await client.StartLoginAsync(ct);
+        try {
+            await platform.OpenSignInAsync(login.Url, ct);
+            await client.WaitForLoginAsync(login.Id, ct);
+            var identity = await client.ReadIdentityAsync(ct);
+            Connection value = new(identity, null);
+            try { value = await client.ReadQuotaAsync(ct); } catch (AppError) { }
+            return value;
+        } catch { try { await client.CancelLoginAsync(login.Id, CancellationToken.None); } catch { } throw; }
+    }
     public async Task<Connection> ReadAsync(Account account,CancellationToken ct=default){
         if(account.Agent!=Agent.Chatgpt)throw new AppError("Quota is not available for this agent.");
         if(account.UsesCodexDesktop){

@@ -117,10 +117,6 @@ final class ProviderQuotaService {
             }
             let before = try await identity()
             try onIdentity?(before)
-            if before.planType?.lowercased() == "free" {
-                let after = try await identity();guard before.matches(after) else { throw ProviderQuotaError.identityChanged }
-                return CodexConnection(identity: after, identityFetchedAt: Date())
-            }
             let c = try await command(account, executable: exe, arguments: ProviderCLIConfiguration.claudeArguments)
             let data: Data
             do { _ = try await c.claudeControl("initialize");data = try await c.claudeControl("get_usage");await c.stop();commands[account.id] = nil }

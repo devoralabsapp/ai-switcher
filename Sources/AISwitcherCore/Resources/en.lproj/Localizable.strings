@@ -612,3 +612,29 @@
 "Share all local projects and conversation history from Antigravity Desktop. Close shared sessions before switching accounts." = "Share all local projects and conversation history from Antigravity Desktop. Close shared sessions before switching accounts.";
 "A local project or conversation differs between Antigravity sessions. Its original data was kept. Close the sessions and resolve the duplicate before sharing." = "A local project or conversation differs between Antigravity sessions. Its original data was kept. Close the sessions and resolve the duplicate before sharing.";
 "Close Antigravity Desktop and other shared Antigravity sessions before opening this shared workspace." = "Close Antigravity Desktop and other shared Antigravity sessions before opening this shared workspace.";
+
+"Sign-in Method" = "Sign-in Method";
+"Sign in with Desktop app" = "Sign in with Desktop app";
+"Sign in with CLI" = "Sign in with CLI";
+"Sign in…" = "Sign in…";
+"All sign-in methods open the Desktop app. Each account keeps its own saved session." = "All sign-in methods open the Desktop app. Each account keeps its own saved session.";
+"Claude CLI signs in to Claude Code for quota. Sign in to Claude Desktop separately once; Free plans may not support Claude Code." = "Claude CLI signs in to Claude Code for quota. Sign in to Claude Desktop separately once; Free plans may not support Claude Code.";
+"In this account's Claude Desktop window, choose browser sign-in and finish authorization in your browser. The saved session belongs to Desktop." = "In this account's Claude Desktop window, choose browser sign-in and finish authorization in your browser. The saved session belongs to Desktop. Set Chrome as your default browser to use personal Chrome.";
+"Authorize in your existing Chrome, then return to this account's ChatGPT Desktop session." = "Authorize in your existing Chrome, then return to this account's ChatGPT Desktop session.";
+"Sign in directly in this account's Desktop window." = "Sign in directly in this account's Desktop window.";
+"Claude Desktop opens authorization in the system default browser. Set Google Chrome as your default browser to use your personal Chrome, then try again." = "Claude Desktop opens authorization in the system default browser. Set Google Chrome as your default browser to use your personal Chrome, then try again.";
+"Existing browser sign-ins stay saved. Sign in once for the new Desktop session." = "Existing browser sign-ins stay saved. Sign in once for the new Desktop session.";
+
+"Desktop sessions with browser, Desktop app, or CLI sign-in." = "Desktop sessions with browser, Desktop app, or CLI sign-in.";
+"Separate Claude Desktop sessions. CLI quota uses Claude Code sign-in." = "Separate Claude Desktop sessions. CLI quota uses Claude Code sign-in.";
+"To sign in again, close the session, then choose Sign in… in the account menu." = "To sign in again, close the session, then choose Sign in… in the account menu.";
+
+"Connect to allow access to this Claude Desktop session for quota. macOS may ask for Claude Safe Storage access." = "Connect to allow access to this Claude Desktop session for quota. macOS may ask for Claude Safe Storage access.";
+"This Claude Desktop session uses unsupported encryption. Its sign-in has been preserved." = "This Claude Desktop session uses unsupported encryption. Its sign-in has been preserved.";
+"Claude did not return numeric usage limits for this account. Email and plan are still shown when available." = "Claude did not return numeric usage limits for this account. Email and plan are still shown when available.";
+"Claude has not exposed numeric usage limits for this account. Email and plan are verified; refresh to check again." = "Claude has not exposed numeric usage limits for this account. Email and plan are verified; refresh to check again.";
+"Sign in to this account's Claude Desktop window, then refresh quota." = "Sign in to this account's Claude Desktop window, then refresh quota.";
+"Claude quota reads only this profile's Desktop session cookie to request account and usage data from claude.ai. It does not read conversations or copy cookies into account metadata or logs." = "Claude quota reads only this profile's Desktop session cookie to request account and usage data from claude.ai. It does not read conversations or copy cookies into account metadata or logs.";
+"Claude quota reads only this profile's Desktop session cookie to request account and usage data from claude.ai. It does not read conversations or copy cookies into account metadata or logs. macOS may ask for Keychain access." = "Claude quota reads only this profile's Desktop session cookie to request account and usage data from claude.ai. It does not read conversations or copy cookies into account metadata or logs. macOS may ask for Keychain access.";
+"Claude CLI signs in to Claude Code only. Sign in to Claude Desktop once too; quota is read from Desktop, including Free when Claude provides it." = "Claude CLI signs in to Claude Code only. Sign in to Claude Desktop once too; quota is read from Desktop, including Free when Claude provides it.";
+"Separate Claude Desktop sessions with quota from the same account, including Free." = "Separate Claude Desktop sessions with quota from the same account, including Free.";

@@ -51,12 +51,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("AI Switcher", isDirectory: true)
         }
+        if arguments.contains("--profile-delete-smoke-test") {
+            Task {
+                do { try await ProfileDeletionSmokeTest.run(root: root); Darwin.exit(0) }
+                catch { fputs("Profile deletion smoke test failed: \(error.localizedDescription)\n", stderr); Darwin.exit(1) }
+            }
+            return
+        }
         if let index = arguments.firstIndex(of: "--render-previews"), arguments.indices.contains(index + 1) {
             do {
                 guard arguments.contains("--data-dir"), root.lastPathComponent.hasPrefix("ai-switcher-preview.") else {
                     throw ProfileError.invalidSelection
                 }
+                if arguments.contains("--compact-cards") {
+                    try AppearancePreview.renderCompactCards(root: root, output: URL(fileURLWithPath: arguments[index + 1]))
+                } else if arguments.contains("--sign-in-methods") {
+                    try AppearancePreview.renderSignInMethods(root: root, output: URL(fileURLWithPath: arguments[index + 1]))
+                } else {
                 try AppearancePreview.render(root: root, output: URL(fileURLWithPath: arguments[index + 1]), galleryOnly: arguments.contains("--seasonal-gallery"))
+                }
                 Darwin.exit(0)
             } catch { fputs("Preview render failed: \(error.localizedDescription)\n", stderr); Darwin.exit(1) }
         }

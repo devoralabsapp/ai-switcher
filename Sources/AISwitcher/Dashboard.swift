@@ -401,10 +401,14 @@ private struct AccountCard: View {
                 .buttonStyle(ThemedPlainButtonStyle()).help(account.isFavorite ? L10n.text("Remove from favorites") : L10n.text("Add to favorites"))
                 Menu {
                     Button(L10n.text("Edit profile…")) { model.editor = AccountEditor(account: account) }
+                    if account.supportsDesktopSignIn {
+                        Button(L10n.text("Sign in…")) { model.signInAccount(account) }
+                            .disabled(model.hasRunningSession(account) || model.launchingIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
+                    }
                     if account.effectiveAgent.supportsQuota {
                         Button(account.effectiveAgent.usesProviderQuota ? L10n.text("Details") : L10n.text("Codex quota…")) { model.quotaAccountID = account.id }
                     }
-                    if account.effectiveLaunchMode == .browser {
+                    if account.effectiveLaunchMode == .browser && !account.supportsDesktopSignIn {
                         Button(L10n.format("Open a new %@ window", account.effectiveAgent.name)) { model.open(account, newWindow: true) }
                     }
                     Divider()

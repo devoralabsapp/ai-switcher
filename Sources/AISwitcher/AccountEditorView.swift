@@ -11,7 +11,7 @@ struct AccountEditorView: View {
     @State private var name: String
     @State private var email: String
     @State private var browser: BrowserKind
-    @State private var launchMode: LaunchMode
+    @State private var signInMethod: AccountSignInMethod
     @State private var color: AccountColor
     @State private var sharesLocalWorkspace: Bool
     @State private var openAfterSave: Bool
@@ -28,7 +28,7 @@ struct AccountEditorView: View {
         _name = State(initialValue: editor.account?.name ?? "")
         _email = State(initialValue: editor.account?.emailHint ?? "")
         _browser = State(initialValue: editor.account?.browser ?? editor.defaultBrowser)
-        _launchMode = State(initialValue: editor.account?.effectiveLaunchMode ?? .desktop)
+        _signInMethod = State(initialValue: editor.account?.effectiveSignInMethod ?? .browser)
         _color = State(initialValue: editor.account?.color ?? editor.defaultColor)
         _sharesLocalWorkspace = State(initialValue: editor.account?.usesSharedLocalWorkspace ?? true)
         _defaultAction = State(initialValue: editor.account?.effectiveDefaultAction ?? (model.preferences.quotaOnlyMode ? .connectSession : .openDesktop))
@@ -41,7 +41,7 @@ struct AccountEditorView: View {
 
     private var isNew: Bool { editor.account == nil }
     private var canShareAntigravityProject: Bool { agent == .antigravity && (isNew || editor.account?.usesIsolatedAntigravity == true) }
-    private var selectedMode: LaunchMode { agent == .chatgpt || agent == .claude ? launchMode : agent.isSharedApplication ? .desktop : .browser }
+    private var selectedMode: LaunchMode { agent == .chatgpt || agent == .claude ? .desktop : agent.isSharedApplication ? .desktop : .browser }
     private var modeLocked: Bool {
         editor.account.map { model.hasRunningSession($0) || model.launchingIDs.contains($0.id) || model.quotaBusyIDs.contains($0.id) || model.pendingConnections[$0.id] != nil } ?? false
     }
@@ -143,16 +143,31 @@ struct AccountEditorView: View {
                     }
                 }
 
-                if agent == .claude {
+                if agent == .chatgpt || agent == .claude {
                     VStack(alignment: .leading, spacing: 9) {
-                        Text(L10n.text("Open accounts with")).font(appearanceTheme.font(size: 12, weight: .medium))
-                        Picker(L10n.text("Mode"), selection: $launchMode) {
-                            Text("Claude Desktop").tag(LaunchMode.desktop)
-                            Text(L10n.text("Browser")).tag(LaunchMode.browser)
-                        }.pickerStyle(.segmented).labelsHidden().disabled(modeLocked)
-                            .accessibilityIdentifier("claudeLaunchMode")
-                        Text(L10n.text("Each Claude Desktop profile has separate app data. Sign in once in its own window; existing browser sign-ins stay in the browser. Quota uses a separate Claude Code sign-in."))
+                        Picker(L10n.text("Sign-in Method"), selection: $signInMethod) {
+                            ForEach(AccountSignInMethod.allCases) { Text($0.title).tag($0) }
+                        }.disabled(modeLocked).accessibilityIdentifier("accountSignInMethod")
+                        Text(L10n.text("All sign-in methods open the Desktop app. Each account keeps its own saved session."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        if agent == .claude && signInMethod == .cli {
+                            Text(L10n.text("Claude CLI signs in to Claude Code only. Sign in to Claude Desktop once too; quota is read from Desktop, including Free when Claude provides it."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        } else if agent == .claude && signInMethod == .browser {
+                            Text(L10n.text("In this account's Claude Desktop window, choose browser sign-in and finish authorization in your browser. The saved session belongs to Desktop."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        } else if agent == .chatgpt && signInMethod == .browser {
+                            Text(L10n.text("Authorize in your existing Chrome, then return to this account's ChatGPT Desktop session."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        }
+                        if !isNew {
+                            Text(L10n.text("To sign in again, close the session, then choose Sign in… in the account menu."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        }
+                        if editor.account?.effectiveLaunchMode == .browser {
+                            Text(L10n.text("Existing browser sign-ins stay saved. Sign in once for the new Desktop session."))
+                                .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
+                        }
                         if modeLocked {
                             Text(L10n.text("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."))
                                 .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
@@ -162,16 +177,6 @@ struct AccountEditorView: View {
 
                 if agent == .chatgpt {
                 VStack(alignment: .leading, spacing: 9) {
-                    Text(L10n.text("Open accounts with")).font(appearanceTheme.font(size: 12, weight: .medium))
-                    Picker(L10n.text("Mode"), selection: $launchMode) {
-                        ForEach(LaunchMode.allCases) { Text($0.name).tag($0) }
-                    }.pickerStyle(.segmented).labelsHidden()
-                        .disabled(modeLocked)
-                    if modeLocked {
-                        Text(L10n.text("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."))
-                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
-                    }
-                    if launchMode == .desktop {
                         Picker(L10n.text("Default account action"), selection: $defaultAction) {
                             ForEach(AccountAction.allCases) { Text($0.title).tag($0) }
                         }.accessibilityIdentifier("defaultAccountAction")
@@ -194,10 +199,7 @@ struct AccountEditorView: View {
                         }
                         Text(L10n.text("Each account has a separate ChatGPT Desktop session and backend. Sign in once in its window. Requires the new ChatGPT with Chat, Work, and Codex; app updates may affect this experimental mode."))
                             .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary).fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        Text(L10n.text("Browser mode keeps its previous session separate. Close the session from the ⋯ menu before changing modes."))
-                            .font(appearanceTheme.font(size: 10)).foregroundColor(palette.secondary)
-                    }
+
                 }
 
                 }
@@ -228,14 +230,14 @@ struct AccountEditorView: View {
 
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "lock.shield").foregroundColor(palette.accent)
-                Text(agent == .chatgpt ? L10n.text("Sign in directly in ChatGPT. AI Switcher does not read passwords, cookies, or conversations. Quota comes from this session's Codex backend.") : L10n.text("Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."))
+                Text(agent == .claude ? L10n.text("Claude quota reads only this profile's Desktop session cookie to request account and usage data from claude.ai. It does not read conversations or copy cookies into account metadata or logs. macOS may ask for Keychain access.") : agent == .chatgpt ? L10n.text("Sign in directly in ChatGPT. AI Switcher does not read passwords, cookies, or conversations. Quota comes from this session's Codex backend.") : L10n.text("Sign in directly with the selected agent. AI Switcher does not read passwords, cookies, or conversations."))
                     .font(appearanceTheme.font(size: 11)).lineSpacing(4).foregroundColor(palette.secondary)
             }.padding(13).frame(maxWidth: .infinity, alignment: .leading)
                 .background(appearanceTheme.isPlayfulRetro ? palette.mint : palette.accent.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: appearanceTheme.radius(9)))
                 .retroOutline(radius: appearanceTheme.radius(9), shadow: false)
 
             if isNew {
-                Toggle(agent == .antigravity ? L10n.text("Sign in after adding") : L10n.format("Open %@ after adding", agent.name), isOn: $openAfterSave)
+                Toggle(agent == .antigravity || agent == .chatgpt || agent == .claude ? L10n.text("Sign in after adding") : L10n.format("Open %@ after adding", agent.name), isOn: $openAfterSave)
                     .toggleStyle(.checkbox).font(appearanceTheme.font(size: 12))
             }
 
@@ -260,6 +262,10 @@ struct AccountEditorView: View {
         account.emailHint = email.trimmingCharacters(in: .whitespacesAndNewlines)
         account.color = color
         account.launchMode = selectedMode
+        if agent == .chatgpt || agent == .claude {
+            account.signInMethod = signInMethod
+            if isNew || editor.account?.effectiveLaunchMode == .browser { account.desktopSignInPending = true }
+        }
         account.agent = agent
         if isNew && agent == .antigravity { account.antigravityUsesPrivateHome = true }
         if isNew && agent == .antigravity {
@@ -272,10 +278,19 @@ struct AccountEditorView: View {
         account.sharesLocalWorkspace = agent == .chatgpt && sharesLocalWorkspace
         account.defaultAction = agent == .chatgpt ? defaultAction : .openDesktop
         account.connectOnStartup = agent == .chatgpt && connectOnStartup
+        // Label edits on an active legacy web session must not move its storage.
+        if let original = editor.account, original.supportsDesktopSignIn,
+           original.effectiveLaunchMode == .browser, modeLocked {
+            account.launchMode = original.launchMode
+            account.signInMethod = original.signInMethod
+            account.desktopSignInPending = original.desktopSignInPending
+            account.sharesLocalWorkspace = original.sharesLocalWorkspace
+        }
         guard model.saveAccount(account) else { return }
         dismiss()
         if isNew && openAfterSave {
             if agent == .antigravity { model.connectSession(account) }
+            else if account.supportsDesktopSignIn { model.signInAccount(account) }
             else { model.open(account) }
         }
     }

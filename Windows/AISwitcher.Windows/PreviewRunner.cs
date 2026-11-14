@@ -37,7 +37,7 @@ internal static partial class PreviewRunner {
     }
     static async Task ProviderFixtureAsync(string root,string? executable){
         Require(executable!=null&&File.Exists(executable),"Provider CLI test executable missing");
-        var data=Path.Combine(root,"provider-sessions");var repo=new Repository(data);var claude=new Account{Name="Claude fixture",Agent=Agent.Claude,EmailHint="fixture@example.test"};var agy=new Account{Name="Antigravity fixture",Agent=Agent.Antigravity};repo.Save(new(){Accounts=[claude,agy]});
+        var data=Path.Combine(root,"provider-sessions");var repo=new Repository(data);var claude=new Account{Name="Claude fixture",Agent=Agent.Claude,LaunchMode=LaunchMode.Browser,EmailHint="fixture@example.test"};var agy=new Account{Name="Antigravity fixture",Agent=Agent.Antigravity};repo.Save(new(){Accounts=[claude,agy]});
         var engine=new AppEngine(data);engine.Preferences.Executables["claudeCode"]=executable!;engine.Preferences.Executables["antigravityCli"]=executable!;
         Require(engine.CanConnect(claude)&&engine.CanConnect(agy),"Provider Connect disabled before connection");
         await engine.ConnectAsync(claude,false);Require(engine.Provider.Connected.Contains(claude.Id),"Claude control bridge did not connect: "+engine.Errors.GetValueOrDefault(claude.Id)+"; "+(File.Exists(Path.Combine(data,"provider-fixture-trace.txt"))?File.ReadAllText(Path.Combine(data,"provider-fixture-trace.txt")):"fixture did not start"));Require(!engine.CanConnect(claude),"Duplicate Claude Connect must be disabled");Require(engine.Snapshot.Accounts.First(x=>x.Id==claude.Id).Connection?.Quota?.Limits.Buckets.First().Value.Primary?.Remaining==0,"Claude 0% quota missing");
@@ -48,7 +48,18 @@ internal static partial class PreviewRunner {
         await engine.ShutdownAsync();
     }
     static async Task CaptureDialog(MainWindow owner,Action open,string path,string expectedAgent="Claude"){
-        _=owner.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(()=>{var dialog=Application.Current.Windows.Cast<Window>().FirstOrDefault(x=>x!=owner&&x.Owner==owner);if(dialog!=null){dialog.UpdateLayout();if(Find(dialog,"accountAgent") is ComboBox agent)Require(agent.SelectedItem is string text&&text==expectedAgent,"Agent selector must display the selected agent name");if(expectedAgent=="Antigravity")Require(Find(dialog,"antigravitySignInMethod") is ComboBox {Visibility:Visibility.Visible,Items.Count:2},"Antigravity browser/CLI choice is missing");Save(dialog,path);dialog.Close();}}));open();await Task.CompletedTask;
+        CompactCardLayout();
+        _=owner.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(()=>{var dialog=Application.Current.Windows.Cast<Window>().FirstOrDefault(x=>x!=owner&&x.Owner==owner);if(dialog!=null){dialog.UpdateLayout();if(Find(dialog,"accountAgent") is ComboBox agent)Require(agent.SelectedItem is string text&&text==expectedAgent,"Agent selector must display the selected agent name");if(expectedAgent is "Claude" or "ChatGPT")Require(Find(dialog,"accountSignInMethod") is ComboBox {Visibility:Visibility.Visible,Items.Count:3},"Desktop sign-in method choices are missing");if(expectedAgent=="Antigravity")Require(Find(dialog,"antigravitySignInMethod") is ComboBox {Visibility:Visibility.Visible,Items.Count:2},"Antigravity browser/CLI choice is missing");Save(dialog,path);dialog.Close();}}));open();await Task.CompletedTask;
+    }
+    static void CompactCardLayout() {
+        foreach(var count in new[]{1,2}){
+            var panel=new AccountColumnsPanel();
+            for(var i=0;i<count;i++)panel.Children.Add(new Border{Height=100});
+            panel.Measure(new Size(1400,1000));panel.Arrange(new Rect(0,0,1400,1000));
+            foreach(FrameworkElement child in panel.Children)Require(child.ActualWidth<=320,"Few accounts must not stretch across the window");
+            panel.Measure(new Size(200,1000));panel.Arrange(new Rect(0,0,200,1000));
+            foreach(FrameworkElement child in panel.Children)Require(child.ActualWidth<=200,"Narrow layout must fit its viewport");
+        }
     }
     static FrameworkElement? Find(DependencyObject root,string id){for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var child=VisualTreeHelper.GetChild(root,i);if(child is FrameworkElement fe&&AutomationProperties.GetAutomationId(fe)==id)return fe;var found=Find(child,id);if(found!=null)return found;}return null;}
     static void Save(Window window,string path){window.UpdateLayout();var width=(int)Math.Ceiling(window.ActualWidth);var height=(int)Math.Ceiling(window.ActualHeight);Require(width>0&&height>0,"Window did not render");var background=new DrawingVisual();using(var draw=background.RenderOpen())draw.DrawRectangle(window.Background??Brushes.White,null,new Rect(0,0,width,height));var bitmap=new RenderTargetBitmap(width,height,96,96,PixelFormats.Pbgra32);bitmap.Render(background);bitmap.Render(window);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using var stream=File.Create(path);encoder.Save(stream);}

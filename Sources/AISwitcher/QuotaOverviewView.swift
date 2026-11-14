@@ -164,6 +164,10 @@ struct QuotaOverviewView: View {
                 if account.effectiveAgent.supportsQuota { Button(L10n.text("Details")) { model.quotaAccountID = account.id } }
                 Button(account.effectiveAgent.openTitle) { model.open(account) }
                 Button(L10n.text("Edit profile…")) { model.editor = AccountEditor(account: account) }
+                    if account.supportsDesktopSignIn {
+                        Button(L10n.text("Sign in…")) { model.signInAccount(account) }
+                            .disabled(model.hasRunningSession(account) || model.launchingIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
+                    }
                 Button(L10n.text("Close account session…")) { model.accountToClose = account }
                     .disabled((account.usesSharedApplication && !model.providerSessionIDs.contains(account.id)) || !model.runningIDs.contains(account.id) || model.quotaBusyIDs.contains(account.id))
             } label: { Image(systemName: "ellipsis").frame(width: 18, height: 20) }

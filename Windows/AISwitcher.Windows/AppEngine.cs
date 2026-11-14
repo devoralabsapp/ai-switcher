@@ -15,6 +15,9 @@ internal sealed class AppEngine {
     public BackendService Backend { get; }
     public ProviderQuotaService Provider { get; }
     public AntigravityDesktopService Antigravity { get; }
+    public ClaudeDesktopQuotaService ClaudeQuota { get; }
+    readonly HashSet<Guid> claudeAutoConnect=[];
+    readonly HashSet<Guid> pausedClaudeQuota=[];
     public HashSet<Guid> WaitingForSignIn { get; }=[];
     public Localizer L=>new(Preferences.Language);
     public Theme Theme=>Themes.Get(Preferences.Theme);
@@ -39,7 +42,7 @@ internal sealed class AppEngine {
     public AppEngine(string root){
         Repository=new(root);
         try{Preferences=Repository.LoadPreferences();Snapshot=Repository.Load();}catch(Exception error){ReadOnly=true;LoadError=Message(error);}
-        Platform=new(Repository,Preferences);Platform.PreparationChanged+=Notify;Backend=new(Repository,Platform,Preferences);Provider=new(Repository,Preferences);Antigravity=new(Repository,Platform);
+        Platform=new(Repository,Preferences);Platform.PreparationChanged+=Notify;Backend=new(Repository,Platform,Preferences);Provider=new(Repository,Preferences);Antigravity=new(Repository,Platform);ClaudeQuota=new(Repository);foreach(var account in Snapshot.Accounts.Where(x=>x.UsesClaudeDesktopQuota))claudeAutoConnect.Add(account.Id);
     }
     public void Notify()=>Changed?.Invoke();
     public void SavePreferences(){if(ReadOnly){Notify();return;}try{Repository.SavePreferences(Preferences);Notify();}catch(Exception error){Error?.Invoke(Message(error));}}
@@ -57,7 +60,7 @@ internal sealed class AppEngine {
     public string Message(Exception error)=>error is System.ComponentModel.Win32Exception native?L.Format("Windows could not start the application (error %@). Check Session diagnostics and the executable paths in Settings.",native.NativeErrorCode):error is UnauthorizedAccessException?L["Windows denied access to an application or profile folder. Open ChatGPT from Start once, then retry. Do not change WindowsApps permissions."]:L[error is AppError app?app.Key:"The operation failed. Your existing data has been preserved."];
     public bool Running(Account a)=>a.UsesAntigravityDesktopQuota?(Antigravity.IsActive(a)||Platform.HasOwnedProcesses(a)):Provider.Connected.Contains(a.Id)|| (a.UsesSharedApplication?Platform.Processes.Any(p=>Path.GetFileName(p.Executable).Equals("Antigravity.exe",StringComparison.OrdinalIgnoreCase)):Platform.HasOwnedProcesses(a)||Backend.IsActive(a));
     public bool CanConnect(Account a)=>(a.UsesCodexDesktop||a.Agent.ProviderQuota())&&!ReadOnly&&!StoppingAll&&!InstallingProviders.Contains(a.Agent)&&!Busy.Contains(a.Id)&&!(a.UsesPrivateAntigravity&&Platform.HasOwnedProcesses(a)&&Platform.Owned(a)==null)&&!(a.Agent.ProviderQuota()?Provider.Connected.Contains(a.Id):Running(a));
-    public string Status(Account a)=>WaitingForSignIn.Contains(a.Id)?L["Waiting for sign-in…"]:StoppingAll||Busy.Contains(a.Id)?L[Platform.PreparingRuntime.Contains(a.Id)?a.Agent==Agent.Claude?"Preparing Claude for the first launch…":"Preparing ChatGPT for the first launch…":"Working…"]:(Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]||Errors.GetValueOrDefault(a.Id)==L[ProviderQuota.SignedOut])?L["Sign-in required"]:!a.UsesAntigravityDesktopQuota&&Provider.Connected.Contains(a.Id)&&!(a.UsesPrivateAntigravity&&Platform.Owned(a)?.HasWindow==true)?L["Running in background"]:a.UsesSharedApplication?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Platform.HasOwnedProcesses(a)||Backend.IsActive(a)||Antigravity.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
+    public string Status(Account a)=>WaitingForSignIn.Contains(a.Id)?L["Waiting for sign-in…"]:StoppingAll||Busy.Contains(a.Id)?L[Platform.PreparingRuntime.Contains(a.Id)?a.Agent==Agent.Claude?"Preparing Claude for the first launch…":"Preparing ChatGPT for the first launch…":"Working…"]:(Errors.GetValueOrDefault(a.Id)==L["The Codex session is signed out or expired. Reconnect the account."]||Errors.GetValueOrDefault(a.Id)==L[ProviderQuota.SignedOut]||Errors.GetValueOrDefault(a.Id)==L[ClaudeDesktopAccount.SignedOut])?L["Sign-in required"]:!a.UsesAntigravityDesktopQuota&&Provider.Connected.Contains(a.Id)&&!(a.UsesPrivateAntigravity&&Platform.Owned(a)?.HasWindow==true)&&!(a.UsesClaudeDesktopQuota&&Platform.Owned(a)?.HasWindow==true)?L["Running in background"]:a.UsesSharedApplication?(Running(a)?L["Application running"]:L["Disconnected"]):Platform.Owned(a) is {HasWindow:true}?(a.EffectiveMode==LaunchMode.Browser?L["Browser running"]:L["Desktop window open"]):Platform.HasOwnedProcesses(a)||Backend.IsActive(a)||Antigravity.IsActive(a)?L["Running in background"]:Errors.ContainsKey(a.Id)?L["Connection failed"]:L["Disconnected"];
     public bool DefaultConnect(Account a)=>(a.UsesCodexDesktop||a.Agent.ProviderQuota())&&(Preferences.QuotaOnlyMode||a.DefaultAction==DefaultAction.ConnectSession);
     public string DefaultTitle(Account a)=>DefaultConnect(a)?(a.Agent.ProviderQuota()?Provider.Connected.Contains(a.Id):Running(a))?L["Refresh quota"]:L["Connect account session"]:L.Format("Open %@",a.Agent.Name());
     public Task DefaultAsync(Account a)=>DefaultConnect(a)?(a.Agent.ProviderQuota()?Provider.Connected.Contains(a.Id):Running(a))?RefreshAsync(a):ConnectAsync(a):OpenAsync(a);
@@ -100,7 +103,55 @@ internal sealed class AppEngine {
     }
     internal void RecordWorkspaceActivation(Account a){if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)WorkspaceActivation.Record(Repository,SharedWorkspace.Source(Preferences),SharedWorkspace.Database(Preferences),a.Id);}
     void InvalidateWorkspaceActivation(Account a){if(a.UsesCodexDesktop&&a.SharesLocalWorkspace)WorkspaceActivation.Invalidate(Repository,SharedWorkspace.Source(Preferences),SharedWorkspace.Database(Preferences));}
-    public Task OpenAsync(Account a)=>Run(a,async ct=>{
+    public async Task SignInAccountAsync(Account a) {
+        var saved = Snapshot.Accounts.FirstOrDefault(x => x.Id == a.Id);
+        if (saved == null || !saved.SupportsDesktopSignIn || Running(saved) || Busy.Contains(saved.Id)) return;
+        a = saved.WithDesktopSignIn();
+        if (!SaveAccount(a)) return;
+        var opened = false;
+        await Run(a, async ct => {
+            await Platform.RefreshProcessesAsync();
+            if(a.UsesCodexDesktop)await Backend.DiscoverAsync(a,true);
+            if(Running(a))throw new AppError("Close the session from the ⋯ menu and wait for quota operations to finish before changing modes.");
+            WaitingForSignIn.Add(a.Id); Notify();
+            try {
+                if (a.Agent == Agent.Claude) {
+                    if (a.EffectiveSignInMethod == AccountSignInMethod.Browser) NativePlatform.RequirePersonalChromeForClaude();
+                    else if (a.EffectiveSignInMethod == AccountSignInMethod.Cli) {
+                        // Claude Code and Desktop have separate sign-ins. Do not
+                        // block Desktop behind a subscription quota read.
+                        Provider.SignIn(a);
+                    }
+                } else if (a.EffectiveSignInMethod != AccountSignInMethod.Desktop) {
+                    await Backend.StopAsync(a, ct);
+                    var connection = await Backend.SignInDesktopAsync(a, ct);
+                    ct.ThrowIfCancellationRequested();
+                    Current(a).DesktopConnection = connection; Repository.Save(Snapshot);
+                }
+                ct.ThrowIfCancellationRequested();
+                Current(a).DesktopSignInPending = false; Repository.Save(Snapshot);
+                opened = true;
+            } finally { WaitingForSignIn.Remove(a.Id); Notify(); }
+        });
+        if (opened && Snapshot.Accounts.FirstOrDefault(x=>x.Id==a.Id) is {} ready) await OpenAsync(ready);
+    }
+    public async Task OpenAsync(Account a) {
+        var saved = Snapshot.Accounts.FirstOrDefault(x => x.Id == a.Id);
+        if(saved==null||ReadOnly||StoppingAll)return;
+        a = saved;
+        if (a.SupportsDesktopSignIn && a.EffectiveMode == LaunchMode.Browser) {
+            await Platform.RefreshProcessesAsync();
+            // Legacy web cookies stay on disk; Desktop has a distinct session.
+            if (Running(a) || Busy.Contains(a.Id)) { Error?.Invoke(L["Close the session from the ⋯ menu and wait for quota operations to finish before changing modes."]); return; }
+            a = a.WithDesktopSignIn();
+            if (SaveAccount(a)) await SignInAccountAsync(a);
+            return;
+        }
+        if (a.SupportsDesktopSignIn && a.DesktopSignInPending == true) { await SignInAccountAsync(a); return; }
+        await OpenDesktopOrAgentAsync(a);
+    }
+    Task OpenDesktopOrAgentAsync(Account a)=>Run(a,async ct=>{
+        if(a.UsesClaudeDesktopQuota){pausedClaudeQuota.Remove(a.Id);claudeAutoConnect.Add(a.Id);Checks.Remove(a.Id);}
         string? backgroundError=null;
         if (a.UsesPrivateAntigravity)
         {
@@ -111,7 +162,7 @@ internal sealed class AppEngine {
         await Platform.OpenAsync(a,useLocalDaemon:Backend.UsesLocalDaemon(a),ct:ct);var current=Current(a);current.LastOpenedAt=DateTimeOffset.UtcNow;Snapshot.LastOpenedId=a.Id;Repository.Save(Snapshot);
         RecordWorkspaceActivation(a);
         if (a.SharesAntigravityProjects) await Antigravity.IndexSharedConversationsAsync(a, ct);
-        if(a.UsesAntigravityDesktopQuota){try{await ReadAsync(a,ct);}catch(AppError error){Errors[a.Id]=Message(error);}}
+        if(a.UsesAntigravityDesktopQuota||a.UsesClaudeDesktopQuota&&ClaudeQuota.HasSession(a)){try{await ReadAsync(a,ct);}catch(AppError error){Errors[a.Id]=Message(error);}}
         if(backgroundError!=null)Errors[a.Id]=backgroundError;
     });
     async Task HandOffAntigravitySessionAsync(Account account, CancellationToken ct)
@@ -159,7 +210,7 @@ internal sealed class AppEngine {
             throw new AppError(SharedAntigravityWorkspace.SessionRunning);
     }
 
-    public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;return Run(a,async ct=>{
+    public Task ConnectAsync(Account a,bool report=true){if(!CanConnect(a))return Task.CompletedTask;if(a.UsesClaudeDesktopQuota){pausedClaudeQuota.Remove(a.Id);claudeAutoConnect.Remove(a.Id);}return Run(a,async ct=>{
         try{
             if(a.UsesAntigravityDesktopQuota){ValidateAntigravityWorkspaceSession(a);Repository.PrepareProfile(a);await Antigravity.ConnectAsync(a,ct);}
             else if(!a.Agent.ProviderQuota())await Backend.StartAsync(a,ct);
@@ -216,17 +267,20 @@ internal sealed class AppEngine {
         }
         Checks[a.Id]=DateTimeOffset.UtcNow;
         try{
-            var connection=a.UsesAntigravityDesktopQuota?await Antigravity.ReadAsync(a,ct):a.Agent.ProviderQuota()?await Provider.ReadAsync(a,ct):await Backend.ReadAsync(a,ct);var current=Current(a);
+            var connection=a.UsesClaudeDesktopQuota?await ClaudeQuota.ReadAsync(a,ct):a.UsesAntigravityDesktopQuota?await Antigravity.ReadAsync(a,ct):a.Agent.ProviderQuota()?await Provider.ReadAsync(a,ct):await Backend.ReadAsync(a,ct);var current=Current(a);
             if(!a.Agent.ProviderQuota()&&!a.UsesCodexDesktop&&current.BrowserConnection is { } verified&&!verified.Identity.Matches(connection.Identity))throw new AppError("The Codex account changed. Disconnect, then verify the intended account for this profile again.");
+            if(a.UsesClaudeDesktopQuota&&connection.Quota==null&&current.ProviderConnection is {Quota:not null} old&&old.Identity.Matches(connection.Identity)&&old.Identity.PlanType==connection.Identity.PlanType&&old.ProviderSessionKind==connection.ProviderSessionKind){connection=connection with{Quota=old.Quota};Errors[a.Id]=L[ClaudeDesktopAccount.Unavailable];}
             if(current.Agent.ProviderQuota()){current.ProviderConnection=connection;Provider.Connected.Add(a.Id);}else if(current.UsesCodexDesktop)current.DesktopConnection=connection;else current.BrowserConnection=connection;
-            Repository.Save(Snapshot);var alerts=AlertTracker.Evaluate(current,Preferences,DateTimeOffset.UtcNow);Repository.SavePreferences(Preferences);if(alerts.Count>0)QuotaAlert?.Invoke(current,alerts);
-        }catch(AppError error)when(a.Agent.ProviderQuota()&&(error.Key==ProviderQuota.SignedOut||error.Key==ProviderQuota.Changed)){
+            Repository.Save(Snapshot);
+            if (a.UsesClaudeDesktopQuota) claudeAutoConnect.Remove(a.Id);
+            var alerts=AlertTracker.Evaluate(current,Preferences,DateTimeOffset.UtcNow);Repository.SavePreferences(Preferences);if(alerts.Count>0)QuotaAlert?.Invoke(current,alerts);
+        }catch(AppError error)when(a.Agent.ProviderQuota()&&(error.Key==ProviderQuota.SignedOut||error.Key==ClaudeDesktopAccount.SignedOut||error.Key==ProviderQuota.Changed)){
             Provider.Connected.Remove(a.Id);throw;
         }catch(AppError error)when(error.Key=="The Codex session is signed out or expired. Reconnect the account."){
             if(a.UsesCodexDesktop){Current(a).DesktopConnection=null;Repository.Save(Snapshot);}throw;
         }
     }
-    public Task CloseAsync(Account a)=>Run(a,async ct=>{if(a.Agent.ProviderQuota())await Provider.DisconnectAsync(a);if(a.UsesSharedApplication)return;await Antigravity.StopAsync(a);await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);await Platform.VerifyClosedAsync(a);InvalidateWorkspaceActivation(a);});
+    public Task CloseAsync(Account a)=>Run(a,async ct=>{if(a.UsesClaudeDesktopQuota){pausedClaudeQuota.Add(a.Id);claudeAutoConnect.Remove(a.Id);}if(a.Agent.ProviderQuota())await Provider.DisconnectAsync(a);if(a.UsesSharedApplication)return;await Antigravity.StopAsync(a);await Platform.CloseAsync(a);if(a.UsesCodexDesktop)await Backend.StopAsync(a);await Platform.VerifyClosedAsync(a);InvalidateWorkspaceActivation(a);});
     public Task RestartAsync(Account a){if(!a.UsesCodexDesktop)return Task.CompletedTask;return Run(a,async ct=>{await Platform.CloseAsync(a);await Backend.StopAsync(a);await Platform.VerifyClosedAsync(a);InvalidateWorkspaceActivation(a);await Backend.StartAsync(a,ct);await ReadAsync(a,ct);});}
     public Task DeleteAsync(Account a)=>Run(a,async ct=>{await Platform.RefreshProcessesAsync();if(Running(a)&&!a.UsesSharedApplication)throw new AppError("Close this session before deleting its profile.");if(a.UsesCodexDesktop)SharedWorkspace.Archive(a,Repository);Snapshot=Repository.Remove(a,Snapshot);});
     public Task BrowserLoginAsync(Account a,Func<Identity,Task<bool>> confirm,CancellationToken externalCt)=>Run(a,async operationCt=>{
@@ -252,10 +306,17 @@ internal sealed class AppEngine {
                 if(StoppingAll)return;
                 if(Busy.Contains(account.Id)||!account.Agent.HasQuota())continue;
                 if(account.UsesAntigravityDesktopQuota&&!Antigravity.IsActive(account)&&!Platform.HasOwnedProcesses(account))Provider.Connected.Remove(account.Id);
-                var active=account.UsesAntigravityDesktopQuota?Antigravity.IsActive(account)||Platform.Owned(account)!=null:account.Agent.ProviderQuota()?Provider.Connected.Contains(account.Id):account.UsesCodexDesktop?Backend.IsActive(account)||Platform.Owned(account)!=null:account.BrowserConnection!=null;
+                var savedClaude=account.UsesClaudeDesktopQuota&&!pausedClaudeQuota.Contains(account.Id)&&ClaudeQuota.HasSession(account);
+                var automaticClaude=savedClaude&&claudeAutoConnect.Contains(account.Id);
+                var active=account.UsesClaudeDesktopQuota?!pausedClaudeQuota.Contains(account.Id)&&(Provider.Connected.Contains(account.Id)||Platform.Owned(account)!=null||automaticClaude):account.UsesAntigravityDesktopQuota?Antigravity.IsActive(account)||Platform.Owned(account)!=null:account.Agent.ProviderQuota()?Provider.Connected.Contains(account.Id):account.UsesCodexDesktop?Backend.IsActive(account)||Platform.Owned(account)!=null:account.BrowserConnection!=null;
                 var missing=account.UsesCodexDesktop&&active&&account.Connection?.Quota==null&&(!Checks.TryGetValue(account.Id,out var checkedAt)||DateTimeOffset.UtcNow-checkedAt>TimeSpan.FromSeconds(30));
                 var antigravity=account.UsesAntigravityDesktopQuota&&(!Checks.TryGetValue(account.Id,out var lastAntigravity)||DateTimeOffset.UtcNow-lastAntigravity>TimeSpan.FromSeconds(10))&&(account.Connection==null||Errors.ContainsKey(account.Id));
-                if(active&&(sweep||missing||antigravity))await RefreshAsync(account,false);
+                var claudeDue = savedClaude && (!Checks.TryGetValue(account.Id, out var lastClaude)
+                    || DateTimeOffset.UtcNow - lastClaude > TimeSpan.FromSeconds(60));
+                var claude = claudeDue && (automaticClaude || account.Connection?.Quota == null
+                    || Errors.ContainsKey(account.Id) || !Provider.Connected.Contains(account.Id));
+                if (active && (account.UsesClaudeDesktopQuota ? claude || sweep && claudeDue : sweep || missing || antigravity))
+                    await RefreshAsync(account, false);
             }
             if(sweep)lastSweep=DateTimeOffset.UtcNow;
         }catch(Exception error){LifecycleError=Message(error);Notify();}finally{observing=false;}
@@ -268,6 +329,10 @@ internal sealed class AppEngine {
             var failed=false;
             foreach(var account in Snapshot.Accounts.ToArray()){
                 Errors.Remove(account.Id);
+                if (account.UsesClaudeDesktopQuota) {
+                    pausedClaudeQuota.Add(account.Id);
+                    claudeAutoConnect.Remove(account.Id);
+                }
                 await Provider.DisconnectAsync(account);await Antigravity.StopAsync(account);
                 try{using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(8));await Backend.StopAsync(account,timeout.Token);}catch(Exception error){Errors[account.Id]=Message(error);failed=true;}
                 try{await Platform.ForceStopAsync(account);}catch(Exception error){Errors[account.Id]=Message(error);failed=true;}

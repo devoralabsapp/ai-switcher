@@ -40,6 +40,11 @@ internal sealed partial class NativePlatform {
             ?? throw new AppError("Could not open the AI agent window. Try again or check the browser.");
         FixtureSignInOpened?.Invoke(url);
     }
+    public static void RequirePersonalChromeForClaude() {
+        using var choice = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
+        if (choice?.GetValue("ProgId") is not string handler || !handler.StartsWith("ChromeHTML", StringComparison.OrdinalIgnoreCase))
+            throw new AppError("Claude Desktop opens authorization in the system default browser. Set Google Chrome as your default browser to use your personal Chrome, then try again.");
+    }
     public static Dictionary<string,string> EnvironmentValues()=>Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>().ToDictionary(x=>(string)x.Key,x=>(string)x.Value!,StringComparer.OrdinalIgnoreCase);
     public static bool IsElevated()=>new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
     public static void ProtectDirectory(string path){

@@ -3,13 +3,14 @@ import SwiftUI
 /// Keep reading order stable while each column follows its own card heights.
 struct AccountColumnsLayout: Layout {
     var minimumWidth: CGFloat = 245
+    var maximumWidth: CGFloat = 320
     var spacing: CGFloat = 16
 
     private func geometry(width: CGFloat, subviews: Subviews) -> (CGSize, [CGRect]) {
         // SwiftUI also probes zero and infinite proposals before actual placement.
         let width = width.isFinite ? max(0, width) : minimumWidth
         let columns = max(1, Int(min(CGFloat(max(1, subviews.count)), (width + spacing) / (minimumWidth + spacing))))
-        let cardWidth = max(0, (width - CGFloat(columns - 1) * spacing) / CGFloat(columns))
+        let cardWidth = min(maximumWidth, max(0, (width - CGFloat(columns - 1) * spacing) / CGFloat(columns)))
         var heights = Array(repeating: CGFloat.zero, count: columns)
         var frames: [CGRect] = []
         for (index, view) in subviews.enumerated() {

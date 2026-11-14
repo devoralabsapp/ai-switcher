@@ -15,7 +15,7 @@ Do not run this app as Administrator and do not copy authentication directories 
 ## Features
 
 - ChatGPT and Claude Desktop profiles with separate user-data directories, exact executable/argument routing, focus/reopen, and normal targeted close.
-- Chrome, Edge and Brave profiles for ChatGPT, Claude, Gemini, Perplexity and DeepSeek.
+- Chrome, Edge and Brave profiles for Gemini, Perplexity and DeepSeek. ChatGPT and Claude use Desktop with a separate sign-in-method choice.
 - Multiple private Antigravity profiles with Google browser or official CLI sign-in, email/plan and separate model quota groups. Existing shared entries keep their original behavior.
 - Claude Code CLI subscription quota with a separate sign-in per profile. Connect reads quota in the background without a model prompt. See [provider setup](../README.md#claude-and-antigravity-quota).
 - Agent sidebar filters, search, favorites, recents and per-profile colors.
@@ -30,7 +30,7 @@ Do not run this app as Administrator and do not copy authentication directories 
 
 ### Account setup
 
-Add a profile, choose the agent, and sign in once in that profile's window. Existing app sign-ins are never imported. For browser-mode ChatGPT quota, use **Details → Connect Codex…**, sign in inside the profile browser, and explicitly confirm the email returned by Codex. Browser and Codex sign-ins are independent.
+For ChatGPT or Claude, choose **Sign-in Method → Browser / Desktop app / CLI** when adding or editing. **Open** always opens that account's Desktop app. ChatGPT Browser opens personal Chrome for official OAuth and stores the returned login in its own Desktop backend home; CLI runs official `codex login` against that same private home. Claude Browser opens its own Desktop authorization flow, which uses the system default browser: set Chrome as default to confirm through personal Chrome. The app checks this without changing browser defaults. Claude CLI signs in to Claude Code for quota and opens Desktop; **Desktop still requires a separate first sign-in**, and Free may not support Code. Use **⋯ → Sign in…** to repeat the chosen method on a stopped account. Legacy web sessions must be closed first; their files and cached web quota are preserved when moving to Desktop.
 
 ChatGPT Desktop requires the newer compatible Electron app with Codex, its bundled/installed native Windows `codex.exe`, and internal isolation switches. Classic ChatGPT is not supported. Claude uses the installed, unmodified app's `--user-data-dir` mechanism. No bundle patches, debug ports, credential extraction, API keys, WSL or browser automation permissions are used.
 
@@ -56,7 +56,7 @@ Scrollbars use theme colors, a rounded thumb and accent hover/drag states in bot
 
 ## Claude Store and closing Desktop sessions
 
-Preview 4 adds a separate `Runtimes\claude\<version-key>` cache for the registered official Claude package (`Claude_pzs8sxrjxfjjc`). ChatGPT's existing cache and profiles are retained. Each Claude Desktop account has its own user-data and Code config directories; browser-mode Claude is unchanged.
+Preview 4 adds a separate `Runtimes\claude\<version-key>` cache for the registered official Claude package (`Claude_pzs8sxrjxfjjc`). ChatGPT's existing cache and profiles are retained. Each Claude Desktop account has its own user-data and Code config directories; legacy browser-mode Claude data is preserved when moving to Desktop.
 
 Close account session now requests a normal Windows application shutdown for exactly the profile PID and creation time through Restart Manager. This also reaches a Desktop app whose window is hidden in its tray. No force-shutdown flag is used. A refusing application stays running and the manager asks you to finish its confirmation or Quit from its own tray menu. Other profiles are not registered for shutdown. Cached sign-in data is retained.
 
@@ -109,3 +109,7 @@ Antigravity browser sign-in and the explicit Codex quota sign-in open the instal
 ### Share all Antigravity Desktop projects and conversations
 
 **Share local project** in Add/Edit account uses the original Desktop catalog and local conversation store for every opted-in private account. It requires no folder picker. Profiles with separate workspaces can open concurrently. Shared profiles open one at a time, and opening another profile closes a managed session with fresh, exhausted quota in every reported group. After browser sign-in, use **Open Antigravity** in AI Switcher to open that profile. A supported Google sign-in from the CLI can seed the first Desktop launch in the same private profile. Existing private histories are imported and indexed under their original IDs, with conflicts reported before replacing private directories. Originals are archived under `SharedProjectsBackup`; disabling sharing restores them on the next Open/Connect. Deleting a profile leaves the shared source intact. Preview 23/24 folder selections migrate to this all-project setting.
+
+## Claude quota for Desktop and Free
+
+All three sign-in methods read account/plan/usage from the same owned Desktop profile. Free is queried too; actual numbers are displayed only when Claude returns them. The reader opens SQLite read-only, decrypts only the scoped session cookie with that profile's DPAPI/AES-GCM key, and makes allowlisted HTTPS GET requests with redirects disabled. It reads no conversations and copies no credentials into account metadata or logs. App-bound/unknown encryption fails closed without changing sign-in. No Claude Code installation or additional CLI login is needed for Desktop quota. Numeric usage is not guaranteed for Free accounts.

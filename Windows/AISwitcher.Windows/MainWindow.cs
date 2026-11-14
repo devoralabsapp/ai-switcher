@@ -92,13 +92,15 @@ internal sealed partial class MainWindow:Window {
         var stack=Stack(top,Space(18),Text(a.Name,17,true),Space(4),Text(string.IsNullOrWhiteSpace(a.EmailHint)?a.Agent.Name():a.EmailHint,11,false,T.Secondary),Space(16),Text(a.Agent.Name()+" · "+(a.EffectiveMode==LaunchMode.Desktop?L["Desktop"]:a.Browser.ToString()),10,false,T.Secondary),Space(8),Text(engine.Status(a),10,true),Space(16));
         if(T.Seasonal){stack.Children.Insert(0,SeasonalArtwork.Ribbon(T));stack.Children.Insert(1,Space(12));}
         if(a.Agent.HasQuota())stack.Children.Add(QuotaSummary(a,false));else stack.Children.Add(Text(Support(a),11,false,T.Secondary));
+        if(a.SupportsDesktopSignIn&&engine.WaitingForSignIn.Contains(a.Id))stack.Children.Add(Button(L["Cancel sign-in"],()=>engine.CancelConnection(a)));
         stack.Children.Add(Space(18));var open=Button(engine.DefaultTitle(a)+"  ↗",()=>_=engine.DefaultAsync(a));open.IsEnabled=!engine.StoppingAll&&!engine.Busy.Contains(a.Id);open.HorizontalAlignment=HorizontalAlignment.Stretch;stack.Children.Add(open);
         var panel=Panel(stack,T,ProfileColors.Pale(a.Color,T),true);panel.ContextMenu=AccountMenu(a);return panel;
     }
-    string Support(Account a)=>a.UsesPrivateAntigravity?L["Separate Antigravity Desktop sign-in with email and quota from that same session."]:a.UsesSharedApplication?L["Antigravity quota uses the official CLI and shared application sign-in."]:a.Agent==Agent.Claude?L["Claude quota uses Claude Code sign-in in this profile. Desktop and browser sessions remain separate."]:L["Separate browser sign-in for each profile. Quota and background connections are not available for this agent."];
+    string Support(Account a)=>a.UsesPrivateAntigravity?L["Separate Antigravity Desktop sign-in with email and quota from that same session."]:a.UsesSharedApplication?L["Antigravity quota uses the official CLI and shared application sign-in."]:a.Agent==Agent.Claude?L["Separate Claude Desktop sessions with quota from the same account, including Free."]:L["Separate browser sign-in for each profile. Quota and background connections are not available for this agent."];
     ContextMenu AccountMenu(Account a){var menu=new ContextMenu();bool busy=engine.StoppingAll||engine.Busy.Contains(a.Id);
         void Item(string text,Action action,bool enabled=true){var item=new MenuItem{Header=text,IsEnabled=enabled};item.Click+=(_,_)=>action();menu.Items.Add(item);}
         Item(L.Format("Open %@",a.Agent.Name()),()=>_=engine.OpenAsync(a),!busy);
+        if(a.SupportsDesktopSignIn)Item(L["Sign in…"],()=>_=engine.SignInAccountAsync(a),!busy&&!engine.Running(a));
         if(a.Agent.ProviderQuota()){Item(L["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));Item(L["Refresh quota"],()=>_=engine.RefreshAsync(a),!busy);}
         if(a.UsesCodexDesktop){Item(L["Connect account session"],()=>_=engine.ConnectAsync(a),engine.CanConnect(a));Item(L["Refresh quota"],()=>_=engine.RefreshAsync(a),!busy);Item(L["Restart session…"],()=>Restart(a),!busy);}
         if(a.Agent.HasQuota())Item(L[a.Agent.ProviderQuota()?"Details":"Codex quota…"],()=>QuotaDetails(a));
@@ -122,7 +124,10 @@ internal sealed partial class MainWindow:Window {
         title.Children.Add(Text("◉ "+(a.Agent.ProviderQuota()?L.Format("%@ quota",a.Agent.Name()):L["Codex quota"]),12,true));stack.Children.Add(title);stack.Children.Add(Space(8));
         if(connection==null){
             if(!all&&a.UsesProviderCli)AddProviderInstallation(stack,a);
-            stack.Children.Add(Text(L[a.Agent==Agent.Antigravity?"Connect to view quota.":a.Agent.ProviderQuota()?"Connect the official CLI session to read subscription quota. No model prompt is sent.":a.UsesCodexDesktop?"For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window.":"No data yet"],11,false,T.Secondary));
+            var prompt = a.UsesClaudeDesktopQuota
+                ? (engine.Busy.Contains(a.Id) ? "Reading Desktop quota…" : "Connect to view quota.")
+                : a.Agent==Agent.Antigravity?"Connect to view quota.":a.Agent.ProviderQuota()?"Connect the official CLI session to read subscription quota. No model prompt is sent.":a.UsesCodexDesktop?"For a new or signed-out profile, use Open ChatGPT Desktop once to sign in. Connecting a session never opens a Desktop window.":"No data yet";
+            stack.Children.Add(Text(L[prompt],11,false,T.Secondary));
             if(!all&&(a.UsesCodexDesktop||a.Agent.ProviderQuota())){var connect=Button(L["Connect account session"],()=>_=engine.ConnectAsync(a));connect.IsEnabled=engine.CanConnect(a);stack.Children.Add(connect);}
         }else{
             stack.Children.Add(Text(connection.Identity.Email??L[a.UsesSharedApplication?"Shared application sign-in":"Account email unavailable"],11,false,T.Secondary));
@@ -138,7 +143,7 @@ internal sealed partial class MainWindow:Window {
                     }
                 }
                 if(quota.IsStale(now)||engine.Errors.ContainsKey(a.Id))stack.Children.Add(Text(L["Stale data · refresh needed"],10,true));
-            }else stack.Children.Add(Text(L["No quota data available for this account."],11,false,T.Secondary));
+            }else stack.Children.Add(Text(L[a.UsesClaudeDesktopQuota?"Claude has not exposed numeric usage limits for this account. Email and plan are verified; refresh to check again.":"No quota data available for this account."],11,false,T.Secondary));
             var read = connection.Quota?.FetchedAt ?? connection.IdentityFetchedAt;
             if (!all && a.Agent == Agent.Antigravity)
             {

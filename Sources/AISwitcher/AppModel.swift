@@ -50,12 +50,17 @@ final class AppModel: ObservableObject {
     @Published private(set) var preferences = AppPreferences()
     @Published private(set) var launchingIDs: Set<UUID> = []
     @Published private(set) var connectingSessionIDs: Set<UUID> = []
+    @Published private(set) var desktopSignInIDs: Set<UUID> = []
     @Published private(set) var closingSessionIDs: Set<UUID> = []
     @Published private(set) var desktopWindowIDs: Set<UUID> = []
     @Published private(set) var providerSessionIDs: Set<UUID> = []
     @Published private(set) var providerSignInIDs: Set<UUID> = []
     private lazy var providerQuota = ProviderQuotaService(repository: repository)
     private lazy var claudeWeb = ClaudeWebAccountService(repository: repository)
+    private let claudeDesktopQuota: any ClaudeDesktopQuotaReading
+    private var claudeQuotaRetryAt: [UUID: Date] = [:]
+    private var claudeAutoConnectIDs: Set<UUID> = []
+    private var pausedClaudeQuotaIDs: Set<UUID> = []
     @Published private(set) var installingProviderAgents: Set<AIAgent> = []
     @Published private(set) var providerInstallationErrors: [AIAgent: String] = [:]
     private var providerInstallationTasks: [AIAgent: Task<Void, Never>] = [:]
@@ -96,6 +101,7 @@ final class AppModel: ObservableObject {
 
     init(root: URL, preferences: AppPreferences? = nil, monitoring: Bool = true,
          desktopQuotaSource: (any DesktopQuotaSource)? = nil,
+         claudeDesktopQuotaSource: (any ClaudeDesktopQuotaReading)? = nil,
          preferencesStore: AppPreferencesStore = AppPreferencesStore(),
          notifications: (any QuotaNotificationSending)? = nil) {
         self.preferencesStore = preferencesStore
@@ -107,19 +113,23 @@ final class AppModel: ObservableObject {
         browserService = BrowserService(repository: repository)
         desktopService = DesktopService(repository: repository)
         claudeDesktopService = ClaudeDesktopService(repository: repository)
+        claudeDesktopQuota = claudeDesktopQuotaSource ?? ClaudeDesktopQuotaService(repository: repository)
         self.desktopQuotaSource = desktopQuotaSource ?? desktopService
         quotaService = CodexQuotaService(repository: repository)
         reload()
+        claudeAutoConnectIDs = Set(accounts.filter(\.usesClaudeDesktop).map(\.id))
         guard monitoring else { return }
         refreshTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshRunning()
             self?.refreshDesktopQuotaIfNeeded()
             self?.refreshAntigravityQuotaIfNeeded()
+            self?.refreshClaudeQuotaIfNeeded()
         }
         quotaTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             self?.refreshAllQuotas()
         }
         startupTask = Task { [weak self] in
+            self?.refreshClaudeQuotaIfNeeded()
             await self?.connectStartupAccounts()
             if !Task.isCancelled { self?.refreshAllQuotas() }
         }
@@ -411,7 +421,7 @@ final class AppModel: ObservableObject {
                 edited.antigravitySignInMethod = updated.accounts[index].antigravitySignInMethod
                 if edited.effectiveLaunchMode != updated.accounts[index].effectiveLaunchMode
                     || edited.usesSharedLocalWorkspace != updated.accounts[index].usesSharedLocalWorkspace || projectChanged {
-                    guard !hasRunningSession(account), !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
+                    guard !hasRunningSession(updated.accounts[index]), !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
                         throw DesktopProfileError.profileRunning
                     }
                     quotaErrors[account.id] = nil
@@ -437,12 +447,81 @@ final class AppModel: ObservableObject {
         saveAccount(updated)
     }
 
+    /// New sign-in choices always target the account's Desktop storage.
+    func signInAccount(_ account: Account) {
+        guard let current = accounts.first(where: { $0.id == account.id }), current.supportsDesktopSignIn,
+              !shuttingDown, !loadFailed, !hasRunningSession(current),
+              !launchingIDs.contains(current.id), !quotaBusyIDs.contains(current.id) else { return }
+        let selected = current.withDesktopSignIn()
+        guard saveAccount(selected) else { return }
+        if selected.usesClaudeDesktop { prepareClaudeAutoConnect(selected) }
+        if selected.effectiveSignInMethod == .desktop {
+            var ready = selected; ready.desktopSignInPending = false
+            guard saveAccount(ready) else { return }
+            open(ready); return
+        }
+        launchingIDs.insert(selected.id)
+        desktopSignInIDs.insert(selected.id)
+        connectingSessionIDs.insert(selected.id)
+        sessionTasks[selected.id] = Task {
+            defer {
+                launchingIDs.remove(selected.id); connectingSessionIDs.remove(selected.id); desktopSignInIDs.remove(selected.id)
+                providerSignInIDs.remove(selected.id); sessionTasks[selected.id] = nil; refreshRunning()
+                if selected.usesClaudeDesktop { refreshClaudeQuotaIfNeeded() }
+            }
+            do {
+                if selected.effectiveAgent == .claude {
+                    if selected.effectiveSignInMethod == .browser { try DesktopSignInService.requirePersonalChromeForClaude() }
+                    else { try await providerQuota.signIn(selected, override: preferences.providerExecutables[selected.effectiveAgent.rawValue]) }
+                    try Task.checkCancellation()
+                    // Claude Code auth cannot replace Desktop's own login.
+                    try await claudeDesktopService.open(selected)
+                } else {
+                    // The preflight requires this profile's previous session to be closed.
+                    let service = DesktopSignInService(repository: repository, desktop: desktopService, browsers: browserService)
+                    let connection = try await service.signInChatGPT(selected)
+                    try Task.checkCancellation()
+                    try storeConnection(connection, for: selected.id, mode: .desktop)
+                    quotaErrors[selected.id] = nil; desktopQuotaRetryAt[selected.id] = nil
+                    try await desktopService.open(selected)
+                }
+                if let index = snapshot.accounts.firstIndex(where: { $0.id == selected.id }) {
+                    var updated = snapshot
+                    updated.accounts[index].desktopSignInPending = false
+                    updated.accounts[index].lastOpenedAt = Date(); updated.lastOpenedID = selected.id
+                    try persist(updated)
+                }
+                lastAction = L10n.format("Opened %@", selected.name)
+            } catch is CancellationError {} catch { showError(error) }
+        }
+    }
+
+    func cancelDesktopSignIn(_ account: Account) {
+        guard desktopSignInIDs.contains(account.id) else { return }
+        sessionTasks[account.id]?.cancel()
+    }
+
     func open(_ account: Account, newWindow: Bool = false) {
         guard let account = accounts.first(where: { $0.id == account.id }), !launchingIDs.contains(account.id),
               !account.usesIsolatedAntigravity || !quotaBusyIDs.contains(account.id) else { return }
+        // Preserve old browser files, but stop offering web windows for these agents.
+        if account.supportsDesktopSignIn && account.effectiveLaunchMode == .browser {
+            guard !hasRunningSession(account), !quotaBusyIDs.contains(account.id), pendingConnections[account.id] == nil else {
+                showError(DesktopProfileError.profileRunning); return
+            }
+            let converted = account.withDesktopSignIn()
+            guard saveAccount(converted) else { return }
+            signInAccount(converted)
+            return
+        }
+        if account.supportsDesktopSignIn && account.desktopSignInPending == true { signInAccount(account); return }
+        if account.usesClaudeDesktop { prepareClaudeAutoConnect(account) }
         launchingIDs.insert(account.id)
         Task {
-            defer { launchingIDs.remove(account.id); refreshRunning() }
+            defer {
+                launchingIDs.remove(account.id); refreshRunning()
+                if account.usesClaudeDesktop { refreshClaudeQuotaIfNeeded() }
+            }
             do {
                 if account.usesIsolatedAntigravity {
                     try await handOffAntigravitySession(to: account)
@@ -517,7 +596,10 @@ final class AppModel: ObservableObject {
     }
 
     func connectSession(_ account: Account, reportFailure: Bool = true) {
-        if account.effectiveAgent.usesProviderQuota { refreshProviderQuota(account, connect: true); return }
+        if account.effectiveAgent.usesProviderQuota {
+            if account.usesClaudeDesktop { pausedClaudeQuotaIDs.remove(account.id); claudeAutoConnectIDs.remove(account.id) }
+            refreshProviderQuota(account, connect: true); return
+        }
         guard !shuttingDown, !loadFailed, let current = accounts.first(where: { $0.id == account.id }),
               canConnectSession(current) else { return }
         launchingIDs.insert(account.id)
@@ -544,6 +626,7 @@ final class AppModel: ObservableObject {
 
     func closeSession(_ account: Account) {
         guard let account = accounts.first(where: { $0.id == account.id }) else { return }
+        if account.usesClaudeDesktop { pausedClaudeQuotaIDs.insert(account.id); claudeAutoConnectIDs.remove(account.id) }
         if account.effectiveAgent.usesProviderQuota {
             providerSessionIDs.remove(account.id);quotaTasks[account.id]?.cancel();claudeWeb.stop(account.id);Task { await providerQuota.stop(account.id) }
             if account.usesSharedApplication { refreshRunning(); return }
@@ -571,6 +654,7 @@ final class AppModel: ObservableObject {
         do {
             guard !hasRunningSession(account) else { throw DesktopProfileError.profileRunning }
             snapshot = try repository.remove(account.id, from: snapshot)
+            claudeAutoConnectIDs.remove(account.id); pausedClaudeQuotaIDs.remove(account.id); claudeQuotaRetryAt[account.id] = nil
             if account.effectiveAgent == .claude { webCleanupTasks[account.id] = Task { await claudeWeb.remove(account);webCleanupTasks[account.id] = nil } }
             lastAction = L10n.format("Deleted local profile %@", String(describing: account.name))
         } catch {
@@ -780,7 +864,7 @@ final class AppModel: ObservableObject {
             if account.usesAntigravityDesktopQuota { await antigravityDesktopQuota.stop(account.id) }
         }
     }
-    private func refreshProviderQuota(_ account: Account, connect: Bool = false) {
+    private func refreshProviderQuota(_ account: Account, connect: Bool = false, allowClaudeAuthorization: Bool = false) {
         guard let account = accounts.first(where: { $0.id == account.id }),
               !shuttingDown, !loadFailed, !installingProviderAgents.contains(account.effectiveAgent), !quotaBusyIDs.contains(account.id) else { return }
         if connect && !canConnectSession(account) { return }
@@ -793,19 +877,23 @@ final class AppModel: ObservableObject {
                     guard let index = snapshot.accounts.firstIndex(where: { $0.id == account.id }) else { throw ProfileError.invalidSelection }
                     var updated = snapshot
                     let old = updated.accounts[index].providerQuotaConnection
-                    let keepQuota = old?.identity.matches(identity) == true && old?.identity.planType == identity.planType && identity.planType != "free"
+                    let keepQuota = old?.identity.matches(identity) == true && old?.identity.planType == identity.planType
                     updated.accounts[index].providerQuotaConnection = CodexConnection(identity: identity, quota: keepQuota ? old?.quota : nil, identityFetchedAt: Date(), providerSessionKind: kind)
                     try persist(updated);providerSessionIDs.insert(account.id)
                 }
                 if account.usesIsolatedAntigravity { try validateAntigravityWorkspaceSession(account) }
                 let usesWeb = account.effectiveAgent == .claude && account.providerQuotaConnection?.providerSessionKind == "claudeWeb"
                 let read = { [self] in
+                    if account.usesClaudeDesktop { return try await claudeDesktopQuota.read(account, interactive: connect || allowClaudeAuthorization, onIdentity: nil) }
                     if account.usesAntigravityDesktopQuota { return try await antigravityDesktopQuota.read(account) }
                     if usesWeb { return try await claudeWeb.read(account, onIdentity: { try storeIdentity($0, "claudeWeb") }) }
                     return try await providerQuota.read(account, override: preferences.providerExecutables[account.effectiveAgent.rawValue], onIdentity: { try storeIdentity($0, nil) })
                 }
                 let value: CodexConnection
-                if connect && account.usesAntigravityDesktopQuota {
+                if account.usesClaudeDesktop {
+                    // Desktop login, including Free, is independent of CLI entitlement.
+                    value = try await read()
+                } else if connect && account.usesAntigravityDesktopQuota {
                     try await antigravityDesktopQuota.connect(account)
                     do { value = try await read() }
                     catch ProviderQuotaError.signedOut {
@@ -828,12 +916,54 @@ final class AppModel: ObservableObject {
                 } else { value = try await read() }
                 try Task.checkCancellation()
                 guard let index = snapshot.accounts.firstIndex(where: { $0.id == account.id }) else { return }
-                var updated = snapshot;updated.accounts[index].providerQuotaConnection = value;try persist(updated)
-                providerSessionIDs.insert(account.id);quotaErrors[account.id] = nil;await notifyQuota(account.id)
+                var updated = snapshot
+                let previous = updated.accounts[index].providerQuotaConnection
+                let retainPrevious = account.usesClaudeDesktop && value.quota == nil && previous?.identity.matches(value.identity) == true && previous?.identity.planType == value.identity.planType && previous?.providerSessionKind == value.providerSessionKind && previous?.quota != nil
+                updated.accounts[index].providerQuotaConnection = retainPrevious
+                    ? CodexConnection(identity: value.identity, quota: previous?.quota, identityFetchedAt: value.identityFetchedAt, providerSessionKind: value.providerSessionKind)
+                    : value
+                try persist(updated)
+                providerSessionIDs.insert(account.id)
+                if account.usesClaudeDesktop { claudeAutoConnectIDs.remove(account.id) }
+                quotaErrors[account.id] = retainPrevious ? ClaudeDesktopQuotaError.unavailable : nil
+                await notifyQuota(account.id)
             } catch is CancellationError {} catch {
                 quotaErrors[account.id] = error
-                if (error as? ProviderQuotaError) == .identityChanged || (error as? ProviderQuotaError) == .signedOut { providerSessionIDs.remove(account.id) }
+                if account.usesClaudeDesktop,
+                   let storageError = error as? ClaudeDesktopQuotaError {
+                    switch storageError {
+                    case .accessRequired, .unsupportedEncryption, .unsafeStorage:
+                        claudeAutoConnectIDs.remove(account.id)
+                    case .unavailable: break
+                    }
+                }
+                if (error as? ProviderQuotaError) == .identityChanged || (error as? ProviderQuotaError) == .signedOut || error is ClaudeDesktopQuotaError { providerSessionIDs.remove(account.id) }
             }
+        }
+    }
+
+    private func prepareClaudeAutoConnect(_ account: Account) {
+        pausedClaudeQuotaIDs.remove(account.id)
+        claudeAutoConnectIDs.insert(account.id)
+        claudeQuotaRetryAt[account.id] = nil
+    }
+
+    func refreshClaudeQuotaIfNeeded(now: Date = Date()) {
+        guard !shuttingDown, !loadFailed else { return }
+        for account in accounts where account.usesClaudeDesktop {
+            guard !pausedClaudeQuotaIDs.contains(account.id),
+                  !launchingIDs.contains(account.id), !quotaBusyIDs.contains(account.id),
+                  claudeAutoConnectIDs.contains(account.id) || claudeDesktopService.runningApplication(for: account) != nil || providerSessionIDs.contains(account.id),
+                  claudeDesktopQuota.hasSession(account) else { continue }
+            let automatic = claudeAutoConnectIDs.contains(account.id)
+            let lastAttempt = claudeQuotaRetryAt[account.id]
+            guard now >= (lastAttempt ?? .distantPast) else { continue }
+            let stale = account.providerQuotaConnection?.quota?.isStale(at: now) ?? true
+            guard automatic || stale || quotaErrors[account.id] != nil || !providerSessionIDs.contains(account.id) else { continue }
+            // A new login/startup gets one authorization attempt as soon as its
+            // saved cookie exists. Later background refreshes cannot show dialogs.
+            claudeQuotaRetryAt[account.id] = now.addingTimeInterval(60)
+            refreshProviderQuota(account, allowClaudeAuthorization: automatic && lastAttempt == nil)
         }
     }
 

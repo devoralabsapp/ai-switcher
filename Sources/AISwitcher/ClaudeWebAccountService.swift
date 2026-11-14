@@ -42,14 +42,13 @@ final class ClaudeWebAccountService {
                     try onIdentity?(metadata.identity)
                     session.closeWindows()
                     var quota: CodexQuotaSnapshot?
-                    if metadata.identity.planType != "free", let org = metadata.organizationID {
+                    if let org = metadata.organizationID {
                         if let result = try? await session.webView.callAsyncJavaScript(try ClaudeWebAccount.usageScript, arguments: ["organizationID": org], in: nil, contentWorld: .page),
                            let text = result as? String, text.utf8.count < 65_536 {
                             quota = try? ProviderQuotaParser.parse(Data(text.utf8), agent: .claude, identity: metadata.identity).quota
                         }
                     }
                     try Task.checkCancellation()
-                    if metadata.identity.planType != "free", quota == nil { throw ProviderQuotaError.unavailable }
                     return CodexConnection(identity: metadata.identity, quota: quota, identityFetchedAt: Date(), providerSessionKind: "claudeWeb")
                 } catch ProviderQuotaError.signedOut { try Task.checkCancellation();if session.cancelled { throw CancellationError() } }
                 catch ProviderQuotaError.identityChanged {
@@ -68,11 +67,19 @@ final class ClaudeWebAccountService {
     func stop(_ id: UUID) { sessions[id]?.stop() }
     func stopAll() { for value in sessions.values { value.stop() } }
     func remove(_ account: Account) async {
-        if let value = sessions.removeValue(forKey: account.id) {
-            value.stop()
-            await value.webView.configuration.websiteDataStore.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
-        }
-        if #available(macOS 14.0, *) { try? await WKWebsiteDataStore.remove(forIdentifier: Self.storeIdentifier(root: repository.root, accountID: account.id)) }
+        let value = sessions.removeValue(forKey: account.id)
+        value?.stop()
+        let store: WKWebsiteDataStore
+        if let value { store = value.webView.configuration.websiteDataStore }
+        else if #available(macOS 14.0, *) {
+            store = WKWebsiteDataStore(forIdentifier: Self.storeIdentifier(root: repository.root, accountID: account.id))
+        } else { return } // Older WebKit stores are in-memory and disappear with their Session.
+        // Do not call the static remove(forIdentifier:) API here. On affected
+        // macOS versions, deleting a never-opened store crashes in WebKit's
+        // background RunLoop. Clear the profile's data through a retained store.
+        await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        withExtendedLifetime(value) {}
+        withExtendedLifetime(store) {}
     }
 
     @MainActor

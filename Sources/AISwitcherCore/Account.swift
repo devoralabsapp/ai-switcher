@@ -39,6 +39,19 @@ public enum AccountColor: String, Codable, CaseIterable, Identifiable, Sendable 
     }
 }
 
+/// Authentication choice is independent of the app used to open the account.
+public enum AccountSignInMethod: String, Codable, CaseIterable, Identifiable, Sendable {
+    case browser, desktop, cli
+    public var id: String { rawValue }
+    public var title: String {
+        switch self {
+        case .browser: return L10n.text("Sign in with browser")
+        case .desktop: return L10n.text("Sign in with Desktop app")
+        case .cli: return L10n.text("Sign in with CLI")
+        }
+    }
+}
+
 public struct Account: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public var name: String
@@ -50,6 +63,8 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     public var lastOpenedAt: Date?
     public var codexConnection: CodexConnection?
     public var launchMode: LaunchMode?
+    public var signInMethod: AccountSignInMethod?
+    public var desktopSignInPending: Bool?
     public var desktopCodexConnection: CodexConnection?
     public var sharesLocalWorkspace: Bool?
     public var defaultAction: AccountAction?
@@ -67,7 +82,18 @@ public struct Account: Codable, Equatable, Identifiable, Sendable {
     }
 
     public var effectiveAgent: AIAgent { agent ?? .chatgpt }
-    public var effectiveLaunchMode: LaunchMode { effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent == .claude ? launchMode ?? .browser : effectiveAgent.isSharedApplication ? .desktop : .browser }
+    public var supportsDesktopSignIn: Bool { effectiveAgent == .chatgpt || effectiveAgent == .claude }
+    public var effectiveSignInMethod: AccountSignInMethod { signInMethod ?? (effectiveLaunchMode == .browser ? .browser : .desktop) }
+    /// Keep legacy browser data intact. Moving to Desktop requires its own sign-in.
+    public func withDesktopSignIn(_ method: AccountSignInMethod? = nil) -> Account {
+        guard supportsDesktopSignIn else { return self }
+        var updated = self
+        if effectiveLaunchMode == .browser { updated.desktopSignInPending = true }
+        updated.signInMethod = method ?? effectiveSignInMethod
+        updated.launchMode = .desktop
+        return updated
+    }
+    public var effectiveLaunchMode: LaunchMode { if supportsDesktopSignIn && signInMethod != nil { return .desktop }; return effectiveAgent == .chatgpt ? launchMode ?? .desktop : effectiveAgent == .claude ? launchMode ?? .browser : effectiveAgent.isSharedApplication ? .desktop : .browser }
     public var usesClaudeDesktop: Bool { effectiveAgent == .claude && effectiveLaunchMode == .desktop }
     public var usesIsolatedAntigravity: Bool { effectiveAgent == .antigravity && antigravityUsesPrivateHome == true }
     public var usesAntigravityCLI: Bool { effectiveAgent == .antigravity && (!usesIsolatedAntigravity || antigravitySignInMethod == .cli) }
